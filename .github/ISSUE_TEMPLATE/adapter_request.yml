@@ -1,0 +1,49 @@
+name: Adapter request
+description: Ask for Deckhand to drive an agent runtime other than Claude Code
+labels: [adapter]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Deckhand talks to agent runtimes through adapters. Claude Code is the
+        reference adapter. Before opening this, please skim
+        [docs/ADAPTER_PROTOCOL.md](../../docs/ADAPTER_PROTOCOL.md) so we can
+        talk about the same six capabilities.
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Which runtime?
+      placeholder: Codex CLI, Aider, Cursor Agent, ChatGPT desktop, ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: observe
+    attributes:
+      label: How would Deckhand learn a session's status?
+      description: >
+        Hooks? A log file? A local socket? An API? Link to docs if they exist.
+        "I do not know" is a valid answer, it just means the answer is research.
+    validations:
+      required: true
+
+  - type: textarea
+    id: act
+    attributes:
+      label: How would Deckhand send an action to a session?
+      description: >
+        Sending a prompt, approving a tool call, interrupting. Say which of
+        these the runtime supports and which it does not.
+
+  - type: checkboxes
+    id: capabilities
+    attributes:
+      label: Which adapter capabilities do you believe are reachable?
+      options:
+        - label: observe_status
+        - label: list_sessions
+        - label: focus_session
+        - label: send_prompt
+        - label: decide_permission
+        - label: interrupt

@@ -1,0 +1,57 @@
+# Rust / Tauri
+target/
+src-tauri/target/
+src-tauri/gen/
+*.pdb
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+package-lock.json
+
+# Bundled installers and signing material
+release/
+*.msi
+*.nsis.zip
+*.sig
+*.p12
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+*.stackdump
+
+# AI/LLM scratch space
+_scratch/
+_draft_*
+*.tmp
+.cascade/
+.cursor/
+
+# Local runtime state (never commit real session data)
+*.local
+.env
+.env.*
+!.env.example
+deckhand.log
+sessions.json
+
+# Python (docs tooling, spec linters)
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/

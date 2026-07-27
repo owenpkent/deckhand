@@ -1,0 +1,48 @@
+# Docs CI: the repo is specification-only, so CI guards the specification.
+# Two gates: house style (no em or en dashes in authored markdown) and link
+# integrity (every relative link and anchor in the repo resolves).
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  style:
+    name: House style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      # The repo's writing style bans em (U+2014) and en (U+2013) dashes.
+      # Inherited third-party texts (Contributor Covenant, the Constellation
+      # guide) are exempt; everything authored here is not.
+      - name: No em or en dashes in authored markdown
+        run: |
+          if rg -n "—|–" --glob "*.md" \
+               --glob "!CODE_OF_CONDUCT.md" \
+               --glob "!CONSTELLATION_INTEGRATION_GUIDE.md"; then
+            echo "::error::Em or en dash found. House style: use a comma, colon, parentheses, or a period."
+            exit 1
+          fi
+
+  links:
+    name: Relative links resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Offline mode: only file-to-file links and anchors are checked, so the
+      # job is fast, deterministic, and never fails on someone else's outage.
+      - name: lychee (offline)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --include-fragments --no-progress "**/*.md"
+          fail: true

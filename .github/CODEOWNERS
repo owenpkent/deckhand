@@ -1,0 +1,5 @@
+# Default code owner for the whole repo. @owenpkent is requested for review on
+# every pull request. Add more specific lines below to delegate subsystems, e.g.:
+#   /src-tauri/  @owenpkent @some-rust-helper
+#   /docs/       @owenpkent @some-docs-helper
+*       @owenpkent

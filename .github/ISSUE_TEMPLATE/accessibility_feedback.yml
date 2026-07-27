@@ -1,0 +1,59 @@
+name: Accessibility feedback
+description: Tell us where Deckhand is hard to operate
+labels: [accessibility]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Deckhand exists because a pointer-only control surface beats a keyboard
+        for some of us. Feedback from disabled users outranks every estimate in
+        this repository.
+
+
+        **You never have to disclose a diagnosis.** Describe what is hard, not
+        why it is hard for you, unless you want to.
+
+  - type: textarea
+    id: barrier
+    attributes:
+      label: What is hard to do?
+      description: >
+        Be as concrete as you like. "The tiles are too small for my pointer"
+        and "I cannot hold the mouse button long enough for push-to-talk" are
+        both perfect.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: input
+    attributes:
+      label: How do you drive the pointer?
+      multiple: true
+      options:
+        - Standard mouse or trackball
+        - Head pointer or eye tracker
+        - Joystick or adaptive controller
+        - Switch access / scanning
+        - Touchscreen
+        - Voice control
+        - Something else
+        - Prefer not to say
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How much does this cost you?
+      options:
+        - Blocks me entirely
+        - I can do it, but it hurts or takes too long
+        - Minor friction
+    validations:
+      required: true
+
+  - type: textarea
+    id: better
+    attributes:
+      label: What would make it work?
+      description: >
+        Even a rough idea helps. Bigger targets, longer dwell, a different
+        gesture, a different default.

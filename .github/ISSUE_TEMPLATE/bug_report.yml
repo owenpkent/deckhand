@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in Deckhand does not work the way it is documented
+labels: [bug]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of Deckhand is misbehaving?
+      options:
+        - Surface (window, layout, always-on-top, focus)
+        - Agent tiles (status colours, session binding)
+        - Command keys / dial / stick
+        - Push-to-talk
+        - Claude Code adapter (status detection)
+        - Claude Code adapter (sending actions)
+        - Settings / profiles
+        - Build or install
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Bind tile 1 to a session in ...
+        2. Start a long tool call
+        3. Tile stays white instead of turning blue
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS and version
+      placeholder: Windows 11 Pro 26200
+    validations:
+      required: true
+
+  - type: input
+    id: deckhand-version
+    attributes:
+      label: Deckhand version or commit
+      placeholder: v0.1.0, or the short commit hash you built from
+    validations:
+      required: true
+
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`. Leave blank if not relevant.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        Relevant lines from the Deckhand log. Please redact anything private:
+        session transcripts can contain your source code and prompts.
+      render: text
