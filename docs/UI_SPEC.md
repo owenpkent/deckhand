@@ -5,6 +5,10 @@ surface. Behaviour semantics live in [CONTROL_MAPPING.md](CONTROL_MAPPING.md);
 constraints on interaction live in [ACCESSIBILITY.md](ACCESSIBILITY.md) and
 win any conflict with this file.
 
+Illustrative mockups of this spec live in [`assets/`](../assets/) and are
+embedded in the README. They are drawings of the spec, not screenshots; where
+a mockup and this file disagree, this file wins.
+
 ## The surface
 
 A frameless, always-on-top panel that never takes keyboard focus. Two

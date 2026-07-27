@@ -1,0 +1,81 @@
+<svg width="1100" height="204" viewBox="0 0 1100 204" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, -apple-system, sans-serif">
+  <!-- The seven tile states. Colour, glyph, and label together; colour is
+       never the only channel. Drawn from docs/ACCESSIBILITY.md. -->
+  <defs>
+    <pattern id="hatch2" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#8b93a0" stroke-width="1.4" opacity="0.30"/>
+    </pattern>
+  </defs>
+  <rect x="2" y="2" width="1096" height="200" rx="16" fill="#1c2026" stroke="#343b45" stroke-width="1.5"/>
+
+  <!-- Idle -->
+  <g transform="translate(36,26)">
+    <rect width="80" height="80" rx="11" fill="#262b31" stroke="#e8eaed" stroke-width="3"/>
+    <circle cx="40" cy="34" r="9" fill="none" stroke="#e8eaed" stroke-width="2.4"/>
+    <text x="40" y="64" text-anchor="middle" font-size="10.5" fill="#9aa0a6">alive, waiting</text>
+    <text x="40" y="130" text-anchor="middle" font-size="12.5" font-weight="700" fill="#e8eaed">Idle</text>
+    <text x="40" y="146" text-anchor="middle" font-size="10" fill="#9aa0a6">white</text>
+  </g>
+
+  <!-- Thinking -->
+  <g transform="translate(188,26)">
+    <rect width="80" height="80" rx="11" fill="#262b31" stroke="#4c8dff" stroke-width="3"/>
+    <path d="M 40 25 A 9 9 0 1 1 31.5 39.5" fill="none" stroke="#4c8dff" stroke-width="2.6" stroke-linecap="round"/>
+    <text x="40" y="64" text-anchor="middle" font-size="10.5" fill="#9aa0a6">working</text>
+    <text x="40" y="130" text-anchor="middle" font-size="12.5" font-weight="700" fill="#4c8dff">Thinking</text>
+    <text x="40" y="146" text-anchor="middle" font-size="10" fill="#9aa0a6">blue</text>
+  </g>
+
+  <!-- Needs input -->
+  <g transform="translate(340,26)">
+    <rect width="80" height="80" rx="11" fill="#2d2820" stroke="#f5a623" stroke-width="3"/>
+    <g transform="translate(33,22)" fill="#f5a623">
+      <rect x="0" y="0" width="3" height="9" rx="1.5"/>
+      <rect x="4.7" y="-1.8" width="3" height="10.8" rx="1.5"/>
+      <rect x="9.4" y="0" width="3" height="9" rx="1.5"/>
+      <rect x="-0.6" y="7.2" width="13.6" height="9" rx="4"/>
+    </g>
+    <text x="40" y="64" text-anchor="middle" font-size="10.5" fill="#c9a86a">waiting on you</text>
+    <text x="40" y="130" text-anchor="middle" font-size="12.5" font-weight="700" fill="#f5a623">Needs input</text>
+    <text x="40" y="146" text-anchor="middle" font-size="10" fill="#9aa0a6">amber</text>
+  </g>
+
+  <!-- Complete -->
+  <g transform="translate(492,26)">
+    <rect width="80" height="80" rx="11" fill="#232b26" stroke="#3ecf6e" stroke-width="3"/>
+    <path d="M 30 36 L 37 43 L 51 26" fill="none" stroke="#3ecf6e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="68" cy="12" r="5" fill="#3ecf6e"/>
+    <text x="40" y="64" text-anchor="middle" font-size="10.5" fill="#9aa0a6">done, unread</text>
+    <text x="40" y="130" text-anchor="middle" font-size="12.5" font-weight="700" fill="#3ecf6e">Complete</text>
+    <text x="40" y="146" text-anchor="middle" font-size="10" fill="#9aa0a6">green, clears on select</text>
+  </g>
+
+  <!-- Error -->
+  <g transform="translate(644,26)">
+    <rect width="80" height="80" rx="11" fill="#2d2224" stroke="#e5484d" stroke-width="3"/>
+    <path d="M 31 26 L 49 44 M 49 26 L 31 44" stroke="#e5484d" stroke-width="3" stroke-linecap="round"/>
+    <text x="40" y="64" text-anchor="middle" font-size="10.5" fill="#c98a8d">crashed or failed</text>
+    <text x="40" y="130" text-anchor="middle" font-size="12.5" font-weight="700" fill="#e5484d">Error</text>
+    <text x="40" y="146" text-anchor="middle" font-size="10" fill="#9aa0a6">red</text>
+  </g>
+
+  <!-- Unknown -->
+  <g transform="translate(796,26)">
+    <rect width="80" height="80" rx="11" fill="#262b31" stroke="#8b93a0" stroke-width="3"/>
+    <rect x="3" y="3" width="74" height="74" rx="8" fill="url(#hatch2)"/>
+    <text x="40" y="42" text-anchor="middle" font-size="24" font-weight="700" fill="#8b93a0">?</text>
+    <text x="40" y="64" text-anchor="middle" font-size="10.5" fill="#8b93a0">never guessed</text>
+    <text x="40" y="130" text-anchor="middle" font-size="12.5" font-weight="700" fill="#8b93a0">Unknown</text>
+    <text x="40" y="146" text-anchor="middle" font-size="10" fill="#9aa0a6">grey, hatched</text>
+  </g>
+
+  <!-- Ended / unbound -->
+  <g transform="translate(948,26)">
+    <rect width="80" height="80" rx="11" fill="none" stroke="#4a5058" stroke-width="2" stroke-dasharray="6 5"/>
+    <line x1="40" y1="28" x2="40" y2="46" stroke="#7c848e" stroke-width="2.6" stroke-linecap="round"/>
+    <line x1="31" y1="37" x2="49" y2="37" stroke="#7c848e" stroke-width="2.6" stroke-linecap="round"/>
+    <text x="40" y="64" text-anchor="middle" font-size="10.5" fill="#7c848e">empty</text>
+    <text x="40" y="130" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7c848e">Ended / unbound</text>
+    <text x="40" y="146" text-anchor="middle" font-size="10" fill="#9aa0a6">off, dashed</text>
+  </g>
+</svg>

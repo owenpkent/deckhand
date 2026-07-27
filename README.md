@@ -93,6 +93,28 @@ Where Deckhand diverges from the device, it says so and says why:
 | Codex key | Send | Send (hosted mode; honest about attached mode) |
 | Touch sensor | Layers, pairing | Layer strip, no pairing to do |
 
+## What it will look like
+
+These are **design mockups drawn from [docs/UI_SPEC.md](docs/UI_SPEC.md)**,
+not screenshots. Nothing runs yet; this is the target the spec commits to.
+
+<img src="assets/surface-horizontal.svg" width="100%" alt="Mockup of the Deckhand surface: a dark horizontal panel. Left, six square tiles: undertow with a white idle ring, contour with a blue thinking ring and the subtitle Bash cmake, deckhand with a thick amber ring, a hand glyph, subtitle Bash approval, and a selection chevron, meshview with a green ring, a check and an unread dot, markcopy grey and hatched with a question mark and the words state unknown, and an empty dashed tile reading bind a session. Middle, six command keys: Approve and Deny enabled, Continue and Interrupt greyed out, Plan and Compact neutral. Right, a four-way arrow pad, a dial reading Opus, model, with minus and plus targets, and Talk and Send buttons. Bottom left, three layer dots labelled Layer 1: Claude Code."/>
+
+*The surface, horizontal, docked to a screen edge. One tile per session; the
+amber tile is selected, so Approve and Deny are live and everything that does
+not apply is disabled rather than hidden.*
+
+<img src="assets/states.svg" width="100%" alt="Legend of the seven tile states, each a small tile with its own colour, glyph, and words: Idle, white with an open circle and alive, waiting. Thinking, blue with an arc spinner and working. Needs input, amber with a hand glyph and waiting on you. Complete, green with a check, an unread dot, and done, unread, clears on select. Error, red with a cross and crashed or failed. Unknown, grey and hatched with a question mark and never guessed. Ended or unbound, a dashed outline with a plus and empty."/>
+
+*The colour language, inherited from the Codex Micro. Every state also has a
+glyph and a label; colour is never the only channel.*
+
+<p align="center"><img src="assets/detail-approval.svg" width="60%" alt="Mockup of the detail panel during a pending approval. Header: Tile 3, deckhand, Opus, attached. An amber pill reads WAITING ON YOU. Below, the text Claude Code wants to run, then a monospace card showing Bash and the command cmake dash dash build build dash dash config Release. Underneath, a green Approve button and a red-outlined Deny button separated by a wide gap, with a note reading answers in 52 seconds, then returns to the terminal. At the bottom, a context bar at 62 percent, 41 cents this session, and Raise window, Unbind, and Settings buttons."/></p>
+
+*The approval card. The tool input is shown before the buttons are live, Deny
+sits a full dead gap away from Approve, and if you do nothing the decision
+returns safely to the terminal.*
+
 ## How it will work
 
 Claude Code fires hooks. A tiny shim will forward each hook's JSON to a local

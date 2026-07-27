@@ -1,0 +1,182 @@
+<svg width="1400" height="240" viewBox="0 0 1400 240" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, -apple-system, sans-serif">
+  <!-- Design mockup of the Deckhand surface, horizontal orientation, dark theme.
+       Drawn from docs/UI_SPEC.md. Nothing runs yet; this is the target. -->
+  <defs>
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#8b93a0" stroke-width="1.4" opacity="0.30"/>
+    </pattern>
+  </defs>
+
+  <!-- surface panel -->
+  <rect x="2" y="2" width="1396" height="236" rx="18" fill="#1c2026" stroke="#343b45" stroke-width="1.5"/>
+
+  <!-- ====================== agent tiles ====================== -->
+  <!-- T1 undertow: IDLE (white) -->
+  <g transform="translate(24,52)">
+    <rect width="96" height="96" rx="12" fill="#262b31" stroke="#e8eaed" stroke-width="3"/>
+    <circle cx="18" cy="18" r="6" fill="none" stroke="#e8eaed" stroke-width="2"/>
+    <text x="48" y="50" text-anchor="middle" font-size="13" font-weight="600" fill="#e8eaed">undertow</text>
+    <text x="48" y="66" text-anchor="middle" font-size="10" fill="#9aa0a6">idle</text>
+    <rect x="16" y="76" width="48" height="4" rx="2" fill="#3a4048"/>
+    <rect x="16" y="76" width="9" height="4" rx="2" fill="#6f7680"/>
+    <text x="80" y="81" font-size="9" fill="#9aa0a6" text-anchor="end">1:02</text>
+  </g>
+
+  <!-- T2 contour: THINKING (blue, spinner arc) -->
+  <g transform="translate(132,52)">
+    <rect width="96" height="96" rx="12" fill="#262b31" stroke="#4c8dff" stroke-width="3"/>
+    <path d="M 18 11 A 7 7 0 1 1 11.5 15.5" fill="none" stroke="#4c8dff" stroke-width="2.4" stroke-linecap="round"/>
+    <text x="48" y="50" text-anchor="middle" font-size="13" font-weight="600" fill="#e8eaed">contour</text>
+    <text x="48" y="66" text-anchor="middle" font-size="10" fill="#9aa0a6">Bash: cmake</text>
+    <rect x="16" y="76" width="48" height="4" rx="2" fill="#3a4048"/>
+    <rect x="16" y="76" width="21" height="4" rx="2" fill="#4c8dff"/>
+    <text x="80" y="81" font-size="9" fill="#9aa0a6" text-anchor="end">0:37</text>
+  </g>
+
+  <!-- T3 deckhand: NEEDS INPUT (amber), SELECTED (thick ring + chevron) -->
+  <g transform="translate(240,52)">
+    <rect width="96" height="96" rx="12" fill="#2d2820" stroke="#f5a623" stroke-width="5"/>
+    <!-- hand glyph -->
+    <g transform="translate(11,9)" fill="#f5a623">
+      <rect x="0" y="0" width="2.6" height="7.5" rx="1.3"/>
+      <rect x="4" y="-1.5" width="2.6" height="9" rx="1.3"/>
+      <rect x="8" y="0" width="2.6" height="7.5" rx="1.3"/>
+      <rect x="-0.5" y="6" width="11.6" height="7.5" rx="3.4"/>
+    </g>
+    <text x="48" y="50" text-anchor="middle" font-size="13" font-weight="600" fill="#f3e9d8">deckhand</text>
+    <text x="48" y="66" text-anchor="middle" font-size="10" fill="#c9a86a">Bash approval</text>
+    <rect x="16" y="76" width="48" height="4" rx="2" fill="#3a4048"/>
+    <rect x="16" y="76" width="30" height="4" rx="2" fill="#f5a623"/>
+    <text x="80" y="81" font-size="9" fill="#c9a86a" text-anchor="end">0:12</text>
+    <path d="M 42 96 L 48 90 L 54 96 Z" fill="#f5a623"/>
+  </g>
+
+  <!-- T4 meshview: COMPLETE (green, unread dot) -->
+  <g transform="translate(348,52)">
+    <rect width="96" height="96" rx="12" fill="#232b26" stroke="#3ecf6e" stroke-width="3"/>
+    <path d="M 12 18 L 17 23 L 26 12" fill="none" stroke="#3ecf6e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="82" cy="14" r="5" fill="#3ecf6e"/>
+    <text x="48" y="50" text-anchor="middle" font-size="13" font-weight="600" fill="#e8eaed">meshview</text>
+    <text x="48" y="66" text-anchor="middle" font-size="10" fill="#9aa0a6">done, unread</text>
+    <rect x="16" y="76" width="48" height="4" rx="2" fill="#3a4048"/>
+    <rect x="16" y="76" width="15" height="4" rx="2" fill="#3ecf6e"/>
+    <text x="80" y="81" font-size="9" fill="#9aa0a6" text-anchor="end">8:40</text>
+  </g>
+
+  <!-- T5 markcopy: UNKNOWN (grey, hatched, question) -->
+  <g transform="translate(456,52)">
+    <rect width="96" height="96" rx="12" fill="#262b31" stroke="#8b93a0" stroke-width="3"/>
+    <rect x="3" y="3" width="90" height="90" rx="9" fill="url(#hatch)"/>
+    <text x="18" y="24" font-size="16" font-weight="700" fill="#8b93a0">?</text>
+    <text x="48" y="50" text-anchor="middle" font-size="13" font-weight="600" fill="#b8bec7">markcopy</text>
+    <text x="48" y="66" text-anchor="middle" font-size="10" fill="#8b93a0">no events</text>
+    <text x="48" y="82" text-anchor="middle" font-size="9" fill="#8b93a0">state unknown</text>
+  </g>
+
+  <!-- T6: UNBOUND (dashed, bind affordance) -->
+  <g transform="translate(564,52)">
+    <rect width="96" height="96" rx="12" fill="none" stroke="#4a5058" stroke-width="2" stroke-dasharray="6 5"/>
+    <line x1="48" y1="34" x2="48" y2="54" stroke="#7c848e" stroke-width="2.6" stroke-linecap="round"/>
+    <line x1="38" y1="44" x2="58" y2="44" stroke="#7c848e" stroke-width="2.6" stroke-linecap="round"/>
+    <text x="48" y="72" text-anchor="middle" font-size="10" fill="#7c848e">bind a session</text>
+  </g>
+
+  <line x1="682" y1="30" x2="682" y2="210" stroke="#343b45" stroke-width="1.5"/>
+
+  <!-- ====================== command keys ====================== -->
+  <!-- selected tile is amber: Approve and Deny live, Continue and Interrupt disabled -->
+  <g transform="translate(698,60)">
+    <g>
+      <rect width="86" height="44" rx="9" fill="#1f3a29" stroke="#3ecf6e" stroke-width="1.8"/>
+      <path d="M 12 22 L 17 27 L 26 15" fill="none" stroke="#3ecf6e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="52" y="27" text-anchor="middle" font-size="11" font-weight="600" fill="#c9f2d6">Approve</text>
+    </g>
+    <g transform="translate(94,0)">
+      <rect width="86" height="44" rx="9" fill="#26262b" stroke="#e5484d" stroke-width="1.8"/>
+      <path d="M 13 15 L 25 27 M 25 15 L 13 27" stroke="#e5484d" stroke-width="2.4" stroke-linecap="round"/>
+      <text x="53" y="27" text-anchor="middle" font-size="11" font-weight="600" fill="#f1b7b9">Deny</text>
+    </g>
+    <g transform="translate(188,0)" opacity="0.38">
+      <rect width="86" height="44" rx="9" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <path d="M 14 14 L 26 22 L 14 30 Z" fill="#9aa0a6"/>
+      <text x="53" y="27" text-anchor="middle" font-size="11" fill="#9aa0a6">Continue</text>
+    </g>
+    <g transform="translate(0,52)" opacity="0.38">
+      <rect width="86" height="44" rx="9" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <rect x="13" y="15" width="12" height="12" rx="2" fill="#9aa0a6"/>
+      <text x="53" y="27" text-anchor="middle" font-size="11" fill="#9aa0a6">Interrupt</text>
+    </g>
+    <g transform="translate(94,52)">
+      <rect width="86" height="44" rx="9" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <rect x="12" y="14" width="14" height="14" rx="3" fill="none" stroke="#b8bec7" stroke-width="1.8"/>
+      <line x1="15" y1="21" x2="23" y2="21" stroke="#b8bec7" stroke-width="1.8"/>
+      <text x="53" y="23" text-anchor="middle" font-size="10.5" font-weight="600" fill="#d5d9de">Plan</text>
+      <text x="53" y="34" text-anchor="middle" font-size="8" fill="#9aa0a6">off</text>
+    </g>
+    <g transform="translate(188,52)">
+      <rect width="86" height="44" rx="9" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <path d="M 14 16 L 24 16 M 12 21 L 26 21 M 14 26 L 24 26" stroke="#b8bec7" stroke-width="1.8" stroke-linecap="round"/>
+      <text x="53" y="27" text-anchor="middle" font-size="11" fill="#d5d9de">Compact</text>
+    </g>
+  </g>
+
+  <line x1="994" y1="30" x2="994" y2="210" stroke="#343b45" stroke-width="1.5"/>
+
+  <!-- ====================== stick (four-way pad) ====================== -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(1046,44)">
+      <rect width="44" height="44" rx="10" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <path d="M 14 26 L 22 17 L 30 26" fill="none" stroke="#b8bec7" stroke-width="2.4"/>
+    </g>
+    <g transform="translate(1094,92)">
+      <rect width="44" height="44" rx="10" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <path d="M 18 14 L 27 22 L 18 30" fill="none" stroke="#b8bec7" stroke-width="2.4"/>
+    </g>
+    <g transform="translate(1046,140)">
+      <rect width="44" height="44" rx="10" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <path d="M 14 18 L 22 27 L 30 18" fill="none" stroke="#b8bec7" stroke-width="2.4"/>
+    </g>
+    <g transform="translate(998,92)">
+      <rect width="44" height="44" rx="10" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <path d="M 26 14 L 17 22 L 26 30" fill="none" stroke="#b8bec7" stroke-width="2.4"/>
+    </g>
+  </g>
+
+  <!-- ====================== dial ====================== -->
+  <g transform="translate(1216,106)">
+    <circle r="40" fill="none" stroke="#3a4048" stroke-width="8"/>
+    <path d="M 0 -40 A 40 40 0 0 1 38 12" fill="none" stroke="#4c8dff" stroke-width="8" stroke-linecap="round"/>
+    <text y="-2" text-anchor="middle" font-size="12" font-weight="700" fill="#e8eaed">Opus</text>
+    <text y="13" text-anchor="middle" font-size="9" fill="#9aa0a6">model</text>
+    <g transform="translate(-52,52)">
+      <circle r="14" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <line x1="-6" y1="0" x2="6" y2="0" stroke="#b8bec7" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(52,52)">
+      <circle r="14" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+      <line x1="-6" y1="0" x2="6" y2="0" stroke="#b8bec7" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="0" y1="-6" x2="0" y2="6" stroke="#b8bec7" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <!-- ====================== talk and send ====================== -->
+  <g transform="translate(1296,52)">
+    <rect width="84" height="52" rx="10" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+    <rect x="16" y="12" width="9" height="15" rx="4.5" fill="none" stroke="#b8bec7" stroke-width="1.8"/>
+    <path d="M 12 22 A 8.5 8.5 0 0 0 29 22 M 20.5 30 L 20.5 36" fill="none" stroke="#b8bec7" stroke-width="1.8" stroke-linecap="round"/>
+    <text x="54" y="31" text-anchor="middle" font-size="12" font-weight="600" fill="#d5d9de">Talk</text>
+  </g>
+  <g transform="translate(1296,116)">
+    <rect width="84" height="52" rx="10" fill="#26262b" stroke="#4a5058" stroke-width="1.5"/>
+    <path d="M 14 32 L 32 14 L 25 33 L 21 27 Z" fill="#b8bec7"/>
+    <text x="56" y="31" text-anchor="middle" font-size="12" font-weight="600" fill="#d5d9de">Send</text>
+  </g>
+
+  <!-- ====================== layer strip ====================== -->
+  <g transform="translate(28,206)">
+    <circle cx="8" cy="8" r="6" fill="#4c8dff"/>
+    <circle cx="30" cy="8" r="6" fill="none" stroke="#4a5058" stroke-width="1.6"/>
+    <circle cx="52" cy="8" r="6" fill="none" stroke="#4a5058" stroke-width="1.6"/>
+    <text x="70" y="12" font-size="10" fill="#9aa0a6">Layer 1: Claude Code</text>
+  </g>
+</svg>

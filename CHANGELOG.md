@@ -35,6 +35,15 @@ and no past release is backfilled.
 
 ### Added
 
+- Design mockups in `assets/` (the surface, the approval card, the seven
+  state tiles), drawn as SVGs directly from `docs/UI_SPEC.md` and embedded
+  in the README with full alt text. They are labelled as mockups, not
+  screenshots, because nothing runs yet and the README should not imply
+  otherwise.
+- Community scaffolding on GitHub: `accessibility`, `adapter`, `spec`, and
+  `spike` labels; seven seeded issues covering the two Phase 1 gating
+  spikes, the open research questions, and two good first issues; and a
+  welcome post in Discussions explaining how to help at Phase 0.
 - Initial specification for Deckhand: a mouse-only, always-on-top macropad
   surface for Claude Code sessions, reimplementing the interaction model of
   the Codex Micro (Work Louder and OpenAI) against Claude Code instead of
