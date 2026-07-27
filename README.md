@@ -54,7 +54,7 @@ window switch is expensive. The author is a wheelchair user with muscular
 dystrophy; moving a pointer is cheap, pressing keys is not, and checking six
 terminals by keyboard is exactly the tax this project removes.
 
-Deckhand is a **status board first**: six tiles you can read at a glance,
+Deckhand is designed as a **status board first**: six tiles you can read at a glance,
 using the Codex Micro's colour language. White idle, blue thinking, green
 done-and-unread, amber waiting on you, red problem. Then it is a control
 surface: when a tile goes amber because Claude wants permission to run a tool,
@@ -93,10 +93,10 @@ Where Deckhand diverges from the device, it says so and says why:
 | Codex key | Send | Send (hosted mode; honest about attached mode) |
 | Touch sensor | Layers, pairing | Layer strip, no pairing to do |
 
-## How it works
+## How it will work
 
-Claude Code fires hooks. A tiny shim forwards each hook's JSON to a local
-daemon, which runs one state machine per session and drives the tiles. When
+Claude Code fires hooks. A tiny shim will forward each hook's JSON to a local
+daemon, which will run one state machine per session and drive the tiles. When
 permission gating is on, the `PreToolUse` hook is held open while the tile
 burns amber; your click travels back as a documented
 `permissionDecision`. If Deckhand cannot answer in time, it answers `ask` and

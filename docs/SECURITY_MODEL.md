@@ -94,7 +94,8 @@ An approval press must be a considered act even though it is one click.
 
 ### 4. Keep rules legible
 
-Auto-approval rules (Phase 3+, off by default) are the riskiest convenience in
+Auto-approval rules (unscheduled: they reach a phase only through
+`ROADMAP.md`, and ship off by default) are the riskiest convenience in
 the design, because they turn a security decision into configuration.
 
 - Rules can only *narrow*: a rule matches a tool name pattern and optionally a

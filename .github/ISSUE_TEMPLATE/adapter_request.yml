@@ -8,7 +8,7 @@ body:
         Deckhand talks to agent runtimes through adapters. Claude Code is the
         reference adapter. Before opening this, please skim
         [docs/ADAPTER_PROTOCOL.md](../../docs/ADAPTER_PROTOCOL.md) so we can
-        talk about the same six capabilities.
+        talk about the same seven capabilities.
 
   - type: input
     id: runtime
@@ -44,6 +44,7 @@ body:
         - label: observe_status
         - label: list_sessions
         - label: focus_session
-        - label: send_prompt
         - label: decide_permission
+        - label: send_prompt
         - label: interrupt
+        - label: set_option

@@ -66,8 +66,8 @@ decided.
 | `THINKING` | Blue | A turn begins, or a tool starts | A turn ends, or input is required |
 | `NEEDS_INPUT` | Amber | A permission decision is pending, or Claude asked a question | The decision is made, or the question is answered |
 | `COMPLETE` | Green | A turn finished and you have not selected the tile since | You select the tile |
-| `ERROR` | Red | The turn failed, the process died, or the session went silent past its deadline | You select the tile, or the session recovers |
-| `ENDED` | Off | The session exited | Rebound |
+| `ERROR` | Red | The turn failed, or the process died without a clean exit | You select the tile (a crashed session then shows `ENDED`), or the session recovers |
+| `ENDED` | Off | The session exited cleanly, or you acknowledged a crashed `ERROR` tile | Rebound |
 | `UNKNOWN` | Grey, hatched | The daemon cannot currently tell | Any authoritative event arrives |
 
 `UNKNOWN` is deliberate and load-bearing. A status board that guesses is worse
@@ -81,7 +81,8 @@ Events are the primary signal, but absence of events is ambiguous: a session
 thinking hard and a session whose terminal was closed both emit nothing. The
 daemon therefore holds a per-session deadline. A session in `THINKING` with no
 event for longer than the deadline moves to `UNKNOWN`, not `ERROR`, because a
-long tool call is normal. Confirmed process death moves it to `ENDED`.
+long tool call is normal. A clean exit moves it to `ENDED`; confirmed process
+death without one is a crash and moves it to `ERROR`.
 
 The deadline default and how process death is confirmed on Windows are both
 unresolved. See [open questions](#open-questions).

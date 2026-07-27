@@ -59,7 +59,7 @@ knows how to read a Deckhand surface.
 | Blue | Thinking | Claude is working: generating or running a tool |
 | Green | Complete | Turn finished, you have not looked yet |
 | Amber | Requires input | Blocked on a permission decision or a question |
-| Red | Error | The turn failed, the process died, or the adapter lost the session |
+| Red | Error | The turn failed, or the session crashed |
 | Off | No assigned chat | Tile is unbound |
 
 Green specifically means **unread**. It clears when you select the tile, which
@@ -110,8 +110,8 @@ default, and presses to select. Deckhand keeps both behaviours and both modes:
 
 - **Composer mode**: step through the adjustable options for the selected
   session, press to commit.
-- **Single-option mode**: the dial is pinned to one option, mirroring the
-  device's "Reasoning only" setting. Default pin is the model.
+- **Pinned mode**: the dial is pinned to one option, mirroring the device's
+  "Reasoning only" setting. Default pin is the model.
 
 A pointer cannot turn a dial, so the dial renders as an arc with a minus and a
 plus target flanking a centre commit target. The arc is decorative; the targets

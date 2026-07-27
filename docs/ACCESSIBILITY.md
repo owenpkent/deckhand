@@ -80,10 +80,10 @@ colour is the fastest channel, never the only one:
 | --- | --- | --- | --- |
 | Idle | White | Open circle | Idle |
 | Thinking | Blue | Arc spinner | Working |
-| Complete | Green | Check | Done, unread |
 | Needs input | Amber | Hand | Waiting on you |
+| Complete | Green | Check | Done, unread |
 | Error | Red | Cross | Problem |
-| Unknown | Grey | Hatched fill | Unknown |
+| Unknown | Grey | Question, hatched fill | Unknown |
 | Ended or unbound | None | Dashed outline | Empty |
 
 Plus: a high-contrast theme, glyph-only mode for monochrome displays, reduced
@@ -117,7 +117,8 @@ Stated plainly rather than promised vaguely:
 
 ## Feedback outranks estimates
 
-Every number above (44 px, 500 ms, 350 ms, 300%) is an informed default, and
+Every number above (44 px, 350 ms, 300%, plus the 500 ms rule in
+[SECURITY_MODEL.md](SECURITY_MODEL.md)) is an informed default, and
 feedback from disabled users outranks every one of them. The
 [accessibility feedback template](https://github.com/owenpkent/deckhand/issues/new?template=accessibility_feedback.yml)
 never requires disclosing a diagnosis: describe what is hard, not why.

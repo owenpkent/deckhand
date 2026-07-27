@@ -65,9 +65,9 @@ orientations:
 | State | Ring | Fill | Glyph | Motion (reduced-motion variant) |
 | --- | --- | --- | --- | --- |
 | Idle | White | Neutral | Open circle | None |
-| Thinking | Blue | Neutral | Arc spinner (static arc badge) |
-| Complete | Green | Tinted 10% | Check | One pulse on entry (none) |
+| Thinking | Blue | Neutral | Arc spinner | Static arc badge |
 | Needs input | Amber | Tinted 20% | Hand | Slow breathe (static) |
+| Complete | Green | Tinted 10% | Check | One pulse on entry (none) |
 | Error | Red | Tinted 20% | Cross | None |
 | Unknown | Grey | Hatched | Question | None |
 | Ended / unbound | None | None | Dashed outline / plus | None |

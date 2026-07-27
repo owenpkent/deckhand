@@ -12,6 +12,27 @@ and no past release is backfilled.
 
 ## [Unreleased]
 
+### Fixed
+
+- Documentation sweep across the whole specification, from two independent
+  audit passes (consistency and honesty). The one real design contradiction
+  found: three documents disagreed on what a dead session process turns a
+  tile into. Resolved as: a clean exit is `ended`, a confirmed death without
+  a clean exit is a crash and is `error` (acknowledging it then shows
+  `ended`), and silence past the liveness deadline stays `unknown`.
+  `docs/ARCHITECTURE.md`, `docs/CLAUDE_CODE_ADAPTER.md`, and
+  `docs/CONTROL_MAPPING.md` now say the same thing.
+- Smaller alignment fixes: the adapter request template now lists all seven
+  capabilities in the protocol's order; the PR sync checklist covers all
+  eight authoritative documents; the source-of-truth map gained rows for
+  `docs/ARCHITECTURE.md` and `docs/ACCESSIBILITY.md`; `TODO.md` no longer
+  lists as open three decisions that ADR-007 and the adapter doc had
+  already made; state tables use one row order and one name per concept
+  (`needs_input`, pinned mode); phase labels for the two de-risking spikes
+  agree (Phase 0, gating Phase 1); auto-approval rules are unscheduled
+  rather than promised for Phase 3; the executive summary and README now
+  hedge unbuilt behaviour and carry the non-affiliation note.
+
 ### Added
 
 - Initial specification for Deckhand: a mouse-only, always-on-top macropad

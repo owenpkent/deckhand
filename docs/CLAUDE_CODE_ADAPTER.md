@@ -62,11 +62,11 @@ The daemon owns the state machine; this adapter feeds it observations.
 | `Stop` | `complete` | Cleared to `idle` when you select the tile |
 | `SessionEnd` | `ended` | |
 | No events past the liveness deadline | `unknown` | Never guessed into `idle` or `error` |
-| Process confirmed dead | `ended` | Detection method on Windows still open |
+| Process confirmed dead without `SessionEnd` | `error` | A crash; detection method on Windows still open |
 
 **Error is the honest gap.** There is no clearly documented hook that fires on
-a failed turn. Until a reliable signal is proven, red means "the process died
-or the adapter lost the session", and the spec does not promise more. If a
+a failed turn. Until a reliable signal is proven, red means "the session
+crashed", and the spec does not promise more. If a
 failed-turn signal turns out to exist, red gets richer and this table changes.
 
 ## Hook installation
@@ -186,7 +186,7 @@ What this adapter will declare, per [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md):
 | --- | --- | --- |
 | `observe_status` | `documented` | `documented` |
 | `list_sessions` | `internal` (cold start) | `documented` |
-| `focus_session` | `synthetic` | not applicable |
+| `focus_session` | `synthetic` | `false` (no window to raise) |
 | `decide_permission` | `documented` | `documented` |
 | `send_prompt` | `false` (`synthetic` if the user opts in) | `documented` |
 | `interrupt` | `false` (`synthetic` if the user opts in) | `documented` |

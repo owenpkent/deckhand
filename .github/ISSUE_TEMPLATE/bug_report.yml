@@ -6,7 +6,10 @@ body:
     id: area
     attributes:
       label: Area
-      description: Which part of Deckhand is misbehaving?
+      description: >
+        Which part of Deckhand is misbehaving? Most areas only apply once
+        Phase 1 code exists; during Phase 0, "Documentation" is the likely
+        answer.
       options:
         - Surface (window, layout, always-on-top, focus)
         - Agent tiles (status colours, session binding)

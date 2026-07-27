@@ -47,8 +47,14 @@ move together. The change propagation table in
 kind of change needs to touch. At minimum:
 
 - [ ] `docs/CONTROL_MAPPING.md` updated, if a control was added or changed
+- [ ] `docs/UI_SPEC.md` updated, if a visual or interaction element changed
 - [ ] `docs/ADAPTER_PROTOCOL.md` updated, if an adapter capability changed
+- [ ] `docs/CLAUDE_CODE_ADAPTER.md` updated, if Claude Code integration
+      behaviour changed
 - [ ] `docs/SECURITY_MODEL.md` updated, if the trust boundary moved
+- [ ] `docs/ACCESSIBILITY.md` updated, if a target size, timing, or
+      interaction rule changed
+- [ ] `docs/DECISIONS.md` has a new ADR, if a decision was made or reversed
 - [ ] `CHANGELOG.md` updated
 - [ ] `TODO.md` / `ROADMAP.md` updated, if this closes or opens a tracked
       item

@@ -45,8 +45,8 @@ Checking a box here means the item is done, not that it is perfect. See
 - [ ] Measure hook call overhead with six Claude Code sessions running
       concurrently. If it is not negligible, `docs/ARCHITECTURE.md` needs an
       answer for it, not just a hope.
-- [ ] Decide the daemon transport (local socket, local HTTP, or a named
-      pipe on Windows) and record the decision in `docs/DECISIONS.md`.
+- [x] Decide the daemon transport: loopback HTTP with a token, recorded as
+      ADR-007. Revisit only if the token model proves inadequate.
 - [ ] Prototype the Tauri always-on-top, non-focus-stealing window on
       Windows 11 before committing further to Tauri for the rest of the UI.
       `alpha-osk` proves the Win32 `WS_EX_NOACTIVATE | WS_EX_TOPMOST`
@@ -61,11 +61,14 @@ Checking a box here means the item is done, not that it is perfect. See
       Deckhand falls back to reading
       `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`, and how it
       detects that the schema it expects has changed underneath it.
-- [ ] Write down the minimum hit target size as an actual number in
-      `docs/UI_SPEC.md`, with a rationale, not just "large".
-- [ ] Decide what `settings.json` hook installation looks like in practice:
-      does Deckhand write it, does the user, and is it merged or
-      overwritten.
+- [x] Write down the minimum hit target size as an actual number, with a
+      rationale: 44 px, in `docs/ACCESSIBILITY.md`, echoed in
+      `docs/UI_SPEC.md`.
+- [ ] Specify the bind picker (what it lists, how a session is chosen, what
+      it shows when the adapter's session list is `internal`-confidence).
+- [ ] Design the UI flow for presenting the hook block for confirmation.
+      The policy is already set in `docs/CLAUDE_CODE_ADAPTER.md`: Deckhand
+      writes only on explicit confirmation, composes, never clobbers.
 - [ ] Resolve whether `docs/SECURITY_MODEL.md`'s trust boundary needs to
       account for a compromised hook shim, not only a compromised tool
       call.
@@ -82,8 +85,9 @@ Checking a box here means the item is done, not that it is perfect. See
       `docs/CLAUDE_CODE_ADAPTER.md`.
 - [ ] Implement `settings.json` hook registration (install and uninstall).
 - [ ] Implement daemon ingestion for all seven hook event types.
-- [ ] Define the internal session state machine (idle, thinking, complete,
-      requires input, error, unbound) and its transition rules.
+- [ ] Define the internal session state machine (idle, thinking, needs_input,
+      complete, error, ended, unknown) and its transition rules, matching
+      `docs/ADAPTER_PROTOCOL.md` exactly.
 - [ ] Implement the six agent tiles in the surface shell.
 - [ ] Wire tile colour to daemon session state over the chosen transport.
 - [ ] Implement the always-on-top, non-focus-stealing window per the

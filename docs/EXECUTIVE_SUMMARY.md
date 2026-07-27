@@ -42,7 +42,10 @@ Deckhand is a piece of software: an always-on-top, frameless, on-screen
 surface, operated with a pointer alone, that shows the live status of up to
 six Claude Code sessions and lets you act on them (approve, deny, continue,
 interrupt, and more) from the surface instead of from each session's own
-terminal window.
+terminal window. None of it exists yet: Deckhand is at Phase 0, a
+specification, and this document describes a design (see the Status section
+at the end). It is independent software, not affiliated with or endorsed by
+OpenAI, Work Louder, or Anthropic.
 
 It has two ways of relating to a Claude Code session, called attached mode
 and hosted mode, and which one is in use matters more than any other single

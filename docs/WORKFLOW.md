@@ -13,7 +13,9 @@ change when one of them does.
 | Fact | Authoritative file |
 |---|---|
 | Control behaviour | `docs/CONTROL_MAPPING.md` |
+| Interaction rules, target sizes, timings | `docs/ACCESSIBILITY.md` |
 | Visual and interaction spec | `docs/UI_SPEC.md` |
+| System structure (daemon, shim, state machine) | `docs/ARCHITECTURE.md` |
 | Adapter contract | `docs/ADAPTER_PROTOCOL.md` |
 | Claude Code specifics | `docs/CLAUDE_CODE_ADAPTER.md` |
 | Trust boundary and permission model | `docs/SECURITY_MODEL.md` |

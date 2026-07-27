@@ -11,8 +11,9 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
   status tiles, approve and deny via the `PreToolUse` hook, dial, stick,
   talk, layers.
 - **Status:** Phase 0, specification only. **There is no application code.**
-  Do not "fix" that by scaffolding code unprompted; Phase 1 begins with the
-  two spikes named in [ROADMAP.md](ROADMAP.md).
+  Do not "fix" that by scaffolding code unprompted; Phase 1 is gated on the
+  two pre-Phase-1 spikes tracked in [TODO.md](TODO.md) and
+  [docs/DECISIONS.md](docs/DECISIONS.md#adr-009).
 - **Stack (decided, not built):** Tauri v2, Rust daemon, TypeScript surface.
   See [docs/DECISIONS.md](docs/DECISIONS.md#adr-002).
 
@@ -65,7 +66,7 @@ expensive; the pointer is cheap. Working agreement:
 
 ## Things to watch out for
 
-1. The five status colours come from the Codex Micro and their meanings are
+1. The six status colours come from the Codex Micro and their meanings are
    frozen (ADR-008). `unknown` is the only Deckhand addition. Do not invent
    states or repurpose colours.
 2. The approval path must fail to `ask`, never to `allow` (ADR-006). Any
@@ -105,5 +106,5 @@ the owner's cross-project dashboard. Keep compatible:
 ## Current focus
 
 Finish Phase 0: spec complete and internally consistent. Next real work is
-the two Phase 1 spikes: prove the no-focus-steal window in Tauri on Windows,
+the two pre-Phase-1 spikes: prove the no-focus-steal window in Tauri on Windows,
 and validate hook payloads against a live Claude Code install.

@@ -29,11 +29,16 @@ Deliverables:
   actually authorises.
 - `docs/ACCESSIBILITY.md`: the mouse-only rule made concrete.
 - `docs/DECISIONS.md`: the decisions already made, and why.
+- `docs/EXECUTIVE_SUMMARY.md` and `docs/WORKFLOW.md`: the front door and the
+  anti-drift rules.
+- The two de-risking spikes, tracked in `TODO.md`: the Tauri
+  no-focus-steal window, and hook payload validation against a live
+  Claude Code install. These gate the start of Phase 1 (ADR-009).
 
 **Done when** the documents above are internally consistent, a second
 implementer could start Phase 1 from them without asking the author basic
-questions, and the open questions that remain are written down rather than
-silently assumed.
+questions, the open questions that remain are written down rather than
+silently assumed, and both spikes have answered their questions.
 
 ---
 
