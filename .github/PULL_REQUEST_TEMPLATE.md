@@ -51,6 +51,8 @@ kind of change needs to touch. At minimum:
 - [ ] `docs/ADAPTER_PROTOCOL.md` updated, if an adapter capability changed
 - [ ] `docs/CLAUDE_CODE_ADAPTER.md` updated, if Claude Code integration
       behaviour changed
+- [ ] `docs/ARCHITECTURE.md` updated, if the session state machine, the
+      approval path, or the process structure changed
 - [ ] `docs/SECURITY_MODEL.md` updated, if the trust boundary moved
 - [ ] `docs/ACCESSIBILITY.md` updated, if a target size, timing, or
       interaction rule changed

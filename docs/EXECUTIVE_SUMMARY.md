@@ -1,5 +1,9 @@
 # Executive summary
 
+Status: **accepted**. This is a derived summary, not an authoritative
+source: it is written to be read first and to stay honest, but where it
+disagrees with any of the documents it summarises, the linked document wins.
+
 ## The problem
 
 Running more than one Claude Code session at a time means running more than
@@ -39,25 +43,37 @@ it was hardware.
 ## What Deckhand is
 
 Deckhand is a piece of software: an always-on-top, frameless, on-screen
-surface, operated with a pointer alone, that shows the live status of up to
-six Claude Code sessions and lets you act on them (approve, deny, continue,
-interrupt, and more) from the surface instead of from each session's own
-terminal window. None of it exists yet: Deckhand is at Phase 0, a
-specification, and this document describes a design (see the Status section
-at the end). It is independent software, not affiliated with or endorsed by
-OpenAI, Work Louder, or Anthropic.
+surface, operated with a pointer alone, that lets you see the live status of
+up to six Claude Code sessions at a glance, answer the questions they ask
+you, and approve the calls that need a human, all from the surface instead
+of from each session's own terminal window. Approve, deny, continue, and
+interrupt stay on the surface; they are simply not the headline anymore. On
+one machine running Claude Code with `permissions.defaultMode: "auto"`, a
+classifier answers most permission prompts on its own, and the human is
+asked to choose between options far more often than asked to allow a tool:
+322 `AskUserQuestion` calls across 155 of 240 sessions, against 10 to 27
+tool denials in the same corpus. That is one user's corpus on one machine,
+not a general finding about how Claude Code is used, and this document
+treats it that way rather than generalising from it. None of it exists yet:
+Deckhand is at Phase 0, a specification, and this document describes a
+design (see the Status section at the end). It is independent software, not
+affiliated with or endorsed by OpenAI, Work Louder, or Anthropic.
 
 It has two ways of relating to a Claude Code session, called attached mode
 and hosted mode, and which one is in use matters more than any other single
 fact about how a given tile behaves. Attached mode watches a session
 started by the user in a terminal; it gets full status observation and
 full approve and deny authority through Claude Code's hook system, but it
-cannot inject a prompt into that session, because Claude Code exposes no
-supported way to do that. Sending, continuing, and interrupting in attached
-mode therefore rely on synthetic keystrokes aimed at the terminal window,
-which is fragile, opt-in, and off by default. Hosted mode starts sessions
-itself through the Claude Agent SDK, which gets full control including
-sending prompts, at the cost of the normal terminal UI.
+has no proven way to put a prompt into that session at the moment a person
+wants to type one. Documented channels do exist and they all deliver at a
+turn boundary rather than into an idle session, and none of them has been
+observed working here, so Deckhand declares the capability false and ships
+no send. Continue is a visible, disabled button that states the reason;
+sending and interrupting fall back to synthetic keystrokes aimed at the
+terminal window only if the user opts in, which is fragile and off by
+default. Hosted mode starts sessions itself through the Claude Agent SDK,
+which gets full control including sending prompts, at the cost of the
+normal terminal UI.
 
 ## What is genuinely new
 

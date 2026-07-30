@@ -55,11 +55,51 @@ decision to the user**. Every failure path answers `ask`:
 | No human decision before Deckhand's deadline | `ask` |
 | Surface not running or not visible | `ask` |
 | Daemon shutting down with approvals pending | `ask` for each |
-| Shim cannot reach the daemon | No output at all; Claude Code prompts normally |
+| Shim cannot reach the daemon | No output at all; Claude Code behaves as if Deckhand were not installed |
 
 `allow` is only ever produced by an explicit click or an explicit rule. There
 is no code path where a timeout, a crash, a default, or a missing config value
 produces `allow`.
+
+The last row is worth stating exactly, because "prompts normally" would be an
+overstatement. With no hook output the call falls through to whatever Claude
+Code would have done unhooked, which is a prompt in some modes, the classifier
+in `auto`, and execution in `bypassPermissions`. That is the same outcome as
+never installing Deckhand, which is the correct behaviour for a dead
+companion: a broken status board must not brick every session on the machine.
+It is not a Deckhand `allow`, and no Deckhand code path emits one.
+
+**What `ask` reaches depends on the session's permission mode.** In `default`
+and `manual` it returns the decision to a human, which is what the rest of this
+rule assumes. In `auto` it returns the decision to Claude Code's own
+classifier, which can answer without a person ever seeing the call. In
+`dontAsk` it becomes a denial. Deckhand cannot change any of that, so it says
+it plainly: `ask` is the safest answer Deckhand can give in every mode, and in
+some modes it is not the same thing as "a human decides". The mode travels with
+the session and is shown on the tile as text, never as a colour, so a
+fail-closed exit is never silently reinterpreted.
+
+The remaining modes in
+[ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types), `acceptEdits`, `plan`, and
+`bypassPermissions`, get no claim here beyond the one that holds in all of
+them: Deckhand still emits `ask` and still never emits `allow` on a failure
+path. Where an `ask` lands in each of the three has not been observed and is
+not asserted, so a tile in one of them shows the mode as text and Approve and
+Deny name it as the reason they are off. An unverified guess about a
+permission mode is exactly the thing this document exists to refuse.
+
+Mode does not switch the gate off. `PreToolUse` still runs first in every mode,
+and a hook `allow` still runs the call in `dontAsk`, so the gate is live even
+where Claude Code itself would not have prompted. Mode changes what a
+fall-through means, not whether Deckhand is asked. (Documented for Claude Code
+2.1.220; unverified here, since no mode other than `default` and `manual` has
+been observed.)
+
+Claude Code 2.1.220 documents a fourth decision value, `defer`. Deckhand never
+uses it on a failure path. `defer` falls through to the normal permission flow,
+which is the classifier in `auto` and execution in `bypassPermissions`, so it
+is not fail-closed in the modes where that matters most. `ask` stays the
+fail-closed exit ([ADR-006](DECISIONS.md#adr-006), unchanged).
 
 ### 2. Authenticate the loopback
 
@@ -79,8 +119,14 @@ produces `allow`.
 
 An approval press must be a considered act even though it is one click.
 
-- Approve and Deny enable only when the selected tile is amber, and only for
-  the request being displayed. There is no "approve whatever is pending".
+- Approve and Deny enable only when the selected tile is amber **and the
+  pending item is a permission request** (`kind: permission`), and only for the
+  request being displayed. There is no "approve whatever is pending". Amber
+  raised by a question enables that question's answer targets instead; Approve
+  is never live over something it cannot approve.
+- A disabled Approve or Deny is never a silent no-op. Clicking it reveals the
+  cause in the detail panel: nothing pending, the wrong kind of amber, or a
+  permission mode in which the decision would not have reached you anyway.
 - **No approval control may appear under the pointer within 500 ms of another
   interaction at that spot.** This kills the misclick where a tile press lands
   on a button that materialised beneath it.
@@ -125,6 +171,67 @@ the design, because they turn a security decision into configuration.
 - A settings health check warns when Deckhand's entries are present but the
   daemon is not running, and offers removal, because a dangling gate hook is
   latency with no benefit.
+- The same health check detects duplicate gating entries, whether left by a
+  second Deckhand install or by an uninstall that did not clean up. Two gating
+  entries mean two decisions for one call, and how Claude Code resolves that is
+  undocumented.
+- Deckhand writes to the user-level `~/.claude/settings.json` only, never to a
+  project's `.claude/settings.json`, which is usually committed and would
+  publish a machine-local shim path to everyone who clones the repository.
+
+### 7. The gate is narrow by default
+
+`PreToolUse` fires on every tool call, so the scope of the gate is a safety
+setting and an accessibility setting at the same time. A gate installed with
+`matcher: "*"` turns a session that was prompting for nothing into one amber
+per tool call, which makes Deckhand the cause of the clicks it exists to
+remove. On a machine running `auto`, where the classifier already answers most
+permission prompts, that is the whole difference between saving motion and
+manufacturing it.
+
+- Gating ships scoped by an `if` condition covering shell execution and file
+  deletion patterns, never `matcher: "*"`. (The `if` field is documented for
+  Claude Code 2.1.220 and unverified here.)
+- Widening the scope is a deliberate act with its cost stated at the point of
+  the change, and it is reversible in one click.
+- `PermissionRequest` is an observation event, not a second gate. It has no
+  documented way to answer `ask`, so `PreToolUse` remains the only place
+  Deckhand can decide anything.
+
+**What amber means under a gate.** Amber means "a tool call matching your gate
+pattern is waiting for you". It does not mean "Claude Code would have asked you
+about this". The two coincide only in `default` and `manual` mode with a
+pattern no wider than what Claude Code would have prompted for anyway. Narrow
+the pattern and amber stays rare and worth reading; widen it and amber becomes
+the cost of running Deckhand at all. Nothing in the surface may present a
+gate-generated amber as though Claude Code raised it.
+
+### 8. The gating hook writes nothing but a decision
+
+The gating hook's output is exactly three fields, and no others:
+
+| Field | Value |
+| --- | --- |
+| `hookEventName` | `PreToolUse` |
+| `permissionDecision` | `allow`, `deny`, or `ask` |
+| `permissionDecisionReason` | Short text naming what answered: a click, or a rule |
+
+Two fields are forbidden by name, because both are ways for one click to reach
+further than the request in front of it:
+
+- **`updatedPermissions` is forbidden.** It writes a durable permission rule
+  into Claude Code. A single approval would then answer every later matching
+  call, invisibly to every later amber, and entirely outside the attribution
+  and one-click-disable guarantees of rule 4. If an "allow always" control ever
+  ships, it is a Deckhand-side rule under rule 4, never a write into Claude
+  Code's own permission rules.
+- **`updatedInput` is forbidden.** Deckhand approves or denies the call as
+  presented. It never edits a tool input, because the input shown on the
+  approval card has to be the input that runs.
+
+This allowlist scopes to the *gating* hook only. Deckhand's observation hooks
+answer no permission decision, and may carry whatever their own event supports,
+`additionalContext` among it.
 
 ## Residual risks, stated plainly
 
@@ -141,6 +248,19 @@ the design, because they turn a security decision into configuration.
 4. **A malicious prompt could time its tool call** so amber appears just as you
    click elsewhere. The 500 ms materialisation rule and per-request display are
    the mitigations; they reduce, not eliminate.
+5. **Deckhand is not the only gate on a session.** In `auto` mode Claude Code's
+   own classifier decides most permission prompts, and that mode is the default
+   on the author's machine. Calls Deckhand never sees may already have been
+   allowed or denied, and the `PermissionDenied` event usually carries the fixed
+   reason "Blocked by classifier", which says almost nothing about why. Deckhand
+   reports what reaches it and must never present that as the whole record of
+   what a session was permitted to do.
+6. **Two decision sources can disagree.** Two Deckhand installs, or one install
+   plus an orphaned shim entry, put two gating entries in the settings file, and
+   how Claude Code resolves conflicting decisions across them is undocumented
+   and unverified. Until it has been observed, the mitigation is prevention
+   rather than reconciliation: the health check in rule 6 detects duplicate
+   entries and offers to remove the ones that are not this install's.
 
 ## Reporting
 

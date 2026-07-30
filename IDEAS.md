@@ -47,6 +47,11 @@ vetted.
   instead of requiring manual binding every time.
 - Export a session's approval and denial history as an audit log: plain
   text or CSV, something greppable.
+- A prompt tray: six customisable keys, mirroring the six the Codex Micro
+  actually shipped with, against Deckhand's six hardcoded command-key
+  actions, which is an undeclared divergence worth naming even if the keys
+  stay hardcoded. Gated entirely on a send channel that does not exist yet
+  in attached mode, so held here, not promoted. **(speculative)**
 
 ## Ecosystem
 
