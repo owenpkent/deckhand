@@ -23,7 +23,7 @@ jobs:
     name: House style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The rules live in the script, not here. One copy, two callers:
       # this job and .claude/commands/docs-gate.md. pwsh is preinstalled
@@ -35,7 +35,7 @@ jobs:
     name: Relative links resolve
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Offline mode: only file-to-file links and anchors are checked, so the
       # job is fast, deterministic, and never fails on someone else's outage.
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
