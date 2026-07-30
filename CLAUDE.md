@@ -31,20 +31,49 @@ expensive; the pointer is cheap. Working agreement:
 - Mouse-only operation is the project's premise. Any suggestion that assumes
   keyboard use is wrong by default.
 
+## Frozen constants
+
+Inlined so no file read is needed to check them. Six colours and meanings
+come from the Codex Micro and are frozen by
+[ADR-008](docs/DECISIONS.md#adr-008); `unknown` is the only Deckhand
+addition. Do not invent states or repurpose colours.
+
+| State | Colour | Meaning |
+| --- | --- | --- |
+| `idle` | white | Bound, nothing running |
+| `thinking` | blue | Turn or tool call in flight |
+| `complete` | green | Finished and unread; clears on tile selection |
+| `needs_input` | amber | Waiting on a human |
+| `error` | red | The turn failed |
+| `ended` / `unbound` | off | Session ended, or no session on this tile |
+| `unknown` | grey | Observation degraded; never a guess |
+
+Colour is never the only channel: every state carries a glyph and a label.
+Minimum hit target is **44 px**, and that is a floor, not a target.
+
 ## Key files
 
-| File | Purpose |
-| --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | Source of truth for what every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Daemon, shim, surface, session state machine |
-| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | Contract between daemon and agent runtimes |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | Reference adapter; stability-annotated; unverified |
-| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | Rules for the approval path; fail to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | Visual and interaction contract |
-| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | ADRs; add entries, never rewrite them |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | Source-of-truth map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | Phases and open work; Constellation scrapes TODO checkboxes |
+[docs/WORKFLOW.md](docs/WORKFLOW.md) section 1 is the authoritative
+source-of-truth map. This table is a reading budget, not a second map.
+
+| File | Lines | Purpose |
+| --- | --- | --- |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 291 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 401 | Daemon, shim, surface, state machine |
+| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 310 | Daemon to runtime contract |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 495 | Reference adapter; partial stamp |
+| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 273 | Approval path; fails to `ask` |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 294 | Visual and interaction contract |
+| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 585 | ADRs; append only |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 136 | Map and change-propagation table |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 182 / 225 | Phases and open work |
+
+**Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
+generic vendor boilerplate sitting at the repo root, where it matches
+searches for TODO, status, commit, and PowerShell and answers none of them.
+The only binding parts are the three rules in the Constellation section
+below. Skip it in searches.
 
 ## Conventions
 
@@ -52,47 +81,48 @@ expensive; the pointer is cheap. Working agreement:
   `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, scoped like `docs(adapter):`
   when useful. One logical change per commit.
 - **Never add AI attribution to commits.** No `Co-Authored-By: Claude`, no
-  "Generated with" lines. Firm rule.
-- **Branches:** `feature/...`, `fix/...`, `docs/...`. Work lands on `main`.
+  "Generated with" lines. Firm rule, enforced by the local `PreToolUse`
+  gate in `.claude/hooks/style-gate.js`.
+- **Branches:** solo work commits direct to `main`. Branches
+  (`feature/...`, `fix/...`, `docs/...`) and the PR template are for larger
+  or riskier changes and for outside contributors. This resolves the
+  apparent contradiction with [CONTRIBUTING.md](CONTRIBUTING.md), which is
+  written for contributors, not for the owner.
 - **Docs style:** plain and honest, no hype, hedge what is unproven. Wrap at
   roughly 80 columns. **Never use em dashes or en dashes**; use commas,
-  colons, parentheses, or full stops. CI enforces this.
+  colons, parentheses, or full stops.
+- **The style rules live in one place:** `scripts/check-docs.ps1`. It is
+  what CI runs and what `/docs-gate` runs. Run
+  `pwsh -NoProfile -File scripts/check-docs.ps1 -All` before pushing rather
+  than reciting the rules by hand.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
+- **Next ADR: 023.** ADRs are append-only, contiguous, and anchored; a
+  decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
   resolving, CI green.
 
 ## Things to watch out for
 
-1. The six status colours come from the Codex Micro and their meanings are
-   frozen (ADR-008). `unknown` is the only Deckhand addition. Do not invent
-   states or repurpose colours.
-2. The approval path must fail to `ask`, never to `allow` (ADR-006). Any
+1. The approval path must fail to `ask`, never to `allow` (ADR-006). Any
    edit that touches it must keep every non-human exit path safe, and update
    [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) in the same change.
-3. Claude Code integration facts in
-   [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) are **unverified
-   against a live install**. If you verify one, update the stamp; if you cite
-   one elsewhere, keep the hedge.
-4. Interaction rules in [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) are
+2. Claude Code integration facts in
+   [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) carry a
+   **partial** verification stamp against 2.1.220. Four things are observed;
+   hook names, payload fields, and the decision vocabulary are `documented`
+   at best. Keep the hedge when citing them, and do not claim the file is
+   wholly unverified either.
+3. Interaction rules in [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) are
    requirements, not guidance: no required holds, drags, double-clicks,
    hovers, or keyboard. 44 px minimum targets.
-5. When you change any control, capability, state, or default, walk the
-   change-propagation table in [docs/WORKFLOW.md](docs/WORKFLOW.md) and update
-   every file in the row. The PR template's sync checklist exists to force
-   this.
-
-## Quick commands
-
-```powershell
-git status
-git log --oneline -10
-rg -n "something" docs/
-# Style gate (same check CI runs): find any em/en dashes in tracked markdown
-rg -n "\x{2014}|\x{2013}" --glob "*.md" --glob "!CODE_OF_CONDUCT.md" --glob "!CONSTELLATION_INTEGRATION_GUIDE.md"
-```
+4. When you change any control, capability, state, timing, hook event, or
+   default, walk the change-propagation table in
+   [docs/WORKFLOW.md](docs/WORKFLOW.md) and update every file in the row.
+   The `sync-check` skill does that walk; use it instead of re-deriving the
+   table by hand.
 
 ## Constellation
 
@@ -105,6 +135,10 @@ the owner's cross-project dashboard. Keep compatible:
 
 ## Current focus
 
-Finish Phase 0: spec complete and internally consistent. Next real work is
-the two pre-Phase-1 spikes: prove the no-focus-steal window in Tauri on Windows,
-and validate hook payloads against a live Claude Code install.
+Finish Phase 0: spec complete and internally consistent. The adapter now
+carries a partial verification stamp against Claude Code 2.1.220, and ADRs
+013 to 022 record the changes that came out of it. The two pre-Phase-1
+spikes are still the next real work: prove the no-focus-steal window in
+Tauri on Windows (untouched), and validate hook payloads against a live
+Claude Code install (partially advanced, and still open, because reading a
+string in documentation or a binary is not observing a payload).
