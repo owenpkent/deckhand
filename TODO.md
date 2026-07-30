@@ -44,16 +44,22 @@ Checking a box here means the item is done, not that it is perfect. See
       capture.
       Partially done, against Claude Code 2.1.220 on 2026-07-30. Actually
       run or read on this machine (`observed`): `claude agents --json`, the
-      captured status line payload keys, and the `~/.claude/projects/`
-      mangling. Read from official documentation, not seen to fire here
+      captured status line payload keys, the `~/.claude/projects/`
+      mangling, and the `--permission-mode` value set from `claude --help`
+      (`acceptEdits`, `auto`, `bypassPermissions`, `manual`, `dontAsk`,
+      `plan`; `default` is not one of them). Read from official
+      documentation, not seen to fire here
       (`documented`): the `hookSpecificOutput` wrapper and the
       `allow`/`deny`/`ask`/`defer` vocabulary, `matcher: "*"` plus the `if`
       field, hook timeouts in seconds, and the common payload fields
       including `prompt_id`, `permission_mode`, `effort.level`, and
       `tool_use_id`. Still unverified: hook overhead at six concurrent
       sessions, what the user sees when a hook times out on Claude Code's
-      side, how conflicting decisions across two hook entries resolve, and
-      any behaviour outside `manual` and `default` permission mode. See
+      side, how conflicting decisions across two hook entries resolve, any
+      behaviour outside `manual` permission mode (the mode names are
+      observed, what each mode does is not), and whether the settings key
+      `permissions.defaultMode` accepts a value spelled `default` even
+      though the CLI flag does not. See
       `docs/CLAUDE_CODE_ADAPTER.md` for the full per-claim stamp. This item
       stays unchecked: a string read from documentation, or present in a
       binary, is not an observation.

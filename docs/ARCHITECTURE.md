@@ -329,15 +329,15 @@ forever. That behaviour is a correctness requirement, not a nicety.
 
 What an `ask` actually reaches depends on the session's permission mode, which
 is a property of the session and not something Deckhand sets. `documented`: in
-`default` it returns the decision to a human; in `auto` it returns it to
+`manual` it returns the decision to a human; in `auto` it returns it to
 Claude Code's own classifier, which is a second gate Deckhand neither controls
 nor sees; in `dontAsk` it becomes a denial. Handing back is still the safe
 direction in all of them, and the fail-closed answer is still `ask` and never
 `allow` ([DECISIONS.md](DECISIONS.md#adr-006)). The mode travels on
-`SessionInfo`, the tile shows it as text rather than colour, the values are
-listed in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types), and what each one
-does to a Deckhand `ask`, including the three modes where the answer is "not
-observed, and not asserted", is in
+`SessionInfo`, the tile shows it as text rather than colour, the six values
+are listed in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types), and what each
+of the six does to a Deckhand `ask`, including the three where the answer is
+"not observed, and not asserted", is in
 [SECURITY_MODEL.md](SECURITY_MODEL.md#1-fail-closed-in-the-correct-direction).
 
 ## The surface

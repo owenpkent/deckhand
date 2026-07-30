@@ -132,9 +132,9 @@ and no past release is backfilled.
   also what an unrecognised value maps to), shown on the tile as a text
   badge, never a colour. `docs/SECURITY_MODEL.md` and
   `docs/CLAUDE_CODE_ADAPTER.md` say where an `ask` actually lands in each
-  mode (a human in `default` and `manual`, the classifier in `auto`, a
-  denial in `dontAsk`), and record the `auto`-mode classifier as a second
-  gate Deckhand does not control.
+  mode (a human in `manual`, the classifier in `auto`, a denial in
+  `dontAsk`), and record the `auto`-mode classifier as a second gate
+  Deckhand does not control.
 - Replaced the turn-duration liveness deadline with liveness by open
   operation. A session now stays `THINKING` while any `PreToolUse` lacks a
   matching `PostToolUse` or `PostToolUseFailure`, or any `SubagentStart`
@@ -163,6 +163,13 @@ and no past release is backfilled.
 
 ### Fixed
 
+- The permission mode set, wrong in both directions one commit ago:
+  `default` was listed as a mode and `manual` was missing, making seven
+  values where there are six. Running `claude --help` on Claude Code 2.1.220
+  observed the six as `acceptEdits`, `auto`, `bypassPermissions`, `manual`,
+  `dontAsk`, and `plan`. Recorded as ADR-022, correcting ADR-018 without
+  editing it; whether `permissions.defaultMode` accepts `default` stays
+  unverified.
 - Two provable wrong-colour bugs in status inference: `SessionStart` with
   `source: "compact"` no longer flips a live blue tile white, because
   compaction fires mid-turn and changes nothing; and `SessionEnd` with

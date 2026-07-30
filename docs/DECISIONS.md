@@ -544,3 +544,42 @@ for a mouse user who could have hovered, and more content for the detail
 panel and the tile budget ([ADR-019](#adr-019)) to carry. Being an
 accessibility requirement, this does not reopen on cost grounds; it reopens
 only if [ACCESSIBILITY.md](ACCESSIBILITY.md) itself changes.
+
+---
+
+<a id="adr-022"></a>
+## ADR-022: `default` is not a permission mode; `manual` is
+
+Date: 2026-07-30
+
+**Context.** [ADR-018](#adr-018) named `default` as one of Claude Code's six
+permission modes and left `manual` out of the enum in
+[ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types), which then carried seven
+values instead of six. Running `claude --help` on 2.1.220 on this machine
+lists the `--permission-mode` choices as exactly `acceptEdits`, `auto`,
+`bypassPermissions`, `manual`, `dontAsk`, and `plan`. `default` is not among
+them.
+
+**Decision.** The membership is corrected everywhere the modes are named: the
+protocol enum is the six above plus Deckhand's own `unknown`, and the phrase
+pairing "`default` and `manual`" as the modes where an `ask` reaches a human
+becomes `manual` alone. ADR-018's count of six stands and its decision stands;
+only its naming was wrong, so this corrects ADR-018 rather than superseding
+it. ADR-018 is not edited, per this file's own rule that a decision is changed
+by adding an entry, not by rewriting history. Whether the settings key
+`permissions.defaultMode` additionally accepts a value spelled `default` is
+**unverified**: the owner's own setting is `auto`, the CLI flag rejects the
+spelling, and neither document nor experiment here settles the key. Nothing in
+the spec assumes either answer. [ADR-006](#adr-006) and [ADR-008](#adr-008)
+stand unchanged.
+
+**Consequences.** One fact moves from `documented` to `observed`, and the
+verification stamp in
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) now marks four things rather
+than three. It moved because a command was run, which is the standard the
+Phase 1 hook payload spike is held to and the reason that spike stays open:
+reading a name in documentation is not seeing it fire. The trade accepted: an
+enum written from documentation was wrong in a way nobody would have caught
+without running the binary, which is an argument for running it earlier. This
+reopens if a later Claude Code release changes the accepted set, or if the
+settings key is tested and accepts something the flag does not.

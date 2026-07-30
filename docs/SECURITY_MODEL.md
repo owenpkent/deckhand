@@ -69,8 +69,8 @@ never installing Deckhand, which is the correct behaviour for a dead
 companion: a broken status board must not brick every session on the machine.
 It is not a Deckhand `allow`, and no Deckhand code path emits one.
 
-**What `ask` reaches depends on the session's permission mode.** In `default`
-and `manual` it returns the decision to a human, which is what the rest of this
+**What `ask` reaches depends on the session's permission mode.** In `manual`
+it returns the decision to a human, which is what the rest of this
 rule assumes. In `auto` it returns the decision to Claude Code's own
 classifier, which can answer without a person ever seeing the call. In
 `dontAsk` it becomes a denial. Deckhand cannot change any of that, so it says
@@ -79,7 +79,11 @@ some modes it is not the same thing as "a human decides". The mode travels with
 the session and is shown on the tile as text, never as a colour, so a
 fail-closed exit is never silently reinterpreted.
 
-The remaining modes in
+There are six modes, and this rule accounts for all six. `claude --help` on
+2.1.220 lists exactly `acceptEdits`, `auto`, `bypassPermissions`, `manual`,
+`dontAsk`, and `plan` as the choices for `--permission-mode`, which is an
+observation, not a reading. `manual`, `auto`, and `dontAsk` are the three
+that carry a claim, above. The remaining three in
 [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types), `acceptEdits`, `plan`, and
 `bypassPermissions`, get no claim here beyond the one that holds in all of
 them: Deckhand still emits `ask` and still never emits `allow` on a failure
@@ -92,8 +96,8 @@ Mode does not switch the gate off. `PreToolUse` still runs first in every mode,
 and a hook `allow` still runs the call in `dontAsk`, so the gate is live even
 where Claude Code itself would not have prompted. Mode changes what a
 fall-through means, not whether Deckhand is asked. (Documented for Claude Code
-2.1.220; unverified here, since no mode other than `default` and `manual` has
-been observed.)
+2.1.220; unverified here, since no mode other than `manual` has been seen to
+run a hook on this machine.)
 
 Claude Code 2.1.220 documents a fourth decision value, `defer`. Deckhand never
 uses it on a failure path. `defer` falls through to the normal permission flow,
@@ -200,7 +204,7 @@ manufacturing it.
 
 **What amber means under a gate.** Amber means "a tool call matching your gate
 pattern is waiting for you". It does not mean "Claude Code would have asked you
-about this". The two coincide only in `default` and `manual` mode with a
+about this". The two coincide only in `manual` mode with a
 pattern no wider than what Claude Code would have prompted for anyway. Narrow
 the pattern and amber stays rare and worth reading; widen it and amber becomes
 the cost of running Deckhand at all. Nothing in the surface may present a

@@ -148,7 +148,7 @@ Approve and Deny are a security surface and are treated as one; see
 [SECURITY_MODEL.md](SECURITY_MODEL.md). Permission mode is part of what enables
 them. Deckhand's `PreToolUse` gate runs first in every mode, and a hook `allow`
 still runs in `dontAsk`, so the gate is not dead in any mode. What differs is
-where a Deckhand `ask` lands: on a human in `default` and `manual`, on the
+where a Deckhand `ask` lands: on a human in `manual`, on the
 classifier in `auto`, on a denial in `dontAsk`. Where
 the mode means no human decision is coming, Approve and Deny are disabled and
 the mode is named as the cause. The tile carries the mode as a text badge,

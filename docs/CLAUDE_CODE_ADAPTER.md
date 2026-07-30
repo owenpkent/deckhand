@@ -6,7 +6,7 @@ against Claude Code.
 
 > **Verification stamp: partial, against Claude Code 2.1.220.** Checked on
 > 2026-07-30 against the native single-binary build at
-> `C:/Users/owenp/.local/bin/claude.exe`, on Windows 11. Exactly three
+> `C:/Users/owenp/.local/bin/claude.exe`, on Windows 11. Exactly four
 > things below are **observed**, meaning run or read on that machine:
 >
 > - `claude agents --json`, which returned the live sessions with `pid`,
@@ -15,6 +15,12 @@ against Claude Code.
 > - The `~/.claude/projects/` directory mangling: the drive colon is
 >   dropped and path separators collapse to single dashes. 41 project
 >   directories, no index file.
+> - The accepted permission mode set, from `claude --help`, which lists
+>   the `--permission-mode` choices as exactly `acceptEdits`, `auto`,
+>   `bypassPermissions`, `manual`, `dontAsk`, and `plan`. `default` is not
+>   one of them. Whether the settings key `permissions.defaultMode`
+>   additionally accepts `default` is **unverified**, and the names are all
+>   this observes: per-mode behaviour is not covered by it.
 >
 > Everything else is **documented** (read from the public Claude Code
 > documentation, not seen to fire here) or **unverified** (neither). Hook
@@ -30,7 +36,11 @@ Named here so that nothing cites them by accident, these stay unverified:
 - Hook overhead at six concurrent sessions.
 - What the user sees when a hook times out on Claude Code's side.
 - How conflicting decisions across two hook entries resolve.
-- Any behaviour outside `manual` and `default` permission mode.
+- Any behaviour outside `manual` permission mode. The mode *names* are
+  observed; what each mode does to a Deckhand `ask` is not.
+- Whether `permissions.defaultMode` accepts a value spelled `default`. The
+  CLI flag does not, and the owner's own setting is `auto`, so neither
+  answer has been tested.
 
 ## The two modes, concretely
 
@@ -75,6 +85,7 @@ it is.
 | Hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Notification`, `Stop`, `StopFailure`, `PermissionDenied`, `SessionEnd`) | Status, approvals | Documented |
 | `PreToolUse` permission decision output | Approve and deny | Documented |
 | Hook payload fields `session_id`, `cwd`, `transcript_path`, and where present `prompt_id`, `permission_mode`, `effort.level`, `tool_use_id` | Session identity, mode badge | Documented |
+| `--permission-mode` accepted value set | The mode badge's vocabulary | Documented, set observed 2.1.220 |
 | `claude agents --json` | Cold-start enumeration, host `pid` for Reveal | Documented, keys observed 2.1.220 |
 | Status line JSON | Tile extras | Documented, keys observed 2.1.220, schema may grow |
 | Agent SDK (`@anthropic-ai/claude-agent-sdk`) | Hosted mode | Documented |
@@ -336,7 +347,7 @@ lands the decision somewhere safe, so `ask` stays the fail-closed exit and
 [ADR-006](DECISIONS.md#adr-006) is unchanged.
 
 **What `ask` reaches depends on the session's permission mode.** In
-`default` and `manual` it returns the decision to a human at the terminal,
+`manual` it returns the decision to a human at the terminal,
 which is the case this design was written against. In `auto` it returns the
 decision to Claude Code's classifier, which usually answers it without a
 person seeing anything. In `dontAsk` it resolves to a denial. The gate is

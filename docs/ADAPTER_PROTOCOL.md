@@ -108,14 +108,21 @@ type SessionState =
   | "complete" | "error" | "ended" | "unknown";
 
 // Whose decision an `ask` reaches. Runtime-specific by nature: these are the
-// values the reference runtime is documented to report, and another adapter
-// maps onto the nearest one or reports `unknown`. `unknown` is not a fallback
-// for laziness, it is the honest answer when a payload carries no mode at all,
-// and it is also the answer for a value not in this list. The list itself is
-// `documented` and unverified: no mode other than `default` and `manual` has
-// been seen here, so treat it as the set to map from, not as a closed set.
+// values the reference runtime accepts, and another adapter maps onto the
+// nearest one or reports `unknown`. The six runtime values are `observed`
+// against Claude Code 2.1.220: `claude --help` lists exactly this set as the
+// choices for `--permission-mode`. `default` is not among them. Whether the
+// settings key `permissions.defaultMode` accepts a value spelled `default`
+// is unverified, and nothing here assumes either answer. Behaviour in any
+// mode other than `manual` is still unverified; this is the set of names,
+// not a claim about what each one does.
+//
+// `unknown` is Deckhand's own seventh value, not a runtime one. It is not a
+// fallback for laziness: it is the honest answer when a payload carries no
+// mode at all, which is not rare, and it is also the answer for a value not
+// in this list.
 type PermissionMode =
-  | "default" | "manual" | "acceptEdits" | "plan"
+  | "manual" | "acceptEdits" | "plan"
   | "auto" | "dontAsk" | "bypassPermissions"
   | "unknown";
 
@@ -168,7 +175,8 @@ type PermissionDecision =
 reaches, and therefore whether Approve and Deny mean anything on that session
 at all. It is `unknown` whenever the runtime does not say, which is not rare:
 not every payload carries one. The surface shows it as text, never as a
-colour. See [DECISIONS.md](DECISIONS.md#adr-018).
+colour. See [DECISIONS.md](DECISIONS.md#adr-018) and, for the corrected
+membership of the set, [DECISIONS.md](DECISIONS.md#adr-022).
 
 `kind` is what makes amber usable. It separates a decision Approve can make
 from a question that needs one of its options chosen, and without it the
