@@ -56,7 +56,8 @@ the table so nothing lands half-updated.
    - Status lines are never upgraded without the evidence that justifies it.
    - ADRs are append-only. A superseded decision gets a new entry and a
      marker, never an edited one.
-6. Run `pwsh -NoProfile -File scripts/check-docs.ps1 -All` and confirm it
+6. Run `powershell -NoProfile -File scripts/check-docs.ps1 -All` (no
+   `pwsh` on this machine; CI uses `pwsh`) and confirm it
    exits 0. That script is where the dash, status line, ADR numbering, and
    Constellation rules live; do not restate them here.
 7. Verify every relative link and anchor the change added resolves to a

@@ -5,7 +5,9 @@ description: Run the docs CI gates locally before pushing
 Reproduce `.github/workflows/docs.yml` against the working tree. Report
 only. Do not fix, commit, or push.
 
-1. Run `pwsh -NoProfile -File scripts/check-docs.ps1 -All`. That is the
+1. Run `powershell -NoProfile -File scripts/check-docs.ps1 -All`. This
+   machine has Windows PowerShell 5.1 and no `pwsh`; CI calls the same
+   script with `pwsh` on ubuntu-latest. That is the
    same script the CI style job runs, so its verdict is the CI verdict for
    the dash rule, the status line rule, ADR numbering, and the
    Constellation contract. Quote any failing line it prints. Its 80 column

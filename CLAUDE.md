@@ -93,7 +93,8 @@ below. Skip it in searches.
   colons, parentheses, or full stops.
 - **The style rules live in one place:** `scripts/check-docs.ps1`. It is
   what CI runs and what `/docs-gate` runs. Run
-  `pwsh -NoProfile -File scripts/check-docs.ps1 -All` before pushing rather
+  `powershell -NoProfile -File scripts/check-docs.ps1 -All` before pushing
+  (CI calls the same script with `pwsh`; this machine has no `pwsh`) rather
   than reciting the rules by hand.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without

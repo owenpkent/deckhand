@@ -20,6 +20,10 @@
     owner's shell examples are PowerShell. Written to run on both Windows
     PowerShell 5.1 and PowerShell 7.
 
+    Invocation differs by machine. CI runs `pwsh`, which ubuntu-latest
+    has. This repo's Windows machine has Windows PowerShell 5.1 and no
+    pwsh, so run `powershell` there. The script itself is the same.
+
 .PARAMETER Staged
     Scope the dash and wrap scans to files staged for commit. The repo-wide
     gates (status lines, ADRs, Constellation) always run: they are cheap
@@ -30,10 +34,10 @@
     the default when neither switch is given, and what CI uses.
 
 .EXAMPLE
-    pwsh -NoProfile -File scripts/check-docs.ps1 -All
+    powershell -NoProfile -File scripts/check-docs.ps1 -All
 
 .EXAMPLE
-    pwsh -NoProfile -File scripts/check-docs.ps1 -Staged
+    powershell -NoProfile -File scripts/check-docs.ps1 -Staged
 #>
 [CmdletBinding()]
 param(
