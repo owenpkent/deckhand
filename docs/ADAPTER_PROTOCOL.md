@@ -126,15 +126,29 @@ type PermissionMode =
   | "auto" | "dontAsk" | "bypassPermissions"
   | "unknown";
 
+// What is holding the session's process, which is a different question from
+// who started it. One adapter can span all three at once. A runtime with no
+// such distinction reports `pty` if it has a window and `sdk` if it does not.
+// See [DECISIONS.md](DECISIONS.md#adr-023).
+type Host =
+  | "pty"               // a terminal, whether its own window or an editor's
+  | "vscode-extension"  // inside the editor process; no window of its own
+  | "sdk";              // started by Deckhand; no window by construction
+
 interface SessionInfo {
   id: SessionId;
   adapter: string;          // "claude-code"
   label: string;            // human-facing, usually the project directory
   cwd: string;
   mode: "attached" | "hosted";
+  host: Host;
   permissionMode: PermissionMode;
   model?: string;
   startedAt: string;        // ISO 8601
+
+  // What this session can actually do, which is not always what its adapter
+  // can do. Narrower than or equal to the adapter's declaration, never wider.
+  capabilities: Record<Capability, Confidence | false>;
 }
 
 interface SessionUpdate {
@@ -177,6 +191,23 @@ at all. It is `unknown` whenever the runtime does not say, which is not rare:
 not every payload carries one. The surface shows it as text, never as a
 colour. See [DECISIONS.md](DECISIONS.md#adr-018) and, for the corrected
 membership of the set, [DECISIONS.md](DECISIONS.md#adr-022).
+
+`host` is separate from `mode` because they answer different questions and
+the answers do not track each other. `mode` says who started the session;
+`host` says what is holding its process, and therefore what can be done to
+it from outside. A session someone else started can sit on a `pty` or
+inside an editor, and those two differ on whether there is a window to
+raise or keystrokes to send, while agreeing on everything hooks provide.
+
+Capabilities are on `SessionInfo` for the same reason. One adapter can span
+hosts whose capability sets genuinely differ, so an adapter-level record
+cannot be true for all of its sessions at once: the Claude Code adapter
+declares `focus_session` as `synthetic` on a `pty` host and `internal` on a
+`vscode-extension` host simultaneously. The adapter's own record is the
+ceiling, a session's is what applies, and a session may never claim more
+than its adapter. The surface reads the session and nothing else, so a
+control is lit by what this session can do rather than by what its runtime
+can do somewhere else. See [DECISIONS.md](DECISIONS.md#adr-023).
 
 `kind` is what makes amber usable. It separates a decision Approve can make
 from a question that needs one of its options chosen, and without it the
@@ -223,6 +254,10 @@ user actually wanted. See [SECURITY_MODEL.md](SECURITY_MODEL.md).
 ```ts
 interface Adapter {
   readonly name: string;
+
+  // The most this adapter can ever offer, across every host it supports.
+  // It is a ceiling, not a promise about any one session: read
+  // `SessionInfo.capabilities` to decide whether a control is live.
   readonly capabilities: Record<Capability, Confidence | false>;
 
   start(ctx: AdapterContext): Promise<void>;

@@ -248,7 +248,13 @@ answer no permission decision, and may carry whatever their own event supports,
    claim that overlay problems are solved.
 3. **Synthetic input fallbacks** (attached-mode send, focus raising) type into
    whatever window matches a heuristic. That is why they are off by default,
-   marked `synthetic`, and never combined with approval authority.
+   marked `synthetic`, and never combined with approval authority. The
+   heuristic is weaker on a `vscode-extension` host, where a pid identifies no
+   single window and the title is all there is, so send has no synthetic route
+   there at all and Reveal raises a window without selecting a tab. The
+   approval path is unaffected by any of this: it runs over hooks and is
+   host-independent, which was observed rather than assumed
+   ([DECISIONS.md](DECISIONS.md#adr-023)).
 4. **A malicious prompt could time its tool call** so amber appears just as you
    click elsewhere. The 500 ms materialisation rule and per-request display are
    the mitigations; they reduce, not eliminate.

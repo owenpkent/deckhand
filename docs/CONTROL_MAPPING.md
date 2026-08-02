@@ -55,12 +55,18 @@ and has an adjustable window, which is what
 [ACCESSIBILITY.md](ACCESSIBILITY.md#forbidden-interactions) already requires of
 every double-click here. Nothing is reachable only by double-clicking.
 
-Reveal matches a session to a host by pid where one is available, since
+Reveal matches a session to a window by pid where that works, since
 `claude agents --json` reports a `pid` per live session (observed on Claude
-Code 2.1.220). Window-title matching is the fallback and is a heuristic.
-Sessions also run in editors and in the browser, and Deckhand can only raise a
-local window, so Reveal is disabled with a stated reason whenever the host is
-not locatable rather than raising the wrong thing.
+Code 2.1.220). It works on a `pty` host. It does not work on a
+`vscode-extension` host, where every editor window shares a single process,
+so three windows report one pid and the pid identifies none of them
+(observed on 2.1.220). There, matching the workspace name in the window
+title is not the fallback but the only route, and it raises the window
+without selecting the session's tab within it: nothing reachable from
+outside the editor can do that. Sessions also run in the browser, and
+Deckhand can only raise a local window, so Reveal is disabled with a stated
+reason whenever the host is not locatable rather than raising the wrong
+thing. See [DECISIONS.md](DECISIONS.md#adr-023).
 
 ### Status colours
 

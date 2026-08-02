@@ -60,9 +60,28 @@ Checking a box here means the item is done, not that it is perfect. See
       observed, what each mode does is not), and whether the settings key
       `permissions.defaultMode` accepts a value spelled `default` even
       though the CLI flag does not. See
-      `docs/CLAUDE_CODE_ADAPTER.md` for the full per-claim stamp. This item
-      stays unchecked: a string read from documentation, or present in a
-      binary, is not an observation.
+      `docs/CLAUDE_CODE_ADAPTER.md` for the full per-claim stamp.
+      Advanced again on 2026-08-02: a `PreToolUse` hook was seen to fire,
+      with `tool_name` and `tool_input` populated, and its
+      `permissionDecision: "deny"` was honoured and blocked the call. That
+      is the first hook observed firing here, and it fired from a session
+      running inside the VS Code extension. Also observed that run: no
+      `status` key on any `claude agents --json` row, correcting the
+      2026-07-30 note. This item stays unchecked: one event with two fields
+      confirmed is not every field of every event.
+- [ ] Enumerate the remaining `PreToolUse` payload fields now that the
+      event is known to fire. `session_id`, `cwd`, `transcript_path`,
+      `prompt_id`, `permission_mode`, `effort.level`, and `tool_use_id` are
+      each still `documented` only, and the gate that logs them is already
+      in this repo at `.claude/hooks/style-gate.js`.
+- [ ] Confirm the host discriminator ADR-023 assumes. The plan is to read
+      the process argv and parent, since `claude agents --json` reports
+      `kind: "interactive"` for a VS Code extension session and a terminal
+      session alike (observed 2.1.220). Verify that
+      `--input-format stream-json` and a `Code.exe` parent are a reliable
+      test, including for a session in VS Code's integrated terminal, which
+      is a `pty` host inside an editor window and must not be misread as
+      `vscode-extension`.
 - [ ] Measure hook call overhead with six Claude Code sessions running
       concurrently. If it is not negligible, `docs/ARCHITECTURE.md` needs an
       answer for it, not just a hope.

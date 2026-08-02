@@ -97,6 +97,34 @@ and no past release is backfilled.
 
 ### Changed
 
+- **The host is now a third axis, and capabilities belong to a session**
+  (ADR-023). Mode said who started a session and was quietly assumed to
+  mean "in a terminal"; sessions run inside the VS Code extension too, and
+  that host has a different capability set on the same adapter.
+  `SessionInfo` gains `host` (`pty`, `vscode-extension`, `sdk`) and carries
+  its own `capabilities`; the adapter's record becomes a ceiling rather
+  than a promise. `docs/ADAPTER_PROTOCOL.md`, `docs/ARCHITECTURE.md`,
+  `docs/CLAUDE_CODE_ADAPTER.md`, `docs/CONTROL_MAPPING.md`,
+  `docs/SECURITY_MODEL.md`, and `docs/EXECUTIVE_SUMMARY.md` follow. The
+  headline finding is that nothing hooks provide varies by host, so status,
+  approve, deny, the mode badge, and the bind picker are unchanged; only
+  the controls that need a window differ.
+- Reveal no longer claims pid matching works everywhere. Every VS Code
+  window shares one process, so a pid identifies none of them (three live
+  windows, one pid, observed 2.1.220). On a `vscode-extension` host,
+  window-title matching is the only route, and it raises the window without
+  selecting the session's tab. `docs/CONTROL_MAPPING.md` says so.
+- The verification stamp in `docs/CLAUDE_CODE_ADAPTER.md` gains two
+  observations and loses a wrong one. Gained: a `PreToolUse` hook seen to
+  fire with `tool_name` and `tool_input` populated and its
+  `permissionDecision: "deny"` honoured, which is the first hook observed
+  firing in this project at all; and the shape of the VS Code extension
+  host, including the per-window MCP server at `~/.claude/ide/<port>.lock`,
+  its twelve tools, and the fact that `openFile` with `makeFrontmost` moves
+  a tab but not the OS foreground window. Lost: the claim that
+  `claude agents --json` returns a `status` key, which no row carried on
+  the 2026-08-02 re-run. ADR-009 still gates Phase 1: one event with two
+  fields confirmed is not payload validation.
 - Reframed the product around answering, not only approving. README and
   `docs/EXECUTIVE_SUMMARY.md` now lead with seeing every session, answering
   the questions it asks, and approving the calls that need a human; Approve

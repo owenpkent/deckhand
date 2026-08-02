@@ -62,18 +62,27 @@ affiliated with or endorsed by OpenAI, Work Louder, or Anthropic.
 It has two ways of relating to a Claude Code session, called attached mode
 and hosted mode, and which one is in use matters more than any other single
 fact about how a given tile behaves. Attached mode watches a session
-started by the user in a terminal; it gets full status observation and
-full approve and deny authority through Claude Code's hook system, but it
-has no proven way to put a prompt into that session at the moment a person
-wants to type one. Documented channels do exist and they all deliver at a
-turn boundary rather than into an idle session, and none of them has been
-observed working here, so Deckhand declares the capability false and ships
-no send. Continue is a visible, disabled button that states the reason;
-sending and interrupting fall back to synthetic keystrokes aimed at the
-terminal window only if the user opts in, which is fragile and off by
-default. Hosted mode starts sessions itself through the Claude Agent SDK,
-which gets full control including sending prompts, at the cost of the
-normal terminal UI.
+started by the user; it gets full status observation and full approve and
+deny authority through Claude Code's hook system, but it has no proven way
+to put a prompt into that session at the moment a person wants to type one.
+Documented channels do exist and they all deliver at a turn boundary rather
+than into an idle session, and none of them has been observed working here,
+so Deckhand declares the capability false and ships no send. Continue is a
+visible, disabled button that states the reason; sending and interrupting
+fall back to synthetic keystrokes aimed at the terminal window only if the
+user opts in, which is fragile and off by default. Hosted mode starts
+sessions itself through the Claude Agent SDK, which gets full control
+including sending prompts, at the cost of the normal terminal UI.
+
+Cutting across that is a second axis, the host: what is holding a session's
+process, as opposed to who started it. An attached session can sit on a
+terminal or inside the VS Code extension, and the difference is real.
+Everything hooks provide is identical on both, which covers status, approve,
+and deny. What differs is everything that needs a window: inside the
+extension there is no window of the session's own, so the synthetic
+fallbacks do not exist and Reveal can raise the editor window but not pick
+the session's tab inside it. Capabilities therefore attach to a session
+rather than to an adapter.
 
 ## What is genuinely new
 

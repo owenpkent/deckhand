@@ -5,12 +5,17 @@ exists. It implements the contract in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md)
 against Claude Code.
 
 > **Verification stamp: partial, against Claude Code 2.1.220.** Checked on
-> 2026-07-30 against the native single-binary build at
-> `C:/Users/owenp/.local/bin/claude.exe`, on Windows 11. Exactly four
-> things below are **observed**, meaning run or read on that machine:
+> 2026-07-30 and extended on 2026-08-02, on Windows 11, against both the
+> native single-binary build at `C:/Users/owenp/.local/bin/claude.exe` and
+> the copy the VS Code extension ships, under
+> `resources/native-binary/` inside
+> `.vscode/extensions/anthropic.claude-code-2.1.220-win32-x64/`.
+> The following are **observed**, meaning run or read on that machine:
 >
 > - `claude agents --json`, which returned the live sessions with `pid`,
->   `cwd`, `kind`, `startedAt`, `sessionId`, `name`, and `status`.
+>   `cwd`, `kind`, `startedAt`, `sessionId`, and `name`. The 2026-07-30
+>   note also listed a `status` key; on the 2026-08-02 re-run no row
+>   carried one, so nothing may depend on it.
 > - The status line payload keys, from a captured invocation.
 > - The `~/.claude/projects/` directory mangling: the drive colon is
 >   dropped and path separators collapse to single dashes. 41 project
@@ -21,15 +26,27 @@ against Claude Code.
 >   one of them. Whether the settings key `permissions.defaultMode`
 >   additionally accepts `default` is **unverified**, and the names are all
 >   this observes: per-mode behaviour is not covered by it.
+> - **A `PreToolUse` hook firing and deciding.** This repository's own
+>   style gate fired, received `tool_name` and `tool_input` populated
+>   correctly, and its `permissionDecision: "deny"` was honoured and
+>   blocked the tool call. Observed from a session running inside the VS
+>   Code extension. This is the first hook seen to fire here at all.
+> - The shape of an extension-hosted session, and the per-window MCP
+>   server the extension runs at `~/.claude/ide/<port>.lock`, including
+>   its twelve tools and the fact that `openFile` with `makeFrontmost`
+>   moves the active tab but not the OS foreground window. See
+>   [The three hosts](#the-three-hosts-concretely).
 >
 > Everything else is **documented** (read from the public Claude Code
 > documentation, not seen to fire here) or **unverified** (neither). Hook
-> names, hook payload fields, and the permission decision vocabulary are
-> `documented` at best, including the ones this file now names for the
-> first time. Do not cite any of them as proven. Validating payloads,
-> timings, and edge cases against a live install is still the first Phase 1
-> task and still gates Phase 1 ([ADR-009](DECISIONS.md#adr-009)); this
-> partial stamp does not close that item.
+> *names* beyond `PreToolUse`, the rest of the payload fields, and the
+> remainder of the permission decision vocabulary are `documented` at
+> best. Do not cite any of them as proven. One hook firing with two fields
+> present is not the payload validation that
+> [ADR-009](DECISIONS.md#adr-009) gates Phase 1 on: that item advances but
+> stays open, and the fields named in
+> [Interfaces used](#interfaces-used-and-what-they-rest-on) are still
+> unconfirmed one by one.
 
 Named here so that nothing cites them by accident, these stay unverified:
 
@@ -42,21 +59,33 @@ Named here so that nothing cites them by accident, these stay unverified:
   CLI flag does not, and the owner's own setting is `auto`, so neither
   answer has been tested.
 
-## The two modes, concretely
+## The three hosts, concretely
 
-| | Attached | Hosted |
-| --- | --- | --- |
-| Who starts the session | You, in your own terminal | Deckhand, via the Claude Agent SDK |
-| Status observation | Hooks | SDK message stream |
-| Approve and deny | `PreToolUse` hook decision | SDK permission callback |
-| Send a prompt | Turn-boundary channels only, none observed; `send_prompt` is `false` | Supported |
-| Interrupt | Synthetic only, off by default | Supported |
-| Terminal UI | Yours, untouched | None; the detail panel is the UI |
-| Phase | 1 to 3 | 4 |
+Mode says who started a session. Host says what is holding its process, and
+that is what decides which controls can work. The two are separate axes per
+[ADR-023](DECISIONS.md#adr-023), and attached mode spans two hosts.
 
-The painful cell is attached-mode send, and it is worth stating precisely,
-because "impossible" and "unproven" are different claims and only the second
-one is true.
+| | Attached, `pty` | Attached, `vscode-extension` | Hosted, `sdk` |
+| --- | --- | --- | --- |
+| Who starts it | You, in a terminal | You, in the editor | Deckhand, via the Claude Agent SDK |
+| The process | `claude.exe` on a pty, in a window | `claude.exe` under the editor, stream-json on stdin, no window | Deckhand's own child |
+| Status observation | Hooks | Hooks, identically | SDK message stream |
+| Approve and deny | `PreToolUse` hook decision | The same, observed 2.1.220 | SDK permission callback |
+| Send a prompt | Turn-boundary channels only, none observed; `false` | No channel exists; `false` | Supported |
+| Interrupt | Synthetic only, off by default | No channel, and no window to type into; `false` | Supported |
+| Reveal | Window by `pid`, title as fallback | Window by title only; `pid` cannot discriminate | Nothing to raise |
+| The UI you read | Your terminal, untouched | Your editor tab, untouched | None; the detail panel is the UI |
+| Phase | 1 to 3 | 1 to 3 | 4 |
+
+The row that matters most is the one that does not vary. Hooks come out of
+`claude.exe`, not out of whatever is holding its pipes, so status, approve,
+deny, the permission mode badge, and the bind picker behave the same on
+every host. That was checked rather than assumed: a `PreToolUse` hook fired
+from inside the extension and its `deny` was honoured.
+
+The painful cell is send, and it is worth stating precisely, because
+"impossible", "absent", and "unproven" are three different claims and the
+host decides which one applies.
 
 What is documented: a `Stop` hook may return `decision: "block"` with a
 reason, which puts that reason back in front of the model instead of letting
@@ -69,7 +98,7 @@ turn in a new process rather than typing into the one on your screen.
 
 So attached-mode send is not blocked by the absence of an interface, it is
 blocked by the shape of the ones that exist, and none of them has been
-observed here. `send_prompt` stays `false` in attached mode and Deckhand
+observed here. `send_prompt` stays `false` on a `pty` host and Deckhand
 ships no send UI on documentation alone. A Phase 1 spike observes Stop-hook
 block behaviour on a live install: whether the held turn stays the same
 session, what the user sees in the terminal while it is held, and what
@@ -77,6 +106,43 @@ ceiling exists on holding it open. If that spike lands, the capability is
 reconsidered then, not before. Until it does, Send is disabled unless you
 explicitly enable the synthetic keyboard fallback, and the button says what
 it is.
+
+### The extension host, and the channel that is not one
+
+On a `vscode-extension` host the answer is shorter and firmer. The session's
+stdin is a `stream-json` pipe owned by the editor, there is no window to aim
+synthetic keystrokes at, and the fallback that a `pty` host can opt into
+does not exist here at all.
+
+The extension does run a local server, and it is worth naming so that nobody
+rediscovers it and assumes it helps. Each VS Code window advertises an MCP
+server over WebSocket in `~/.claude/ide/<port>.lock`, carrying `pid`,
+`workspaceFolders`, `ideName`, `transport`, and an `authToken`, reached with
+the header `x-claude-code-ide-authorization`. It identifies as `Claude Code
+VSCode MCP` and serves twelve tools: `openFile`, `openDiff`,
+`getDiagnostics`, `getOpenEditors`, `getWorkspaceFolders`,
+`getCurrentSelection`, `getLatestSelection`, `checkDocumentDirty`,
+`saveDocument`, `close_tab`, `closeAllDiffTabs`, and `executeCode`.
+
+Not one of them sends a prompt, interrupts a turn, or reports session state.
+The channel exists so that Claude can drive the editor, and Deckhand needs
+the opposite direction. `send_prompt` and `interrupt` are therefore `false`
+on this host because they are **absent**, checked against the full tool
+list, which is a stronger statement than the `pty` host's **unproven**.
+
+It does not solve Reveal either. `openFile` takes a `makeFrontmost` flag,
+and setting it moved the active tab in the targeted window while leaving the
+OS foreground window alone, which is what its own schema describes. Worse,
+opening a file navigates that window away from the Claude tab, so using it
+for Reveal would hide the thing the user asked to see. Reveal on this host
+raises the window natively instead, matching the workspace name in the
+window title, because every VS Code window shares one process and a `pid`
+cannot tell them apart. Tab-level focus would need the extension's own
+`claude-vscode.focus` command, which only another VS Code extension can
+invoke, and Deckhand does not ship one.
+
+This whole surface is `internal`, evidence `observed`. Under the rule below,
+nothing may be built on it.
 
 ## Interfaces used, and what they rest on
 
@@ -91,7 +157,8 @@ it is.
 | Agent SDK (`@anthropic-ai/claude-agent-sdk`) | Hosted mode | Documented |
 | Enumerating `~/.claude/projects/` | Populating the bind picker | **Internal**, mangling observed 2.1.220 |
 | Transcript JSONL per-line schema | Last-resort detail | **Internal, changes between releases** |
-| Window-title heuristics to find a session's terminal | Fallback host match when no `pid` is available, synthetic input | **Synthetic** |
+| Window-title heuristics to find a session's window | Fallback host match when no usable `pid` exists, synthetic input. The only route on a `vscode-extension` host, where every window shares one `pid` | **Synthetic** |
+| The extension's per-window MCP server, `~/.claude/ide/<port>.lock` | Nothing. Enumerated, evaluated for Reveal, and rejected | **Internal**, observed 2.1.220 |
 
 The design rule that follows: the `documented` rows may be load-bearing, the
 `internal` and `synthetic` rows may not. If every `internal` row broke
@@ -429,18 +496,27 @@ thing than a status board.
 
 What this adapter will declare, per [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md):
 
-| Capability | Attached | Hosted |
-| --- | --- | --- |
-| `observe_status` | `documented` | `documented` |
-| `list_sessions` | `documented` (observed 2.1.220) | `documented` |
-| `focus_session` | `synthetic` | `false` (no window to raise) |
-| `decide_permission` | `documented` | `documented` |
-| `answer_question` | `false` (optional, and unproven) | `false` (unproven) |
-| `send_prompt` | `false` (`synthetic` if the user opts in) | `documented` |
-| `interrupt` | `false` (`synthetic` if the user opts in) | `documented` |
-| `set_option` | `false` | `documented` |
+Per [ADR-023](DECISIONS.md#adr-023) this is a per-session table, not a
+per-adapter one. The adapter declares the widest value in each row; a
+session declares the value for its own host, and the surface reads the
+session.
 
-Three of those rows need a sentence.
+| Capability | Attached, `pty` | Attached, `vscode-extension` | Hosted, `sdk` |
+| --- | --- | --- | --- |
+| `observe_status` | `documented` | `documented` | `documented` |
+| `list_sessions` | `documented` (observed 2.1.220) | `documented` (observed 2.1.220) | `documented` |
+| `focus_session` | `synthetic` | `synthetic` (title only) | `false` (no window to raise) |
+| `decide_permission` | `documented` | `documented` (observed 2.1.220) | `documented` |
+| `answer_question` | `false` (optional, and unproven) | `false` (optional, and unproven) | `false` (unproven) |
+| `send_prompt` | `false` (`synthetic` if the user opts in) | `false` (absent, and no synthetic route) | `documented` |
+| `interrupt` | `false` (`synthetic` if the user opts in) | `false` (absent, and no synthetic route) | `documented` |
+| `set_option` | `false` | `false` | `documented` |
+
+Four of those rows need a sentence.
+
+`decide_permission` on a `vscode-extension` host is the one row that gained
+an observation on 2026-08-02, and it is the row the product rests on: a
+`PreToolUse` hook fired inside the extension and its `deny` was honoured.
 
 `list_sessions` is the one promotion here, and it is earned. The command
 `claude agents --json` was run on this machine and returned live sessions,
@@ -457,7 +533,7 @@ half of the feature and is what ships. MCP elicitation is sometimes suggested
 here; it is MCP-only, so it answers a different question and is not a
 candidate.
 
-`set_option` is `false` in attached mode because no local interface sets the
+`set_option` is `false` on both attached hosts because no local interface sets the
 model, the effort level, or the permission mode of a session that is already
 running. The dial is a readout there, and the surface should say so rather
 than offering a control with nowhere to write.
@@ -468,8 +544,9 @@ than offering a control with nowhere to write.
    session. The documented channels (Stop-hook `decision: "block"`,
    `SessionStart` `initialUserMessage`, `additionalContext`) all deliver at a
    turn boundary and none of them has been observed here, so `send_prompt`
-   stays `false` in attached mode.
-   See [the two modes](#the-two-modes-concretely) for the shape of each one.
+   stays `false` on a `pty` host. On a `vscode-extension` host it is `false`
+   for a firmer reason: no such channel exists at all.
+   See [the three hosts](#the-three-hosts-concretely) for the shape of each.
 2. Error detection now has a documented mechanism (`StopFailure`) but still
    no observation, so red stays a narrow promise.
 3. `--resume` semantics need testing: whether a resumed session keeps its id in

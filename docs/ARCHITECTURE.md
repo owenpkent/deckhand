@@ -231,29 +231,44 @@ the tile must say that hooks are disabled rather than sit grey with no
 explanation. See
 [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md#known-limitations).
 
-## Modes
+## Modes and hosts
 
 The mode is a property of a session, not of the application. A single surface
 can show attached sessions and hosted sessions side by side, and the tile should
 make clear which is which.
 
+Mode is not the whole story. It says who started a session; the **host** says
+what is holding its process, and that is what decides which controls can act
+on it. The two are separate axes, and attached mode spans two hosts: a `pty`,
+whether in its own terminal window or an editor's, and `vscode-extension`,
+where the process runs under the editor with no window of its own. Capabilities
+therefore belong to a session rather than to an adapter. See
+[DECISIONS.md](DECISIONS.md#adr-023) and
+[ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types).
+
 ### Attached mode
 
-Deckhand watches a `claude` session that you started in your own terminal.
+Deckhand watches a `claude` session that you started, in a terminal or in the
+editor.
 
 - Status observation: **full**, through hooks, with the enumeration above as a
-  second channel.
+  second channel. The host makes no difference: hooks come out of `claude.exe`
+  and not out of whatever holds its pipes.
 - Approve and deny: **full**, through the `PreToolUse` hook, subject to the
-  session's permission mode.
-- Send and continue: **unproven, not impossible.** The channels that are
-  documented deliver at a turn boundary, never into an idle session, which is
-  exactly when a person wants to type. `send_prompt` therefore stays `false`
-  in attached mode until one of them is observed working. See
-  [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) and
-  [DECISIONS.md](DECISIONS.md#adr-020).
-- Interrupt: no channel proven from outside the session. An opt-in fallback
-  synthesises keystrokes at the session's terminal window. It is off by
-  default and clearly marked as unreliable.
+  session's permission mode. Observed working on a `vscode-extension` host
+  against 2.1.220.
+- Send and continue: **unproven on a `pty` host, absent on a
+  `vscode-extension` host.** The documented channels deliver at a turn
+  boundary, never into an idle session, which is exactly when a person wants
+  to type, and none has been observed. Inside the extension there is no such
+  channel at all and stdin belongs to the editor. `send_prompt` is `false` on
+  both. See [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md),
+  [DECISIONS.md](DECISIONS.md#adr-020), and
+  [DECISIONS.md](DECISIONS.md#adr-023).
+- Interrupt: no channel proven from outside the session. On a `pty` host an
+  opt-in fallback synthesises keystrokes at the session's terminal window; it
+  is off by default and clearly marked as unreliable. On a `vscode-extension`
+  host there is no window to type into, so the fallback does not exist.
 
 ### Hosted mode
 

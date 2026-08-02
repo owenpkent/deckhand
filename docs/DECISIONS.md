@@ -583,3 +583,114 @@ enum written from documentation was wrong in a way nobody would have caught
 without running the binary, which is an argument for running it earlier. This
 reopens if a later Claude Code release changes the accepted set, or if the
 settings key is tested and accepts something the flag does not.
+
+---
+
+<a id="adr-023"></a>
+## ADR-023: The host is a third axis, and capabilities belong to a session
+
+Date: 2026-08-02
+
+**Context.** [ADR-004](#adr-004) and the spec since have described two ways
+of relating to a session, attached and hosted, and treated attached as a
+synonym for "running in your own terminal". The owner runs Claude Code
+through the VS Code extension as well, which that model has no place for.
+A spike on 2026-08-02, against Claude Code 2.1.220 on Windows 11, observed
+the following.
+
+An extension-hosted session is a real `claude.exe`, launched from
+`.vscode/extensions/anthropic.claude-code-2.1.220-win32-x64/resources/native-binary/`
+with `--output-format stream-json --verbose --input-format stream-json`,
+parented to a `Code.exe` utility process, owning no window of its own. It
+appears in `claude agents --json` tagged `kind: "interactive"`, which is
+what a terminal session is tagged, so `kind` does not discriminate hosts.
+No `status` key was present on any row of that output, which corrects the
+key list in the stamp in
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md).
+
+Hooks are unaffected by the host. This repository's own `PreToolUse` gate
+fired from inside the extension, with `tool_name` and `tool_input`
+populated, and its `permissionDecision: "deny"` was honoured. That is the
+first time a hook has been seen to fire and decide anything here, and it
+was seen in the host the spec did not model.
+
+The extension also runs an MCP server over WebSocket, one per VS Code
+window, advertised at `~/.claude/ide/<port>.lock` carrying `pid`,
+`workspaceFolders`, `ideName`, `transport`, and an `authToken`, and reached
+with the header `x-claude-code-ide-authorization`. It identifies as
+`Claude Code VSCode MCP 2.1.220` and serves twelve tools: `openFile`,
+`openDiff`, `getDiagnostics`, `getOpenEditors`, `getWorkspaceFolders`,
+`getCurrentSelection`, `getLatestSelection`, `checkDocumentDirty`,
+`saveDocument`, `close_tab`, `closeAllDiffTabs`, and `executeCode`. None of
+them sends a prompt, interrupts a turn, or reports session state. The
+channel exists so the CLI can drive the editor, not so anything can drive
+Claude, and it points the wrong way for Deckhand's purposes.
+
+Two further facts decide Reveal. Every VS Code window shares one main
+process, so a `pid` cannot tell two windows apart: three live windows and
+three live lockfiles all reported the same `pid`. And `openFile` with
+`makeFrontmost: true` changed the active tab in the targeted window, which
+its window title confirmed, but left the OS foreground window untouched.
+The tool does tab focus, not window raise, exactly as its own schema says.
+
+**Decision.** The host becomes a third axis, separate from the mode.
+`SessionInfo` gains a `host` field with the values `pty`,
+`vscode-extension`, and `sdk`, derived from the process argv and parent
+rather than from `kind`, which cannot carry it. `mode` keeps its existing
+two values and its existing meaning, which is who started the session.
+
+Capabilities move from the adapter to the session. One adapter now spans
+hosts whose capability sets genuinely differ, so a single
+`capabilities` record on the `Adapter` can no longer be true: on the
+Claude Code adapter `focus_session` is `synthetic` on a `pty` host and
+`internal` on a `vscode-extension` host at the same moment. The adapter
+declares the capabilities it can ever offer, and each `SessionInfo`
+carries the set that actually applies to it. Where they disagree, the
+session wins, and the surface reads the session.
+
+Reveal on a `vscode-extension` host raises the window natively, by
+enumerating top-level windows and matching the workspace name in the
+title, because no `pid` can do it. Tab-level focus is not attempted: the
+only thing that could do it is the `claude-vscode.focus` command, which
+is invokable only from inside the extension host, and Deckhand will not
+ship a companion VS Code extension to reach it. `openFile` is explicitly
+rejected as a Reveal primitive: it would navigate the window away from the
+Claude tab, hiding the thing the user asked to see.
+
+`send_prompt` and `interrupt` stay `false` on a `vscode-extension` host,
+and the reason is stronger than the one that keeps them false on a `pty`
+host. On a `pty` host they are unproven, per [ADR-020](#adr-020). Here
+they are absent: the full tool and command surface was enumerated and
+neither exists, and the process's stdin belongs to the extension. The
+opt-in synthetic keystroke fallback is unavailable on this host, having no
+window to type into.
+
+The `~/.claude/ide/` lockfiles and the MCP server they advertise are
+`internal`, evidence `observed`. Under the rule in
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) that `internal` rows may
+not be load-bearing, nothing in the spec is allowed to depend on them.
+They are recorded because they are the map of what this host does and does
+not offer, not because anything is being built on them.
+
+**Consequences.** The spec now describes the host the owner actually uses
+for a good part of the day, and the answer for that host is better than
+expected on the part that matters and worse on the part that does not.
+Status, approve, deny, the mode badge, and the bind picker are unchanged,
+because hooks come out of `claude.exe` and not out of whatever is holding
+its pipes. Reveal degrades from "raise the right thing" to "raise the
+right window", which in the owner's observed setup, one workspace per
+window, is the same thing.
+
+[ADR-006](#adr-006) stands and is strengthened: the approval path is
+host-independent, and that is now observed rather than assumed.
+[ADR-008](#adr-008) is untouched, no state or colour moves.
+[ADR-020](#adr-020) stands for the `pty` host and is narrowed, not
+superseded: its "unproven, not impossible" verdict was about the terminal,
+and this entry adds a host where the stronger word is warranted.
+
+The trade accepted: a second discriminator on every session, and a
+capability model that is now two-level and therefore easier to get wrong,
+bought in exchange for a spec that stops being silent about a third of how
+the product is used. This reopens if Claude Code exposes a documented way
+to send into or interrupt a running session from outside it, on any host,
+or if a release adds a window-raise tool to the IDE server.

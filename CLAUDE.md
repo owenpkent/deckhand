@@ -58,16 +58,16 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 291 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 401 | Daemon, shim, surface, state machine |
-| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 310 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 495 | Reference adapter; partial stamp |
-| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 273 | Approval path; fails to `ask` |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 416 | Daemon, shim, surface, state machine |
+| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 345 | Daemon to runtime contract |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 572 | Reference adapter; partial stamp |
+| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
 | [docs/UI_SPEC.md](docs/UI_SPEC.md) | 294 | Visual and interaction contract |
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 585 | ADRs; append only |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 696 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 136 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 182 / 225 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 182 / 244 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -99,7 +99,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 023.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 024.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -138,8 +138,16 @@ the owner's cross-project dashboard. Keep compatible:
 
 Finish Phase 0: spec complete and internally consistent. The adapter now
 carries a partial verification stamp against Claude Code 2.1.220, and ADRs
-013 to 022 record the changes that came out of it. The two pre-Phase-1
-spikes are still the next real work: prove the no-focus-steal window in
-Tauri on Windows (untouched), and validate hook payloads against a live
-Claude Code install (partially advanced, and still open, because reading a
-string in documentation or a binary is not observing a payload).
+013 to 023 record the changes that came out of it. ADR-023 is the newest:
+the host (`pty`, `vscode-extension`, `sdk`) is a third axis beside the
+mode, and capabilities moved from the adapter to the session, because the
+owner runs Claude Code in the VS Code extension as well as in a terminal
+and those hosts differ on everything that needs a window. Nothing that
+runs over hooks differs, which is most of the product.
+
+The two pre-Phase-1 spikes are still the next real work: prove the
+no-focus-steal window in Tauri on Windows (untouched), and validate hook
+payloads against a live Claude Code install. The second advanced on
+2026-08-02, when a `PreToolUse` hook was first seen to fire here and its
+`deny` was honoured, but it stays open: one event with two fields
+confirmed is not every field of every event.
