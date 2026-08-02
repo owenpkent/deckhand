@@ -109,21 +109,23 @@ type SessionState =
 
 // Whose decision an `ask` reaches. Runtime-specific by nature: these are the
 // values the reference runtime accepts, and another adapter maps onto the
-// nearest one or reports `unknown`. The six runtime values are `observed`
-// against Claude Code 2.1.220: `claude --help` lists exactly this set as the
-// choices for `--permission-mode`. `default` is not among them. Whether the
-// settings key `permissions.defaultMode` accepts a value spelled `default`
-// is unverified, and nothing here assumes either answer. Behaviour in any
-// mode other than `manual` is still unverified; this is the set of names,
-// not a claim about what each one does.
+// nearest one or reports `unknown`. Six values are `observed` against
+// Claude Code 2.1.220 as the `--permission-mode` choices in `claude --help`.
+// `default` is not among the flag's choices, but it is a live *payload*
+// value: a headless session reported `permission_mode: "default"` on its
+// events (observed 2.1.220, ADR-026), so the type carries it. Whether the
+// settings key `permissions.defaultMode` accepts the spelling is still
+// unverified. Behaviour in any mode other than `manual` is still
+// unverified; this is the set of names, not a claim about what each does.
 //
-// `unknown` is Deckhand's own seventh value, not a runtime one. It is not a
+// `unknown` is Deckhand's own value, not a runtime one. It is not a
 // fallback for laziness: it is the honest answer when a payload carries no
 // mode at all, which is not rare, and it is also the answer for a value not
 // in this list.
 type PermissionMode =
   | "manual" | "acceptEdits" | "plan"
   | "auto" | "dontAsk" | "bypassPermissions"
+  | "default"
   | "unknown";
 
 // What is holding the session's process, which is a different question from

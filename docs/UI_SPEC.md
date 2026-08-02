@@ -101,9 +101,10 @@ badge is a glance, not a route.
   listed in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types), plus `unknown`
   for a payload that does not carry one or carries one the adapter does not
   recognise, and `unknown` renders as the word rather than as a blank.
-  Six modes exist (`acceptEdits`, `auto`, `bypassPermissions`, `manual`,
-  `dontAsk`, `plan`, observed against Claude Code 2.1.220), and `manual`,
-  `auto`, and `dontAsk` are the three that change what a
+  Seven runtime values exist (`acceptEdits`, `auto`, `bypassPermissions`,
+  `manual`, `dontAsk`, `plan` from the CLI flag, plus `default`, seen
+  only in payloads; all observed against Claude Code 2.1.220), and
+  `manual`, `auto`, and `dontAsk` are the three known to change what a
   Deckhand `ask` falls through to; see
   [SECURITY_MODEL.md](SECURITY_MODEL.md#1-fail-closed-in-the-correct-direction).
 - **Bottom-right: live children.** The count of open entries in the session's

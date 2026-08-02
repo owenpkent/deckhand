@@ -69,8 +69,14 @@ Checking a box here means the item is done, not that it is perfect. See
       `status` key on any `claude agents --json` row, correcting the
       2026-07-30 note. Advanced a third time later on 2026-08-02, when the
       capture tap below logged five complete `PreToolUse` events and moved
-      every common field to `observed` for that event. This item stays
-      unchecked: one event enumerated is not every field of every event.
+      every common field to `observed` for that event. Advanced a fourth
+      time the same day by live validation (ADR-026): nine of the twelve
+      documented events have now fired here with their fields captured,
+      correcting `PostToolUseFailure`'s shape (`error` string plus
+      `is_interrupt`, no `error_type`) and adding `permission_mode:
+      "default"` as a live payload value. This item stays unchecked until
+      `Notification`, `StopFailure`, and `PermissionDenied` are seen
+      firing.
 - [x] Enumerate the remaining `PreToolUse` payload fields now that the
       event is known to fire. Done 2026-08-02: a capture tap (first inside
       the style gate, now the dedicated `.claude/hooks/payload-capture.js`)

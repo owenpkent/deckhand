@@ -61,14 +61,14 @@ source-of-truth map. This table is a reading budget, not a second map.
 | --- | --- | --- |
 | [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 431 | Daemon, shim, surface, state machine |
-| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 345 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 598 | Reference adapter; partial stamp |
+| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 347 | Daemon to runtime contract |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 617 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 294 | Visual and interaction contract |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 295 | Visual and interaction contract |
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 802 | ADRs; append only |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 858 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 138 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 288 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 294 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -100,7 +100,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 026.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 027.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -150,9 +150,10 @@ the window spike pass that Phase 1's window builds on.
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on
 Windows, recorded as ADR-025. The payload spike advanced twice the same
-day: a `PreToolUse` deny was honoured from a live session, and a capture
-hook, `.claude/hooks/payload-capture.js`, logged complete `PreToolUse`
-payloads, moving every common field to `observed` for that event. The
-capture hook is now registered for all twelve documented event names, so
-the remaining events enumerate themselves passively as future sessions
-run. Phase 1 has started.
+day: a `PreToolUse` deny was honoured from a live session, and the
+capture hook `.claude/hooks/payload-capture.js`, registered for all
+twelve documented event names, has now seen nine of them fire with full
+payloads (ADR-026). Only `Notification`, `StopFailure`, and
+`PermissionDenied` remain unobserved, and the live corrections that
+came out of validation are in the ADR. Phase 1 has started and the
+board has painted real sessions.

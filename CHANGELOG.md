@@ -12,6 +12,21 @@ and no past release is backfilled.
 
 ## [Unreleased]
 
+### Changed
+
+- Live validation against Claude Code 2.1.220, recorded as ADR-026, put
+  real sessions through the Phase 1 pipeline and corrected the spec and
+  code in four places: `PostToolUseFailure`'s observed shape (`error`
+  string plus `is_interrupt`, no `error_type`; an interrupt closes every
+  open operation), the child ledger now keyed on the observed `agent_id`
+  so duplicate delivery is a no-op and a stray stop cannot close an
+  unrelated bracket, `claude agents --json` treated as successful on
+  parseable output because it exits 255, and `permission_mode:
+  "default"` added to the protocol as an observed payload value. Nine of
+  twelve documented hook events have now fired live. Tile text also
+  became legible: tiles no longer inherit the button default black, and
+  the slot and badge sizes came up.
+
 ### Added
 
 - The Phase 1 observation skeleton, the first application code beyond the

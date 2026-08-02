@@ -45,8 +45,8 @@ live install is done for `PreToolUse` and open for the other events.
 | Security model for permission gating | ✅ Written |
 | UI and accessibility specification | ✅ Written |
 | Tauri no-focus-steal window spike | ✅ Passed on Windows 11 (ADR-025) |
-| Hook payload validation spike | ⏳ `PreToolUse` fully enumerated, other events open |
-| Daemon, shim, state machine, six tiles | ✅ Phase 1 skeleton; synthetic events paint real tiles |
+| Hook payload validation spike | ⏳ Nine of twelve events observed live; three remain |
+| Daemon, shim, state machine, six tiles | ✅ Phase 1 skeleton; live sessions paint real tiles |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet |
 
 Build it with `powershell -NoProfile -File scripts/build-app.ps1`, which

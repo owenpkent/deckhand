@@ -40,12 +40,31 @@ against Claude Code.
 >   all five events of one turn, so it names the turn, not the tool
 >   call), `permission_mode` (live value `auto`), `effort.level` (live
 >   value `xhigh`), `hook_event_name`, `tool_name`, `tool_input` (the
->   complete tool arguments), and `tool_use_id`. Observed for `Edit`
->   tool calls only; other hook events and other tools stay
->   `documented`. The tap now lives in its own hook,
->   `.claude/hooks/payload-capture.js`, registered for all twelve
->   documented event names, so this list extends passively as future
->   sessions fire the other events.
+>   complete tool arguments), and `tool_use_id`. The tap now lives in
+>   its own hook, `.claude/hooks/payload-capture.js`, registered for
+>   all twelve documented event names.
+> - **Nine of the twelve events firing, with their fields** (later on
+>   2026-08-02, from live sessions, a headless `claude -p` run, and a
+>   spawned subagent; ADR-026). `SessionStart` (`source: "startup"`),
+>   `UserPromptSubmit` (`prompt`; carries no `effort`), `PreToolUse`
+>   across many tools, `PostToolUse` (`tool_response`, `duration_ms`),
+>   `PostToolUseFailure` (`error` is a plain string of tool output plus
+>   `is_interrupt`; there is **no** `error_type` field), `Stop`
+>   (`stop_hook_active`, `last_assistant_message`, `background_tasks`,
+>   `session_crons`), `SessionEnd` (`reason: "other"`, a value the
+>   documented list did not name), and `SubagentStart` and
+>   `SubagentStop` (`agent_id`, `agent_type`; the stop also carries
+>   `agent_transcript_path` and the `Stop` extras). Still never seen
+>   firing: `Notification`, `StopFailure`, `PermissionDenied`.
+> - **Payloads can carry `permission_mode: "default"`.** The headless
+>   session reported it on `UserPromptSubmit` and `Stop`, even though
+>   the CLI flag rejects that spelling. What `default` does to an `ask`
+>   is as unobserved as every other mode's behaviour.
+> - **Hooks fire in print mode**, and **hook registration changes take
+>   effect mid-session**: events registered mid-session began firing
+>   from the very session that registered them, without a restart.
+> - **`claude agents --json` exits 255 while emitting valid JSON.**
+>   Parseable output, not the exit code, is the success signal.
 > - The shape of an extension-hosted session, and the per-window MCP
 >   server the extension runs at `~/.claude/ide/<port>.lock`, including
 >   its twelve tools and the fact that `openFile` with `makeFrontmost`
@@ -204,7 +223,7 @@ The daemon owns the state machine; this adapter feeds it observations.
 | `Notification`, `notification_type: "agent_needs_input"` | `needs_input` | No `kind`: the payload does not say which sort of prompt it is. The field is `notification_type`, not `type` |
 | `Notification`, `notification_type: "agent_completed"` | `idle` | |
 | `PostToolUse` | `thinking` | Success only. Closes the operation |
-| `PostToolUseFailure` | `thinking` | The turn continues. Detail `error: { kind, message? }`, `kind` from this event's `error_type`. Closes the operation |
+| `PostToolUseFailure` | `thinking` | The turn continues. Observed 2.1.220: `error` is a plain string of the tool's output and `is_interrupt` marks an interrupted call; there is no `error_type` field. A non-interrupt failure closes its operation; an interrupt closes every open operation on the session |
 | `Stop` | `complete` | Cleared to `idle` when you select the tile |
 | `StopFailure` | `error` | An API error ended the turn. The typed field is `error`, not `error_type` |
 | `SubagentStart`, `SubagentStop` | no change | Children never move the parent's colour. They feed the child ledger and the liveness bracket, and nothing else |

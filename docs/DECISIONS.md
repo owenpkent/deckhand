@@ -800,3 +800,59 @@ the answer. Dragging, DPI changes, multiple monitors, and release builds
 (`windows_subsystem = "windows"`) are untested. This reopens if a Tauri or
 WebView2 release changes activation behaviour, or if the Phase 1 window
 observably takes focus in daily use.
+
+<a id="adr-026"></a>
+## ADR-026: First live validation, and what reality corrected
+
+Date: 2026-08-02
+
+**Context.** The Phase 1 skeleton shipped proven only against synthetic
+events. The same day, the payload capture hook and the machine-local shim
+wiring put real traffic through it: this repository's own sessions, a
+headless `claude -p` run, and a spawned subagent, all against Claude Code
+2.1.220. Nine of the twelve documented hook event names have now been
+seen firing here; `Notification`, `StopFailure`, and `PermissionDenied`
+have not.
+
+**Decision.** Reality won four arguments, and the code and the spec now
+follow it:
+
+- `PostToolUseFailure` carries `error` as a plain string of the tool's
+  own output, plus an `is_interrupt` boolean. There is no `error_type`
+  field; the status-inference table had specified one from
+  documentation. The adapter derives the error detail from the observed
+  fields, truncated to panel size, and an `is_interrupt` failure closes
+  every operation open on the session, which is the first observed
+  mechanism for the interrupt rule in
+  [ARCHITECTURE.md](ARCHITECTURE.md#liveness-by-open-operation).
+- Subagent events carry `agent_id` and `agent_type`, and `SubagentStart`
+  opens a real operation. The child ledger keys on `agent_id` instead of
+  counting, which is what makes duplicate delivery a no-op (adapter rule
+  4) and stops a stray `SubagentStop` from closing an unrelated tool
+  bracket, a bug the counter version had.
+- `claude agents --json` emits valid JSON and exits 255. The daemon
+  treats parseable output as the success signal and ignores the exit
+  code, which its first implementation did not, so cold start silently
+  returned nothing against the real binary.
+- `permission_mode: "default"` is a live payload value: the headless
+  session reported it on `UserPromptSubmit` and `Stop`, even though the
+  CLI flag rejects that spelling. The protocol's mode list gains it as
+  an observed payload value. What `default` does to an `ask` stays
+  unobserved, like every other mode's behaviour.
+
+Also observed, strengthening rather than correcting: hooks fire in print
+mode; hook registration changes take effect mid-session without a
+restart, seen when events registered mid-session began firing from the
+session that registered them; `SessionStart` arrived with
+`source: "startup"` and `SessionEnd` with `reason: "other"`, a value the
+documented list did not name, which the unrecognised-reason arm already
+handled by design.
+
+**Consequences.** The per-claim stamps in
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) move accordingly, and
+the Phase 0 validation item narrows to the three unobserved events. Red
+keeps its narrow promise: `StopFailure` remains a string in a binary,
+not an observation. The board itself ran through all of this live, with
+the owner's own session as the first tile. This entry reopens per event
+as the remaining three are seen, and per field if a release changes any
+observed shape.
