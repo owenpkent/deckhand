@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Deckhand focus spike</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #14161a;
+    color: #e6e6e6;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    user-select: none;
+  }
+  button {
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 18px;
+    border-radius: 8px;
+    border: 1px solid #3a3f47;
+    background: #232830;
+    color: #e6e6e6;
+    cursor: pointer;
+  }
+  button:active { background: #2f3743; }
+  #log {
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    color: #9aa4b2;
+  }
+</style>
+</head>
+<body>
+  <button id="click-me">Click me (0)</button>
+  <div id="log">waiting…</div>
+  <script>
+    const invoke = window.__TAURI__.core.invoke;
+    const btn = document.getElementById("click-me");
+    const log = document.getElementById("log");
+    let count = 0;
+
+    btn.addEventListener("click", async () => {
+      count += 1;
+      btn.textContent = `Click me (${count})`;
+      const r = await invoke("record_event", { kind: "click" });
+      log.textContent = JSON.stringify(r, null, 1);
+    });
+
+    window.addEventListener("focus", () => invoke("record_event", { kind: "webview-focus" }));
+    window.addEventListener("blur", () => invoke("record_event", { kind: "webview-blur" }));
+
+    invoke("record_event", { kind: "loaded" }).then((r) => {
+      log.textContent = JSON.stringify(r, null, 1);
+    });
+  </script>
+</body>
+</html>

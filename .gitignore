@@ -32,6 +32,9 @@ Thumbs.db
 desktop.ini
 *.stackdump
 
+# Spike evidence logs (findings are recorded in docs/, raw logs stay local)
+spike-log.jsonl
+
 # AI/LLM scratch space
 _scratch/
 _draft_*
