@@ -73,6 +73,12 @@ pub struct Session {
     /// The child ledger: open subagents only. Background Bash tasks emit
     /// no hook and are invisible to it; the count is a floor.
     pub children: u32,
+    /// The ledger's identity backing: `agent_id` per open child
+    /// (observed 2.1.220 on both subagent events). Keying on identity is
+    /// what makes duplicate delivery a no-op, which adapter rule 4
+    /// requires and a bare counter cannot provide.
+    #[serde(skip)]
+    child_ids: Vec<String>,
     pub open_ops: Vec<OpenOp>,
     pub last_event_at_ms: i64,
     pub unread_since_ms: Option<i64>,
@@ -99,6 +105,7 @@ impl Session {
             options: Vec::new(),
             error: None,
             children: 0,
+            child_ids: Vec::new(),
             open_ops: Vec::new(),
             last_event_at_ms: now_ms,
             unread_since_ms: None,
@@ -182,6 +189,7 @@ impl Session {
                     return false;
                 }
                 self.children = 0;
+                self.child_ids.clear();
                 self.open_ops.clear();
                 self.pending_complete = false;
                 self.error = None;
@@ -219,17 +227,27 @@ impl Session {
                 true
             }
             "PostToolUseFailure" => {
-                self.close_op(tool_use_id, tool_name);
-                let kind = payload
-                    .get("error_type")
-                    .and_then(Value::as_str)
-                    .unwrap_or("tool_failure");
+                // Observed 2.1.220: `error` is a string carrying the
+                // tool's own output and `is_interrupt` marks an
+                // interrupted call. There is no `error_type` field; the
+                // documented shape said otherwise and reality won.
+                let is_interrupt = payload
+                    .get("is_interrupt")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                if is_interrupt {
+                    // An interrupt closes every operation open on the
+                    // session, not just this call's.
+                    self.open_ops.clear();
+                } else {
+                    self.close_op(tool_use_id, tool_name);
+                }
                 self.error = Some(ErrorDetail {
-                    kind: kind.to_string(),
+                    kind: if is_interrupt { "interrupt" } else { "tool_failure" }.to_string(),
                     message: payload
                         .get("error")
                         .and_then(Value::as_str)
-                        .map(String::from),
+                        .map(|s| truncate(s, 200)),
                 });
                 // The turn continues: a failed tool call is not a failed
                 // turn.
@@ -292,12 +310,45 @@ impl Session {
                 true
             }
             "SubagentStart" => {
-                self.children += 1;
+                // Observed 2.1.220: carries `agent_id` and `agent_type`.
+                // The ledger keys on identity so a duplicate delivery
+                // changes nothing, and the start opens an operation for
+                // the liveness bracket per the table in
+                // docs/ARCHITECTURE.md#liveness-by-open-operation.
+                let agent_id = payload
+                    .get("agent_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                if agent_id.is_empty() || !self.child_ids.contains(&agent_id) {
+                    let agent_type = payload
+                        .get("agent_type")
+                        .and_then(Value::as_str)
+                        .unwrap_or("subagent");
+                    self.child_ids.push(agent_id.clone());
+                    self.open_op(Some(agent_id), agent_type, now_ms);
+                    self.children = self.child_ids.len() as u32;
+                }
                 true // the badge changed even though the colour did not
             }
             "SubagentStop" => {
-                self.children = self.children.saturating_sub(1);
-                self.close_op(tool_use_id, None);
+                let agent_id = payload.get("agent_id").and_then(Value::as_str);
+                match agent_id.and_then(|id| self.child_ids.iter().position(|c| c == id)) {
+                    Some(i) => {
+                        let id = self.child_ids.remove(i);
+                        self.close_op(Some(&id), None);
+                    }
+                    None => {
+                        // A stop for a child never seen. Shrink the
+                        // ledger anyway rather than pin the count high
+                        // forever, but close no unrelated operation.
+                        if !self.child_ids.is_empty() {
+                            let id = self.child_ids.pop().unwrap_or_default();
+                            self.close_op(Some(&id), None);
+                        }
+                    }
+                }
+                self.children = self.child_ids.len() as u32;
                 if self.children == 0 && self.pending_complete {
                     self.pending_complete = false;
                     self.set_state(SessionState::Complete, now_ms);
@@ -313,6 +364,7 @@ impl Session {
                     return false;
                 }
                 self.children = 0;
+                self.child_ids.clear();
                 self.open_ops.clear();
                 self.pending_complete = false;
                 self.set_state(SessionState::Ended, now_ms);
@@ -349,6 +401,19 @@ impl Session {
         }
         false
     }
+}
+
+/// Clip detail text to what a tile or panel can honestly show. Real
+/// `error` strings carry whole compiler dumps.
+fn truncate(text: &str, max: usize) -> String {
+    if text.len() <= max {
+        return text.to_string();
+    }
+    let mut cut = max;
+    while !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}...", &text[..cut])
 }
 
 pub fn dir_name(path: &str) -> String {
@@ -466,10 +531,31 @@ mod tests {
     fn tool_failure_keeps_the_turn_alive() {
         let mut x = s();
         ev(&mut x, 1, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
-        ev(&mut x, 2, json!({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_use_id": "t1", "error_type": "exit_code"}));
+        // The observed shape: `error` is a string, `is_interrupt` a bool.
+        ev(&mut x, 2, json!({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_use_id": "t1", "error": "Exit code 101\nlots of compiler output", "is_interrupt": false}));
         assert_eq!(x.state, SessionState::Thinking, "a failed tool call is not a failed turn");
         assert!(x.open_ops.is_empty());
-        assert_eq!(x.error.as_ref().unwrap().kind, "exit_code");
+        assert_eq!(x.error.as_ref().unwrap().kind, "tool_failure");
+        assert!(x.error.as_ref().unwrap().message.as_ref().unwrap().starts_with("Exit code 101"));
+    }
+
+    #[test]
+    fn an_interrupt_closes_every_open_operation() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_use_id": "t2"}));
+        assert_eq!(x.open_ops.len(), 2);
+        ev(&mut x, 3, json!({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_use_id": "t1", "error": "interrupted", "is_interrupt": true}));
+        assert!(x.open_ops.is_empty(), "an interrupt closes every open operation, not just its own");
+        assert_eq!(x.error.as_ref().unwrap().kind, "interrupt");
+    }
+
+    #[test]
+    fn error_detail_is_truncated_to_panel_size() {
+        let mut x = s();
+        let long = "x".repeat(5000);
+        ev(&mut x, 1, json!({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "error": long, "is_interrupt": false}));
+        assert!(x.error.as_ref().unwrap().message.as_ref().unwrap().len() <= 203);
     }
 
     #[test]
@@ -502,6 +588,25 @@ mod tests {
         ev(&mut x, 3, json!({"hook_event_name": "SubagentStop"}));
         assert_eq!(x.state, SessionState::Complete, "green arrives when the ledger empties");
         assert!(x.unread_since_ms.is_some());
+    }
+
+    #[test]
+    fn duplicate_subagent_start_is_idempotent() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "Explore"}));
+        ev(&mut x, 2, json!({"hook_event_name": "SubagentStart", "agent_id": "a1", "agent_type": "Explore"}));
+        assert_eq!(x.children, 1, "the same update delivered twice must not change anything");
+        ev(&mut x, 3, json!({"hook_event_name": "SubagentStop", "agent_id": "a1"}));
+        assert_eq!(x.children, 0);
+        assert!(x.open_ops.is_empty(), "the subagent bracket closed by agent_id");
+    }
+
+    #[test]
+    fn subagent_stop_never_closes_an_unrelated_bracket() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "SubagentStop", "agent_id": "ghost"}));
+        assert_eq!(x.open_ops.len(), 1, "a stop for an unseen child must not close a tool bracket");
     }
 
     #[test]

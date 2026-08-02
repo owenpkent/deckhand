@@ -22,9 +22,9 @@ pub fn fetch() -> Option<Vec<Row>> {
         .args(["agents", "--json"])
         .output()
         .ok()?;
-    if !out.status.success() {
-        return None;
-    }
+    // The exit code is deliberately ignored: on 2.1.220 the command
+    // emits valid JSON and exits 255 (observed 2026-08-02). Parseable
+    // output is the success signal here.
     let parsed: Value = serde_json::from_slice(&out.stdout).ok()?;
     // Accept either a bare array or an object wrapping one, so a schema
     // that grows a wrapper does not kill cold start.
