@@ -152,8 +152,8 @@ Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 Windows, recorded as ADR-025. The payload spike advanced twice the same
 day: a `PreToolUse` deny was honoured from a live session, and the
 capture hook `.claude/hooks/payload-capture.js`, registered for all
-twelve documented event names, has now seen nine of them fire with full
-payloads (ADR-026). Only `Notification`, `StopFailure`, and
-`PermissionDenied` remain unobserved, and the live corrections that
-came out of validation are in the ADR. Phase 1 has started and the
-board has painted real sessions.
+twelve documented event names, has now seen ten of them fire with full
+payloads (ADR-026 and after). Only `Notification` and `StopFailure`
+remain unobserved, and the live corrections that came out of validation
+are in the ADR. Phase 1 has started and the board has painted real
+sessions.

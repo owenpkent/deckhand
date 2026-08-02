@@ -74,9 +74,12 @@ Checking a box here means the item is done, not that it is perfect. See
       documented events have now fired here with their fields captured,
       correcting `PostToolUseFailure`'s shape (`error` string plus
       `is_interrupt`, no `error_type`) and adding `permission_mode:
-      "default"` as a live payload value. This item stays unchecked until
-      `Notification`, `StopFailure`, and `PermissionDenied` are seen
-      firing.
+      "default"` as a live payload value. A fifth advance later that day:
+      `PermissionDenied` fired live (the auto-mode classifier blocking a
+      call) carrying the common fields plus `tool_name`, `tool_input`,
+      `tool_use_id`, and `reason: "Blocked by classifier"`, exactly as
+      predicted. This item stays unchecked until `Notification` and
+      `StopFailure` are seen firing.
 - [x] Enumerate the remaining `PreToolUse` payload fields now that the
       event is known to fire. Done 2026-08-02: a capture tap (first inside
       the style gate, now the dedicated `.claude/hooks/payload-capture.js`)

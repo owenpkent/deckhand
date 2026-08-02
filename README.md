@@ -35,8 +35,8 @@ first code exists: a daemon and tile surface in one Tauri application
 plus the hook shim, building and passing their tests, with the
 observation pipeline proven end to end against live sessions. One
 Phase 0 item stays open alongside it: hook payload validation against a
-live install has nine of the twelve documented events observed, with
-`Notification`, `StopFailure`, and `PermissionDenied` still unseen.
+live install has ten of the twelve documented events observed, with
+`Notification` and `StopFailure` still unseen.
 
 | Piece | State |
 | --- | --- |
@@ -46,7 +46,7 @@ live install has nine of the twelve documented events observed, with
 | Security model for permission gating | ✅ Written |
 | UI and accessibility specification | ✅ Written |
 | Tauri no-focus-steal window spike | ✅ Passed on Windows 11 (ADR-025) |
-| Hook payload validation spike | ⏳ Nine of twelve events observed live; three remain |
+| Hook payload validation spike | ⏳ Ten of twelve events observed live; two remain |
 | Daemon, shim, state machine, six tiles | ✅ Phase 1 skeleton; live sessions paint real tiles |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet |
 

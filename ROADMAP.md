@@ -35,9 +35,9 @@ Deliverables:
   no-focus-steal window, and hook payload validation against a live
   Claude Code install. These gate the start of Phase 1 (ADR-009). The
   window spike passed on 2026-08-02 (`spikes/tauri-focus/`, ADR-025);
-  payload validation has nine of the twelve documented events observed
-  (ADR-026), with `Notification`, `StopFailure`, and `PermissionDenied`
-  still open.
+  payload validation has ten of the twelve documented events observed
+  (ADR-026 and after), with `Notification` and `StopFailure` still
+  open.
 
 **Done when** the documents above are internally consistent, a second
 implementer could start Phase 1 from them without asking the author basic
