@@ -209,6 +209,18 @@ and no past release is backfilled.
   epoch milliseconds, and `docs/ADAPTER_PROTOCOL.md` types `SessionInfo`
   `startedAt` as an ISO 8601 string, so the conversion is now stated
   instead of assumed.
+- Three defects in the new tooling, found while reviewing it. The
+  `.claude/hooks/style-gate.js` wrap warning fired at 88 columns while
+  `scripts/check-docs.ps1` reports at 80, so the pre-flight and CI
+  disagreed about the same line; the gate's exemption pattern matched a
+  bare filename suffix where the script compares the leaf filename, so
+  something like `OUR_CODE_OF_CONDUCT.md` would have been exempt locally
+  and failed in CI; and gate 4 of the script read list items inside fenced
+  code blocks and left a level-4 heading in whatever section state
+  preceded it. The gate's header now also says plainly that it is a
+  pre-flight rather than the enforcement point, and that it sees `Write`
+  and `Edit` only, so markdown written through a Bash heredoc reaches CI
+  unchecked.
 - The permission mode set, wrong in both directions one commit ago:
   `default` was listed as a mode and `manual` was missing, making seven
   values where there are six. Running `claude --help` on Claude Code 2.1.220

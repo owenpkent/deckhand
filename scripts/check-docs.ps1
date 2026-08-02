@@ -172,8 +172,9 @@ if (Test-Path -LiteralPath $decisions) {
             $adrFail++
             $want = '{0:D3}' -f $expected
             Add-Failure "$decisions`:$($i + 1): ADR numbering jumped. Expected ADR-$want, found ADR-$($m.Groups[1].Value). Numbering starts at 001, ascends, no gaps, no reuse."
-            $expected = $number
         }
+        # Resync to what was actually found, so one gap reports once rather
+        # than making every later heading look wrong too.
         $anchor = '<a id="adr-' + $m.Groups[1].Value + '"></a>'
         $prev = ''
         if ($i -gt 0) { $prev = $lines[$i - 1].Trim() }
@@ -209,10 +210,20 @@ if (-not ($readme | Where-Object { $_ -match '^## Status\s*$' })) {
 
 $todo = Read-Lines 'TODO.md'
 $inSection = $false
+$inFence = $false
 for ($i = 0; $i -lt $todo.Count; $i++) {
     $line = $todo[$i]
-    if ($line -match '^### ') { $inSection = $true; continue }
-    if ($line -match '^#{1,2} ') { $inSection = $false; continue }
+    # A fenced block can hold anything, including sample bullets that are
+    # deliberately not checkboxes. Never read inside one.
+    if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
+    if ($inFence) { continue }
+    # Decide by heading level rather than by two separate patterns, so a
+    # level-4 heading is a subsection of the '###' it sits under instead of
+    # falling through both tests and silently keeping the previous state.
+    if ($line -match '^(#{1,6}) ') {
+        $inSection = ($matches[1].Length -ge 3)
+        continue
+    }
     if (-not $inSection) { continue }
     if ($line -match '^\s*[-*+] ' -and $line -notmatch '^- \[[ x]\] ') {
         $constellationFail++
