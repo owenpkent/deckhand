@@ -47,6 +47,30 @@ extern "system" fn collect(hwnd: HWND, lparam: LPARAM) -> i32 {
     }
 }
 
+/// Every attempt is appended to %LOCALAPPDATA%\deckhand\reveal.log so a
+/// "clicking did nothing" report can be diagnosed after the fact: what
+/// was searched for, how many windows were seen, and what won.
+fn log_attempt(
+    label: &str,
+    dir: Option<&str>,
+    pid: Option<u32>,
+    windows: &[Candidate],
+    best: Option<(i32, String)>,
+) {
+    let Some(base) = std::env::var_os("LOCALAPPDATA") else {
+        return;
+    };
+    let path = std::path::Path::new(&base).join("deckhand").join("reveal.log");
+    let line = format!(
+        "label={label:?} dir={dir:?} pid={pid:?} windows={} best={best:?}\n",
+        windows.len()
+    );
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        use std::io::Write;
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
 /// Try to raise the window for a session. `label` is the tile label,
 /// `dir` the cwd directory name, `pid` the enumeration's pid where one
 /// is known. Returns a sentence for the detail panel either way.
@@ -86,6 +110,8 @@ pub fn reveal(label: &str, dir: Option<&str>, pid: Option<u32>) -> String {
             }
         }
     }
+
+    log_attempt(label, dir, pid, &windows, best.as_ref().map(|(s, c)| (*s, c.title.clone())));
 
     let Some((_, target)) = best else {
         return format!("No window matched \"{label}\". Reveal is a title and pid heuristic; the session may have no window on this machine.");

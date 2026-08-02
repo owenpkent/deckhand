@@ -1,13 +1,14 @@
 # Contributing to Deckhand
 
-Deckhand is at Phase 0: specification. There is no application to build or
-run yet. That makes this a good time to contribute, because the cheapest bug
-to fix is one that is still just a sentence in a document.
+Deckhand is at Phase 1: observation. The status board runs (Windows only,
+built from source); everything that acts on a session is still
+specification. The cheapest bug to fix is still one that is just a
+sentence in a document, and the spec remains the best place to contribute.
 
 ## Where to start
 
-The most valuable contributions right now are to the specification, not
-code. In rough order of usefulness:
+The most valuable contributions right now are to the specification and to
+accessibility review. In rough order of usefulness:
 
 1. Review [`docs/CONTROL_MAPPING.md`](docs/CONTROL_MAPPING.md) and challenge
    anything that seems ambiguous, contradictory, or hard to operate with a
@@ -35,10 +36,9 @@ consistency matter, not just correctness.
 
 ### 💻 Implementation
 
-There is no implementation yet (Phase 0). Once Phase 1 starts, implementation
-work will be scoped and tracked in `TODO.md`. Please open an issue before
-starting a large, unsolicited implementation, so the approach can be agreed
-first.
+Phase 1 implementation work is scoped and tracked in `TODO.md` (the app in
+`app/`, the hook shim in `shim/`). Please open an issue before starting a
+large, unsolicited implementation, so the approach can be agreed first.
 
 ### ♿ Accessibility
 
@@ -69,8 +69,8 @@ security specs and trying to find a real scenario they do not cover.
    cd deckhand
    ```
 
-2. There is nothing to install or build yet. Phase 0 is documentation only,
-   so open the docs in an editor and start reading from `README.md`.
+2. To read, start from `README.md`. To run the Phase 1 board on Windows
+   (needs Rust, Node, and Python): `python scripts/run.py`.
 
 3. Ready to propose a change? See Conventions below for commit and branch
    naming, then Pull requests for how to submit it.
@@ -113,8 +113,8 @@ rule for this repository.
   unproven or undecided, rather than asserting confidence the project does
   not have.
 - Never state that something is built or working unless it demonstrably is.
-  While the project is at Phase 0, that means almost nothing should be
-  described in the present tense as functioning.
+  Observation runs; nothing that acts on a session does. Anything else
+  described in the present tense as functioning is probably a doc bug.
 
 ## Pull requests
 

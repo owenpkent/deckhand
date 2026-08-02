@@ -2,11 +2,12 @@
 
 ## Supported versions
 
-There are no releases and no code yet; the project is at Phase 0,
-specification only. Until a first release exists, `main` is the only line,
-and security reports against the *design* are welcome: finding a hole in
-[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) now is worth more than
-finding it in software later.
+There are no releases yet; the project is at Phase 1, an observation-only
+board built from source, and nothing in it holds write authority. `main`
+is the only line, and security reports against the *design* are still the
+most valuable kind: finding a hole in
+[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) before Phase 2 wires the
+approval path is worth more than finding it in software later.
 
 ## Reporting
 

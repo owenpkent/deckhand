@@ -239,8 +239,12 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 - [ ] Implement the Reveal command key and its pid-based host match.
       Implemented 2026-08-02 as a pid-then-title heuristic
       (`app/src-tauri/src/reveal.rs`) behind the Reveal key and the
-      panel action, with the ALT-tap foreground workaround. Stays
-      unchecked until a live click is seen to raise the right window.
+      panel action, with the ALT-tap foreground workaround. The owner's
+      first live try the same day did not visibly work; every attempt
+      now appends what it searched for and what won to
+      `%LOCALAPPDATA%\deckhand\reveal.log`, so the next report is
+      diagnosable. Stays unchecked until a live click is seen to raise
+      the right window.
 - [ ] Implement plan mode and compact in the detail panel, not as command
       keys.
 - [ ] Implement the layer strip and profile switching.

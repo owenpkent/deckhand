@@ -385,9 +385,12 @@ Two window properties are hard requirements rather than preferences:
    reapply it whenever the window becomes visible. Deckhand has to reproduce
    that in Tauri.
 
-Prototyping this in Tauri before anything else is built is a Phase 0 task,
-because if it cannot be made to work the stack choice is wrong and it is much
-cheaper to learn that now. See [DECISIONS.md](DECISIONS.md#adr-002).
+This was prototyped before anything else was built, exactly because a
+failure would have made the stack choice wrong while it was still cheap to
+change. The spike passed on Windows 11 and the mechanism it proved, one
+extended-style pass at setup, is what the Phase 1 window ships. See
+[DECISIONS.md](DECISIONS.md#adr-025) and
+[DECISIONS.md](DECISIONS.md#adr-002).
 
 ## Stack
 

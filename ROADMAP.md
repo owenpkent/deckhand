@@ -10,7 +10,7 @@ marked current.
 
 ---
 
-## Phase 0: Specification (current)
+## Phase 0: Specification (done except payload validation)
 
 **Goal:** describe the system precisely enough that Phase 1 can be built
 without re-deciding its architecture halfway through.
@@ -35,8 +35,9 @@ Deliverables:
   no-focus-steal window, and hook payload validation against a live
   Claude Code install. These gate the start of Phase 1 (ADR-009). The
   window spike passed on 2026-08-02 (`spikes/tauri-focus/`, ADR-025);
-  payload validation has `PreToolUse` fully enumerated and the other
-  events still open.
+  payload validation has nine of the twelve documented events observed
+  (ADR-026), with `Notification`, `StopFailure`, and `PermissionDenied`
+  still open.
 
 **Done when** the documents above are internally consistent, a second
 implementer could start Phase 1 from them without asking the author basic
@@ -45,7 +46,7 @@ silently assumed, and both spikes have answered their questions.
 
 ---
 
-## Phase 1: Observation only
+## Phase 1: Observation only (current)
 
 **Goal:** prove that Claude Code session status can be inferred reliably
 enough to show on a tile, before any authority is put behind it.

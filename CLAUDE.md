@@ -60,7 +60,7 @@ source-of-truth map. This table is a reading budget, not a second map.
 | File | Lines | Purpose |
 | --- | --- | --- |
 | [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 431 | Daemon, shim, surface, state machine |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 434 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 347 | Daemon to runtime contract |
 | [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 617 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
@@ -68,7 +68,7 @@ source-of-truth map. This table is a reading budget, not a second map.
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 858 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 138 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 294 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 186 / 310 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches

@@ -4,15 +4,23 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a
 Changelog](https://keepachangelog.com/en/1.1.0/), and dates are ISO 8601
-(`YYYY-MM-DD`). There are no releases yet: Deckhand is at Phase 0
-(specification), so everything so far lives under `[Unreleased]`. Once there
-is something to version, releases here will follow [Semantic
-Versioning](https://semver.org/); until then, no version number is invented
-and no past release is backfilled.
+(`YYYY-MM-DD`). There are no releases yet, so everything so far lives
+under `[Unreleased]`. Once there is something to version, releases here
+will follow [Semantic Versioning](https://semver.org/); until then, no
+version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
 ### Added
+
+- `scripts/run.py`: build and restart the board in one command
+  (`--no-build` to skip the build, `--stop` to stop it), and a
+  documentation sweep that moved every stale "Phase 0, no code" claim
+  across the README, roadmap, changelog intro, executive summary,
+  architecture, and community files to the Phase 1 reality. Reveal
+  attempts now also log what they searched for and what won to
+  `%LOCALAPPDATA%\deckhand\reveal.log`, because the owner's first live
+  try did not visibly work and the next report should be diagnosable.
 
 - The rest of the control surface, so the strip matches the design
   instead of stopping at six tiles: the six command keys (Approve, Deny,
