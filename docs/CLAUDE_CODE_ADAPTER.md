@@ -42,7 +42,10 @@ against Claude Code.
 >   value `xhigh`), `hook_event_name`, `tool_name`, `tool_input` (the
 >   complete tool arguments), and `tool_use_id`. Observed for `Edit`
 >   tool calls only; other hook events and other tools stay
->   `documented`.
+>   `documented`. The tap now lives in its own hook,
+>   `.claude/hooks/payload-capture.js`, registered for all twelve
+>   documented event names, so this list extends passively as future
+>   sessions fire the other events.
 > - The shape of an extension-hosted session, and the per-window MCP
 >   server the extension runs at `~/.claude/ide/<port>.lock`, including
 >   its twelve tools and the fact that `openFile` with `makeFrontmost`

@@ -153,8 +153,8 @@ Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on
 Windows, recorded as ADR-025. The payload spike advanced twice the same
 day: a `PreToolUse` deny was honoured from a live session, and a capture
-tap added to `.claude/hooks/style-gate.js` then logged complete
-`PreToolUse` payloads, moving every common field to `observed` for that
-event. It stays open for the other hook events, which need hooks
-registered before they can be captured. The spike directory is the only
-application code; Phase 1 remains unstarted.
+hook, `.claude/hooks/payload-capture.js`, logged complete `PreToolUse`
+payloads, moving every common field to `observed` for that event. The
+capture hook is now registered for all twelve documented event names, so
+the remaining events enumerate themselves passively as future sessions
+run. Phase 1 has started.

@@ -116,23 +116,6 @@ process.stdin.on("data", (c) => {
   raw += c;
 });
 process.stdin.on("end", () => {
-  // Field-capture tap for the pre-Phase-1 payload spike (TODO.md): append
-  // every raw event to gitignored _scratch/ before any gating, so each
-  // fire enumerates real payload fields instead of documented ones.
-  // Fail-open like everything else in this file.
-  try {
-    const fs = require("fs");
-    const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "_scratch");
-    fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(
-      path.join(dir, "hook-capture.jsonl"),
-      raw.trim() + "\n"
-    );
-  } catch (e) {
-    // Capture is best-effort; gating continues regardless.
-  }
-
   let d;
   try {
     d = JSON.parse(raw);

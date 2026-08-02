@@ -72,14 +72,15 @@ Checking a box here means the item is done, not that it is perfect. See
       every common field to `observed` for that event. This item stays
       unchecked: one event enumerated is not every field of every event.
 - [x] Enumerate the remaining `PreToolUse` payload fields now that the
-      event is known to fire. Done 2026-08-02: a capture tap in
-      `.claude/hooks/style-gate.js` now appends every raw event to
-      gitignored `_scratch/hook-capture.jsonl`, and five captured events
-      showed `session_id`, `cwd`, `transcript_path`, `prompt_id`,
-      `permission_mode`, `effort.level`, and `tool_use_id` all populated
-      (`vscode-extension` host, 2.1.220, `Edit` tool calls). The tap stays
-      in place so other event types get enumerated the moment hooks for
-      them are registered.
+      event is known to fire. Done 2026-08-02: a capture tap (first inside
+      the style gate, now the dedicated `.claude/hooks/payload-capture.js`)
+      appends every raw event to gitignored `_scratch/hook-capture.jsonl`,
+      and five captured events showed `session_id`, `cwd`,
+      `transcript_path`, `prompt_id`, `permission_mode`, `effort.level`,
+      and `tool_use_id` all populated (`vscode-extension` host, 2.1.220,
+      `Edit` tool calls). The capture hook is registered for all twelve
+      documented event names, so future sessions enumerate the other
+      events passively; which names never fire is a finding of its own.
 - [ ] Confirm the host discriminator ADR-023 assumes. The plan is to read
       the process argv and parent, since `claude agents --json` reports
       `kind: "interactive"` for a VS Code extension session and a terminal
