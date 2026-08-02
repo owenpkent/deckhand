@@ -30,12 +30,12 @@ human, plus the rest of the macropad reimagined for a pointer.
 
 ## Status
 
-**Phase 0: specification.** There is no application yet. What exists is a
-complete, reviewable design plus the first of the two de-risking spikes:
-every control mapped from the original device, the architecture, the
-adapter contract, the security model for the approve button, the
-accessibility rules the rest must obey, and a working proof that a Tauri
-window on Windows can be always-on-top without stealing focus.
+**Phase 1: observation, started.** The specification is complete and the
+first code exists: a daemon and tile surface in one Tauri application
+plus the hook shim, building and passing their tests, with the
+observation pipeline proven end to end against synthetic events. One
+Phase 0 item stays open alongside it: hook payload validation against a
+live install is done for `PreToolUse` and open for the other events.
 
 | Piece | State |
 | --- | --- |
@@ -46,7 +46,12 @@ window on Windows can be always-on-top without stealing focus.
 | UI and accessibility specification | ✅ Written |
 | Tauri no-focus-steal window spike | ✅ Passed on Windows 11 (ADR-025) |
 | Hook payload validation spike | ⏳ `PreToolUse` fully enumerated, other events open |
-| The application itself | ❌ Not yet, Phase 1 |
+| Daemon, shim, state machine, six tiles | ✅ Phase 1 skeleton; synthetic events paint real tiles |
+| Approve and deny | ❌ Phase 2, nothing has write authority yet |
+
+Build it with `powershell -NoProfile -File scripts/build-app.ps1`, which
+compiles the TypeScript surface and then the Rust workspace, and run
+`target\debug\deckhand.exe`.
 
 ---
 

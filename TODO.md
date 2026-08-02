@@ -136,26 +136,60 @@ Checking a box here means the item is done, not that it is perfect. See
 
 ## Phase 1: Observation only
 
+Started 2026-08-02. The skeleton lives in `app/` (daemon and surface, one
+Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
+`scripts/phase1-smoke.ps1` drives it with synthetic events end to end.
+
 - [ ] Design the daemon's process lifecycle (start on login, restart on
       crash, single instance).
-- [ ] Implement the hook shim: the small program Claude Code calls, per
-      `docs/CLAUDE_CODE_ADAPTER.md`.
-- [ ] Implement `settings.json` hook registration (install and uninstall).
-- [ ] Implement daemon ingestion for all seven hook event types.
-- [ ] Define the internal session state machine (idle, thinking, needs_input,
-      complete, error, ended, unknown) and its transition rules, matching
-      `docs/ADAPTER_PROTOCOL.md` exactly.
-- [ ] Implement the six agent tiles in the surface shell.
-- [ ] Wire tile colour to daemon session state over the chosen transport.
-- [ ] Implement the always-on-top, non-focus-stealing window per the
-      Phase 0 prototype.
-- [ ] Implement manual tile binding, including the unbound (off) state.
-- [ ] Implement the transcript JSONL fallback path for a missed hook event.
-- [ ] Handle daemon restart without losing which tile is bound to which
-      session.
+- [x] Implement the hook shim: the small program Claude Code calls, per
+      `docs/CLAUDE_CODE_ADAPTER.md`. Done 2026-08-02: `shim/`, std-only,
+      reads stdin, POSTs to the daemon's loopback port with the token
+      from `%LOCALAPPDATA%\deckhand\daemon.json`, exits 0 silently in
+      every failure mode so it can never block a session.
+- [ ] Implement `settings.json` hook registration (install and
+      uninstall). The dogfood wiring on this machine is hand-written in
+      gitignored `.claude/settings.local.json`; the installable,
+      user-level version with an uninstall path is still owed.
+- [x] Implement daemon ingestion for the hooked event types. Done
+      2026-08-02 for all twelve documented events (the count in this
+      item used to say seven; the twelve-event set and the reasons are
+      in `docs/CLAUDE_CODE_ADAPTER.md#hook-installation`).
+- [x] Define the internal session state machine (idle, thinking,
+      needs_input, complete, error, ended, unknown) and its transition
+      rules, matching `docs/ADAPTER_PROTOCOL.md` exactly. Done
+      2026-08-02: `app/src-tauri/src/state.rs`, with the
+      status-inference table encoded as unit tests, including the
+      compaction and clear/resume no-change rows, the child ledger
+      gating green, `T_unknown` to grey never red, and never guessing
+      idle.
+- [x] Implement the six agent tiles in the surface shell. Done
+      2026-08-02: `app/ui/`, triple-coded state (ring, drawn glyph,
+      words), mode and children badges, 44 px floor, no keyboard
+      handlers anywhere.
+- [x] Wire tile colour to daemon session state over the chosen
+      transport. Done 2026-08-02: shim to daemon over loopback HTTP with
+      a token (ADR-007), daemon to surface over Tauri events in-process.
+- [x] Implement the always-on-top, non-focus-stealing window per the
+      Phase 0 prototype. Done 2026-08-02 with the ADR-025 mechanism.
+      The focus-test harness has not yet been re-run against this
+      window, only against the spike's; do that before trusting it.
+- [x] Implement manual tile binding, including the unbound (off) state.
+      Done 2026-08-02: unbound tiles render dashed with a plus and open
+      the bind picker; first-heard sessions auto-fill free tiles. The
+      unbind control ships with the detail panel (Phase 3); the daemon
+      command exists.
+- [ ] Implement the transcript JSONL fallback path for a missed hook
+      event.
+- [x] Handle daemon restart without losing which tile is bound to which
+      session. Done 2026-08-02: bindings persist with labels, and a
+      bound session the daemon has not seen renders as the right tile,
+      rightly named, in grey, never as unbound.
 - [ ] Write a manual test script that induces every status colour across
       six concurrent sessions, and decide what gets logged and at what
-      verbosity.
+      verbosity. `scripts/phase1-smoke.ps1` induces five states across
+      three tiles and screenshots them; the six-session version and the
+      logging decision are still owed.
 
 ---
 

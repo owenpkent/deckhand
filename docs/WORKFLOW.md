@@ -90,13 +90,14 @@ not have to guess.
 
 ## 3. Generated versus authored
 
-Nothing in this repository is generated yet; every file here is hand
-authored. The rule for when that changes: generated artefacts that other
-people need in order to use or build the project are committed, but build
-trees, package caches, and anything reproducible purely from a clean
-checkout plus a documented command are not. When code generation is
-introduced, this section should be updated to say specifically what is
-generated, by what command, and where it is checked in.
+The rule: generated artefacts that other people need in order to use or
+build the project are committed, but build trees, package caches, and
+anything reproducible purely from a clean checkout plus a documented
+command are not. What is generated today, all of it reproducible by
+`scripts/build-app.ps1` and none of it committed: `target/` (cargo),
+`app/ui/dist/` (tsc), `app/ui/node_modules/` (npm), and
+`app/src-tauri/gen/` (tauri-build). `Cargo.lock` is committed on
+purpose: it is not a build product, it is the pinned dependency set.
 
 ---
 

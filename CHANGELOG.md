@@ -14,6 +14,21 @@ and no past release is backfilled.
 
 ### Added
 
+- The Phase 1 observation skeleton, the first application code beyond the
+  spike. One Tauri application in `app/` holds the daemon (session
+  registry, the state machine from
+  `docs/CLAUDE_CODE_ADAPTER.md#status-inference` with the table encoded
+  as unit tests, loopback HTTP ingest with a per-start token per ADR-007,
+  cold-start enumeration per ADR-024, bindings persisted across restarts)
+  and the TypeScript tile surface (six tiles, triple-coded state, drawn
+  glyphs, mode and children badges, bind picker, 44 px floor, no keyboard
+  handlers, the ADR-025 no-focus-steal mechanism). `shim/` is the
+  std-only hook shim: stdin to POST, always exits 0 and silent, so a dead
+  daemon can never block a session. Nothing in Phase 1 holds any write
+  authority. Built by `scripts/build-app.ps1`; proven end to end by
+  `scripts/phase1-smoke.ps1`, which drives synthetic hook events through
+  the real shim and screenshots the painted tiles.
+
 - The first application code: the pre-Phase-1 window spike at
   `spikes/tauri-focus/`, a minimal Tauri v2 app proving the always-on-top,
   no-focus-steal window on Windows 11, with an automated check in

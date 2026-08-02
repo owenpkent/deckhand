@@ -1,7 +1,10 @@
 # Architecture
 
-Status: **proposed**. Nothing here is built. This document exists so the first
-line of code has somewhere to go.
+Status: **accepted**. The Phase 1 skeleton, `app/` for the daemon and
+surface and `shim/` for the hook shim, implements this document's
+observation half; the approval path is designed here and not yet built
+(Phase 2). Where the code and this file disagree, this file wins and the
+code is the bug.
 
 ## The one-paragraph version
 

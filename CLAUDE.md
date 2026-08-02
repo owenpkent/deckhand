@@ -10,11 +10,11 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
   always-on-top, mouse-only control surface for Claude Code sessions. Six
   status tiles, approve and deny via the `PreToolUse` hook, dial, stick,
   talk, layers.
-- **Status:** Phase 0, specification plus spikes. The only application
-  code is the spike under `spikes/`; do not scaffold Phase 1 code
-  unprompted. The window spike passed (ADR-025); the payload spike is
-  tracked in [TODO.md](TODO.md) and
-  [docs/DECISIONS.md](docs/DECISIONS.md#adr-009).
+- **Status:** Phase 1, observation only, started 2026-08-02. The code
+  lives in `app/` (daemon plus surface, one Tauri application) and
+  `shim/`; `spikes/` is frozen Phase 0 evidence. Nothing has write
+  authority: approve and deny are Phase 2 and are not to be wired early.
+  Open Phase 1 work is tracked in [TODO.md](TODO.md).
 - **Stack (decided, not built):** Tauri v2, Rust daemon, TypeScript surface.
   See [docs/DECISIONS.md](docs/DECISIONS.md#adr-002).
 
@@ -60,15 +60,15 @@ source-of-truth map. This table is a reading budget, not a second map.
 | File | Lines | Purpose |
 | --- | --- | --- |
 | [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 428 | Daemon, shim, surface, state machine |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 431 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 345 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 595 | Reference adapter; partial stamp |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 598 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
 | [docs/UI_SPEC.md](docs/UI_SPEC.md) | 294 | Visual and interaction contract |
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 802 | ADRs; append only |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 136 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 182 / 253 | Phases and open work |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 138 | Map and change-propagation table |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 288 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -137,17 +137,15 @@ the owner's cross-project dashboard. Keep compatible:
 
 ## Current focus
 
-Finish Phase 0: spec complete and internally consistent. The adapter now
-carries a partial verification stamp against Claude Code 2.1.220, and ADRs
-013 to 024 record the changes that came out of it. ADR-023 added the host
-(`pty`, `vscode-extension`, `sdk`) as a third axis beside the mode, and
-moved capabilities from the adapter to the session, because the owner runs
-Claude Code in the VS Code extension as well as in a terminal and those
-hosts differ on everything that needs a window. Nothing that runs over
-hooks differs, which is most of the product. ADR-024 is the newest and is
-a correction: `claude agents --json` carries no `status` key, so the
-second observation channel recovers a session's binding and label at cold
-start but not its state.
+Phase 1: make observation trustworthy. The skeleton builds, passes its
+state machine tests, and paints real tiles from synthetic events through
+the real shim; `scripts/build-app.ps1` builds it, and gitignored
+`.claude/settings.local.json` wires this repo's sessions into the shim
+for dogfooding. The open Phase 1 work is in [TODO.md](TODO.md): daemon
+lifecycle, installable hook registration, the transcript fallback, and
+the six-session colour test. ADR-023 added the host axis, ADR-024
+corrected the enumeration to bindings-not-state, and ADR-025 recorded
+the window spike pass that Phase 1's window builds on.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on
