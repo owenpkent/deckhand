@@ -67,6 +67,7 @@ Columns: **CM** `docs/CONTROL_MAPPING.md`, **UI** `docs/UI_SPEC.md`,
 | Change a timing or timeout | Yes | Yes | | | | Yes | Yes | | Yes |
 | Change the hook event set | | | Yes | Yes | Yes | Yes | | | Yes |
 | Change a control label or wording | Yes | Yes | | | | | Yes | | Yes |
+| Upgrade or correct a verification stamp | | | | Yes | | | | Yes | Yes |
 
 `docs/ARCHITECTURE.md` is authoritative for the session state machine, so any
 change that adds, removes, or re-times a state belongs in the ARCH column and

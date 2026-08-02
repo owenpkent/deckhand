@@ -31,6 +31,18 @@ against Claude Code.
 >   correctly, and its `permissionDecision: "deny"` was honoured and
 >   blocked the tool call. Observed from a session running inside the VS
 >   Code extension. This is the first hook seen to fire here at all.
+> - **The full `PreToolUse` payload, field by field.** A capture tap
+>   added to the style gate on 2026-08-02 logged five complete events
+>   from a live `vscode-extension` session (they land in gitignored
+>   `_scratch/hook-capture.jsonl`). Every common field this spec names
+>   arrived populated: `session_id`, `transcript_path` (carrying the
+>   `~/.claude/projects/` mangling), `cwd`, `prompt_id` (constant across
+>   all five events of one turn, so it names the turn, not the tool
+>   call), `permission_mode` (live value `auto`), `effort.level` (live
+>   value `xhigh`), `hook_event_name`, `tool_name`, `tool_input` (the
+>   complete tool arguments), and `tool_use_id`. Observed for `Edit`
+>   tool calls only; other hook events and other tools stay
+>   `documented`.
 > - The shape of an extension-hosted session, and the per-window MCP
 >   server the extension runs at `~/.claude/ide/<port>.lock`, including
 >   its twelve tools and the fact that `openFile` with `makeFrontmost`
@@ -39,14 +51,13 @@ against Claude Code.
 >
 > Everything else is **documented** (read from the public Claude Code
 > documentation, not seen to fire here) or **unverified** (neither). Hook
-> *names* beyond `PreToolUse`, the rest of the payload fields, and the
-> remainder of the permission decision vocabulary are `documented` at
-> best. Do not cite any of them as proven. One hook firing with two fields
-> present is not the payload validation that
-> [ADR-009](DECISIONS.md#adr-009) gates Phase 1 on: that item advances but
-> stays open, and the fields named in
-> [Interfaces used](#interfaces-used-and-what-they-rest-on) are still
-> unconfirmed one by one.
+> *names* beyond `PreToolUse`, the payload fields of every event that has
+> not fired here, and the rest of the permission decision vocabulary
+> (`allow`, `ask`, `defer`) are `documented` at best. Do not cite any of
+> them as proven. One event type fully enumerated is not the payload
+> validation that [ADR-009](DECISIONS.md#adr-009) gates Phase 1 on: that
+> item advances again but stays open until the other events are seen
+> firing with their fields.
 
 Named here so that nothing cites them by accident, these stay unverified:
 
@@ -148,9 +159,9 @@ nothing may be built on it.
 
 | Interface | Used for | Stability |
 | --- | --- | --- |
-| Hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Notification`, `Stop`, `StopFailure`, `PermissionDenied`, `SessionEnd`) | Status, approvals | Documented |
-| `PreToolUse` permission decision output | Approve and deny | Documented |
-| Hook payload fields `session_id`, `cwd`, `transcript_path`, and where present `prompt_id`, `permission_mode`, `effort.level`, `tool_use_id` | Session identity, mode badge | Documented |
+| Hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Notification`, `Stop`, `StopFailure`, `PermissionDenied`, `SessionEnd`) | Status, approvals | Documented; `PreToolUse` observed firing 2.1.220 |
+| `PreToolUse` permission decision output | Approve and deny | Documented; `deny` observed honoured 2.1.220 |
+| Hook payload fields `session_id`, `cwd`, `transcript_path`, and where present `prompt_id`, `permission_mode`, `effort.level`, `tool_use_id` | Session identity, mode badge | Observed 2.1.220 on `PreToolUse`; documented on other events |
 | `--permission-mode` accepted value set | The mode badge's vocabulary | Documented, set observed 2.1.220 |
 | `claude agents --json` | Cold-start enumeration, host `pid` for Reveal | Documented, keys observed 2.1.220 |
 | Status line JSON | Tile extras | Documented, keys observed 2.1.220, schema may grow |

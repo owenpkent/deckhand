@@ -31,19 +31,22 @@ human, plus the rest of the macropad reimagined for a pointer.
 ## Status
 
 **Phase 0: specification.** There is no application yet. What exists is a
-complete, reviewable design: every control mapped from the original device,
-the architecture, the adapter contract, the security model for the approve
-button, and the accessibility rules the rest must obey.
+complete, reviewable design plus the first of the two de-risking spikes:
+every control mapped from the original device, the architecture, the
+adapter contract, the security model for the approve button, the
+accessibility rules the rest must obey, and a working proof that a Tauri
+window on Windows can be always-on-top without stealing focus.
 
 | Piece | State |
 | --- | --- |
 | Control mapping (device to software) | ✅ Written |
 | Architecture and adapter contract | ✅ Written |
-| Claude Code adapter design | ✅ Written, ⏳ unverified against a live install |
+| Claude Code adapter design | ✅ Written, ⏳ partially verified against 2.1.220 |
 | Security model for permission gating | ✅ Written |
 | UI and accessibility specification | ✅ Written |
-| Tauri no-focus-steal window spike | ⏳ Next |
-| Any running code | ❌ Not yet |
+| Tauri no-focus-steal window spike | ✅ Passed on Windows 11 (ADR-025) |
+| Hook payload validation spike | ⏳ `PreToolUse` fully enumerated, other events open |
+| The application itself | ❌ Not yet, Phase 1 |
 
 ---
 

@@ -14,6 +14,25 @@ and no past release is backfilled.
 
 ### Added
 
+- The first application code: the pre-Phase-1 window spike at
+  `spikes/tauri-focus/`, a minimal Tauri v2 app proving the always-on-top,
+  no-focus-steal window on Windows 11, with an automated check in
+  `scripts/focus-test.ps1`. Result recorded as ADR-025: `alwaysOnTop`
+  supplies `WS_EX_TOPMOST` but not `WS_EX_NOACTIVATE`; one
+  `SetWindowLongPtrW` call at setup adds it, and a click into the webview
+  then registers without the window ever taking the foreground. Half the
+  ADR-009 gate closes; hook payload validation stays open.
+- A payload capture tap in `.claude/hooks/style-gate.js`: every hook event
+  the gate receives is appended raw to gitignored
+  `_scratch/hook-capture.jsonl` before any gating, fail-open. Five
+  captured `PreToolUse` events moved the common payload fields
+  (`session_id`, `cwd`, `transcript_path`, `prompt_id`,
+  `permission_mode`, `effort.level`, `tool_use_id`) from `documented` to
+  `observed` against 2.1.220 in `docs/CLAUDE_CODE_ADAPTER.md`.
+- A change-propagation row in `docs/WORKFLOW.md` for upgrading or
+  correcting a verification stamp, matching how ADR-024 and ADR-025
+  actually propagated.
+
 - Nine new ADRs, 013 to 021, in `docs/DECISIONS.md`: amber's `kind` and
   answer targets (013); the narrow default gate (014); the gating hook's
   restricted output (015); liveness by open-operation bracketing (016);

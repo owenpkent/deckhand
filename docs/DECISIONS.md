@@ -744,3 +744,59 @@ This entry is a correction to a verification stamp, not a design change, so
 no control, colour, state, or capability moves. It reopens if a release adds
 a status field to the enumeration, at which point the conditional in step 2
 starts firing on its own.
+
+<a id="adr-025"></a>
+## ADR-025: Tauri clears the no-focus-steal bar on Windows
+
+Date: 2026-08-02
+
+**Context.** [ADR-002](#adr-002) chose Tauri with its biggest risk held
+open, and [ADR-009](#adr-009) gated Phase 1 on proving it: an always-on-top
+window on Windows 11 that takes mouse clicks without ever taking the
+foreground. alpha-osk proves the Win32 recipe, `WS_EX_NOACTIVATE` plus
+`WS_EX_TOPMOST`, in PySide6. It does not prove a Tauri window can reach the
+same behaviour, because Tauri's content area is a WebView2 child window
+with focus habits of its own, and a surface that grabbed the keyboard on
+every click would invert the product for a mouse-only user.
+
+**Decision.** The spike at `spikes/tauri-focus/` answers it: the recipe
+holds in Tauri v2. Phase 1 builds the window this way, and ADR-002 stands
+with its riskiest unknown closed.
+
+What the spike observed, on Windows 11 against Tauri 2 and the installed
+WebView2 runtime, recorded in the app's own `spike-log.jsonl`:
+
+- Tauri's window options get halfway there. `alwaysOnTop: true` produced
+  extended style `0x40118`: `WS_EX_TOPMOST` set, `WS_EX_NOACTIVATE`
+  absent. `focus: false` kept the window from activating at creation.
+  No Tauri option supplies the missing bit.
+- One `SetWindowLongPtrW` call in the setup hook adds it, taking the
+  extended style to `0x8040118`, with one `SetWindowPos` carrying
+  `SWP_NOACTIVATE` to re-assert topmost placement. Nothing fought the
+  change back.
+- A synthetic click on a button inside the webview ran the DOM click
+  handler and reached a Tauri command, while `GetForegroundWindow` before
+  and after the click returned the same other window and never the spike.
+  The click landed without activation.
+- With Chrome holding the foreground and the machine in live use,
+  starting the spike and clicking at it moved nothing: Chrome kept the
+  foreground throughout.
+
+**Consequences.** Half the ADR-009 gate is closed; the other half, hook
+payload validation, advanced the same day but stays open. The Phase 1
+window inherits the spike's mechanism: config for `alwaysOnTop` and
+`focus: false`, plus a one-time Win32 extended-style pass at setup, behind
+a `cfg(windows)` boundary that an eventual macOS or Linux port replaces
+rather than shares.
+
+Hedges, so this entry does not claim more than two runs of one window: the
+click-received and unrelated-app-foreground observations come from
+separate runs, because the machine was in live use and synthetic input was
+stopped rather than risk clicking into the owner's session. The webview
+document fires DOM focus events on click even though the OS foreground
+never moves; keyboard routing follows the foreground by definition, but
+Phase 1 should re-check that dial and scroll interactions do not change
+the answer. Dragging, DPI changes, multiple monitors, and release builds
+(`windows_subsystem = "windows"`) are untested. This reopens if a Tauri or
+WebView2 release changes activation behaviour, or if the Phase 1 window
+observably takes focus in daily use.

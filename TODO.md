@@ -67,13 +67,19 @@ Checking a box here means the item is done, not that it is perfect. See
       is the first hook observed firing here, and it fired from a session
       running inside the VS Code extension. Also observed that run: no
       `status` key on any `claude agents --json` row, correcting the
-      2026-07-30 note. This item stays unchecked: one event with two fields
-      confirmed is not every field of every event.
-- [ ] Enumerate the remaining `PreToolUse` payload fields now that the
-      event is known to fire. `session_id`, `cwd`, `transcript_path`,
-      `prompt_id`, `permission_mode`, `effort.level`, and `tool_use_id` are
-      each still `documented` only, and the gate that logs them is already
-      in this repo at `.claude/hooks/style-gate.js`.
+      2026-07-30 note. Advanced a third time later on 2026-08-02, when the
+      capture tap below logged five complete `PreToolUse` events and moved
+      every common field to `observed` for that event. This item stays
+      unchecked: one event enumerated is not every field of every event.
+- [x] Enumerate the remaining `PreToolUse` payload fields now that the
+      event is known to fire. Done 2026-08-02: a capture tap in
+      `.claude/hooks/style-gate.js` now appends every raw event to
+      gitignored `_scratch/hook-capture.jsonl`, and five captured events
+      showed `session_id`, `cwd`, `transcript_path`, `prompt_id`,
+      `permission_mode`, `effort.level`, and `tool_use_id` all populated
+      (`vscode-extension` host, 2.1.220, `Edit` tool calls). The tap stays
+      in place so other event types get enumerated the moment hooks for
+      them are registered.
 - [ ] Confirm the host discriminator ADR-023 assumes. The plan is to read
       the process argv and parent, since `claude agents --json` reports
       `kind: "interactive"` for a VS Code extension session and a terminal
@@ -87,11 +93,14 @@ Checking a box here means the item is done, not that it is perfect. See
       answer for it, not just a hope.
 - [x] Decide the daemon transport: loopback HTTP with a token, recorded as
       ADR-007. Revisit only if the token model proves inadequate.
-- [ ] Prototype the Tauri always-on-top, non-focus-stealing window on
+- [x] Prototype the Tauri always-on-top, non-focus-stealing window on
       Windows 11 before committing further to Tauri for the rest of the UI.
-      `alpha-osk` proves the Win32 `WS_EX_NOACTIVATE | WS_EX_TOPMOST`
-      approach works in PySide6; it does not yet prove Tauri can reach the
-      same behaviour.
+      Done 2026-08-02: `spikes/tauri-focus/` proves it, recorded as
+      ADR-025. Tauri's `alwaysOnTop` sets `WS_EX_TOPMOST` but not
+      `WS_EX_NOACTIVATE`; one `SetWindowLongPtrW` call at setup adds it,
+      and a synthetic click was then received by a button in the webview
+      while the foreground window never changed and the spike window never
+      activated. Hedges and untested cases are in the ADR.
 - [ ] Confirm whether a genuine Claude Code error state (crash, process
       death, the adapter losing the session) can be detected at all through
       hooks, or whether it needs a separate supervisory heartbeat.

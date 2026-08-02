@@ -10,9 +10,10 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
   always-on-top, mouse-only control surface for Claude Code sessions. Six
   status tiles, approve and deny via the `PreToolUse` hook, dial, stick,
   talk, layers.
-- **Status:** Phase 0, specification only. **There is no application code.**
-  Do not "fix" that by scaffolding code unprompted; Phase 1 is gated on the
-  two pre-Phase-1 spikes tracked in [TODO.md](TODO.md) and
+- **Status:** Phase 0, specification plus spikes. The only application
+  code is the spike under `spikes/`; do not scaffold Phase 1 code
+  unprompted. The window spike passed (ADR-025); the payload spike is
+  tracked in [TODO.md](TODO.md) and
   [docs/DECISIONS.md](docs/DECISIONS.md#adr-009).
 - **Stack (decided, not built):** Tauri v2, Rust daemon, TypeScript surface.
   See [docs/DECISIONS.md](docs/DECISIONS.md#adr-002).
@@ -59,15 +60,15 @@ source-of-truth map. This table is a reading budget, not a second map.
 | File | Lines | Purpose |
 | --- | --- | --- |
 | [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 416 | Daemon, shim, surface, state machine |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 428 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 345 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 572 | Reference adapter; partial stamp |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 595 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
 | [docs/UI_SPEC.md](docs/UI_SPEC.md) | 294 | Visual and interaction contract |
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 696 | ADRs; append only |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 802 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 136 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 182 / 244 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 182 / 253 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -99,7 +100,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 025.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 026.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -148,9 +149,12 @@ a correction: `claude agents --json` carries no `status` key, so the
 second observation channel recovers a session's binding and label at cold
 start but not its state.
 
-The two pre-Phase-1 spikes are still the next real work: prove the
-no-focus-steal window in Tauri on Windows (untouched), and validate hook
-payloads against a live Claude Code install. The second advanced on
-2026-08-02, when a `PreToolUse` hook was first seen to fire here and its
-`deny` was honoured, but it stays open: one event with two fields
-confirmed is not every field of every event.
+Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
+`spikes/tauri-focus/` proved the no-focus-steal window in Tauri on
+Windows, recorded as ADR-025. The payload spike advanced twice the same
+day: a `PreToolUse` deny was honoured from a live session, and a capture
+tap added to `.claude/hooks/style-gate.js` then logged complete
+`PreToolUse` payloads, moving every common field to `observed` for that
+event. It stays open for the other hook events, which need hooks
+registered before they can be captured. The spike directory is the only
+application code; Phase 1 remains unstarted.

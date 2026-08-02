@@ -144,11 +144,13 @@ This section is here because leaving it out would be dishonest.
 
 ## Status and what happens next
 
-Deckhand is at Phase 0: specification. No code has been written. The
-purpose of this phase is to get the architecture, the adapter contract, and
-the security model precise enough that Phase 1, which builds the status
-board and nothing else, can proceed without re-deciding fundamentals midway
-through. See `ROADMAP.md` for the phase breakdown and `TODO.md` for what is
+Deckhand is at Phase 0: specification. The only code is a small spike
+under `spikes/`, which proved that the always-on-top window can take
+clicks without stealing focus on Windows; the application itself is not
+started. The purpose of this phase is to get the architecture, the adapter
+contract, and the security model precise enough that Phase 1, which builds
+the status board and nothing else, can proceed without re-deciding
+fundamentals midway through. See `ROADMAP.md` for the phase breakdown and `TODO.md` for what is
 currently open, including the specific validation work, against a real
 Claude Code install rather than just its documentation, that Phase 0 still
 owes before Phase 1 can start on solid ground.
