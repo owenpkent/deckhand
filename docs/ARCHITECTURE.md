@@ -199,19 +199,31 @@ while a human decides. They have one structural weakness: they report only what
 happens after they are installed, so a daemon that starts while sessions are
 already running knows nothing about them until each one next emits an event.
 
-A second channel closes most of that gap. Claude Code ships a session
+A second channel closes part of that gap. Claude Code ships a session
 enumeration, `claude agents --json`. `observed` on this machine on 2026-07-30
-against version 2.1.220: it needs no TTY, and it returned the live sessions
-with `pid`, `cwd`, `kind`, `startedAt`, `sessionId`, `name`, and `status`. It
-is a poll rather than a push, and it says nothing about a pending permission,
-so it supplements hooks and does not replace them.
+and re-run on 2026-08-02, both against version 2.1.220: it needs no TTY, and
+it returned the live sessions with `pid`, `cwd`, `kind`, `startedAt`,
+`sessionId`, and `name`. The 2026-07-30 note also listed a `status` key; no
+row carried one on the re-run, so nothing may depend on it
+([ADR-024](DECISIONS.md#adr-024)). It is a poll rather than a push, and it
+says nothing about a pending permission, so it supplements hooks and does not
+replace them.
 
 Cold start therefore runs like this:
 
 1. Enumerate the live sessions and rebind tiles by session id.
-2. Map a `busy` status to `THINKING`.
+2. Map a `busy` status to `THINKING`, where a status is reported at all.
 3. Map everything else, including a status the daemon does not recognise and a
    status that is absent, to `UNKNOWN`.
+
+On 2.1.220 no row carries a status, so step 2 never fires and every enumerated
+session lands in step 3. The rule is kept rather than deleted because it costs
+nothing if the key comes back, not because state recovery works today. What
+this channel actually buys at cold start is rebinding and labelling: the board
+is still grey after a restart, but the tiles are the right tiles, bound to the
+right sessions, under the right names. That is a smaller claim than the one
+[ADR-017](DECISIONS.md#adr-017) made, and it is the one the observation
+supports.
 
 Step 3 is not a formality. `IDLE` is the one guess that looks like knowledge:
 a white tile says "nothing here needs you", which is exactly the claim the

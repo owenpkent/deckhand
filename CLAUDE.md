@@ -99,7 +99,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 024.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 025.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -138,12 +138,15 @@ the owner's cross-project dashboard. Keep compatible:
 
 Finish Phase 0: spec complete and internally consistent. The adapter now
 carries a partial verification stamp against Claude Code 2.1.220, and ADRs
-013 to 023 record the changes that came out of it. ADR-023 is the newest:
-the host (`pty`, `vscode-extension`, `sdk`) is a third axis beside the
-mode, and capabilities moved from the adapter to the session, because the
-owner runs Claude Code in the VS Code extension as well as in a terminal
-and those hosts differ on everything that needs a window. Nothing that
-runs over hooks differs, which is most of the product.
+013 to 024 record the changes that came out of it. ADR-023 added the host
+(`pty`, `vscode-extension`, `sdk`) as a third axis beside the mode, and
+moved capabilities from the adapter to the session, because the owner runs
+Claude Code in the VS Code extension as well as in a terminal and those
+hosts differ on everything that needs a window. Nothing that runs over
+hooks differs, which is most of the product. ADR-024 is the newest and is
+a correction: `claude agents --json` carries no `status` key, so the
+second observation channel recovers a session's binding and label at cold
+start but not its state.
 
 The two pre-Phase-1 spikes are still the next real work: prove the
 no-focus-steal window in Tauri on Windows (untouched), and validate hook

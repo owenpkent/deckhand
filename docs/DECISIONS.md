@@ -694,3 +694,53 @@ bought in exchange for a spec that stops being silent about a third of how
 the product is used. This reopens if Claude Code exposes a documented way
 to send into or interrupt a running session from outside it, on any host,
 or if a release adds a window-raise tool to the IDE server.
+
+<a id="adr-024"></a>
+## ADR-024: `claude agents --json` recovers bindings, not state
+
+Date: 2026-08-02
+
+**Context.** [ADR-017](#adr-017) made `claude agents --json` a second
+observation channel on the strength of a run that appeared to return a
+`status` key alongside `pid`, `cwd`, `kind`, `startedAt`, `sessionId`, and
+`name`. Its consequences claimed that the all-grey-tiles-after-a-restart
+failure mode "goes away for sessions that are still live", and it closed by
+naming its own reopen condition: "This reopens if the output shape changes."
+
+The re-run on 2026-08-02, recorded in [ADR-023](#adr-023), found no `status`
+key on any row. A third run while reviewing that change confirmed it: six
+rows, six keys each, no `status` anywhere. Whether the key was misread on
+2026-07-30 or removed since does not matter to the outcome. The reopen
+condition is met either way.
+
+**Decision.** ADR-017 is narrowed, not superseded. `claude agents --json`
+stays a load-bearing observation channel and `list_sessions` keeps its
+`documented (observed 2.1.220)` confidence, because enumeration is the part
+that was observed and re-observed. What it no longer carries is a state
+claim.
+
+At cold start the channel recovers the binding and the label. It does not
+recover the state. The `busy` to `THINKING` mapping in ADR-017 is kept in the
+spec as a conditional, since it costs nothing if the key returns, but on
+2.1.220 it never fires: every enumerated session takes the missing-status
+branch and lands in `UNKNOWN`. Nothing may be written that depends on a
+status arriving from this channel.
+
+**Consequences.** The honest version of the win is smaller than ADR-017's and
+still worth having. Before this channel, a daemon restart left tiles grey,
+unbound, and unnamed, and the only route back was to wait for each session to
+emit an event or to rebind six tiles by hand. After it, the tiles are still
+grey, but they are the right tiles, bound to the right sessions, under the
+right names, and the first event on any of them colours it correctly. The
+fail-safe in ADR-017 is what makes this survivable: because a missing status
+already mapped to `UNKNOWN` rather than to `IDLE`, the wrong reading produced
+no wrong colour, only an overstated claim.
+
+`disableAgentView` and the hooks-disabled case from ADR-017 are unaffected: a
+tile can still say "hooks are disabled" on the strength of an enumeration
+that answers while hooks do not.
+
+This entry is a correction to a verification stamp, not a design change, so
+no control, colour, state, or capability moves. It reopens if a release adds
+a status field to the enumeration, at which point the conditional in step 2
+starts firing on its own.

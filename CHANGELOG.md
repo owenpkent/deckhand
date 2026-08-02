@@ -191,6 +191,24 @@ and no past release is backfilled.
 
 ### Fixed
 
+- A stale `observed` stamp on the `status` key of `claude agents --json`,
+  which survived in `docs/ARCHITECTURE.md` and in the cold-start section of
+  `docs/CLAUDE_CODE_ADAPTER.md` after the 2026-08-02 re-run found no row
+  carrying one. The adapter file contradicted its own verification stamp
+  eight lines from the top. Recorded as ADR-024, which narrows ADR-017
+  without editing it: `claude agents --json` stays a load-bearing
+  enumeration channel, but at cold start it recovers a session's binding and
+  label, not its state. The `busy` to `THINKING` mapping is kept as a
+  conditional and currently never fires. ADR-017's own reopen condition,
+  "this reopens if the output shape changes", is what triggered the entry.
+  No colour was ever wrong as a result, because a missing status already
+  mapped to `UNKNOWN` rather than to `IDLE`; the defect was an overstated
+  claim, not a wrong tile.
+- The `startedAt` type in the cold-start section of
+  `docs/CLAUDE_CODE_ADAPTER.md`. It arrives from `claude agents --json` as
+  epoch milliseconds, and `docs/ADAPTER_PROTOCOL.md` types `SessionInfo`
+  `startedAt` as an ISO 8601 string, so the conversion is now stated
+  instead of assumed.
 - The permission mode set, wrong in both directions one commit ago:
   `default` was listed as a mode and `manual` was missing, making seven
   values where there are six. Running `claude --help` on Claude Code 2.1.220

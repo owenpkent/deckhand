@@ -452,24 +452,36 @@ any of them until each one next emitted an event. In practice that meant a
 board of grey tiles after every restart, which is a daily event, not an edge
 case.
 
-`claude agents --json` closes most of that gap. It is documented, it needs no
+`claude agents --json` closes part of that gap. It is documented, it needs no
 TTY, and on this machine it returned the live sessions with `pid`, `cwd`,
-`kind`, `startedAt`, `sessionId`, `name`, and `status` (`observed`, 2.1.220).
+`kind`, `startedAt`, `sessionId`, and `name` (`observed`, 2.1.220). The
+2026-07-30 note also listed a `status` key; no row carried one on the
+2026-08-02 re-run, so nothing here may depend on it
+([ADR-024](DECISIONS.md#adr-024)). `startedAt` arrives as epoch
+milliseconds, not as a string, so the adapter converts it to the ISO 8601
+that [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types) requires.
+
 Cold start, in order:
 
 1. Enumerate live sessions with `claude agents --json` and rebind tiles by
    `session_id`.
-2. Map the reported `status`. `busy` becomes `thinking`. **Everything else,
-   including a status that is missing or a value this adapter does not
-   recognise, becomes `unknown`.** Never guess `idle`: white is a claim that
-   a session is sitting waiting for you, and this channel does not support
-   that claim.
+2. Map the reported `status`, where one is reported. `busy` becomes
+   `thinking`. **Everything else, including a status that is missing or a
+   value this adapter does not recognise, becomes `unknown`.** Never guess
+   `idle`: white is a claim that a session is sitting waiting for you, and
+   this channel does not support that claim.
 3. A tile whose binding no enumeration explains stays `unknown` until an
    event arrives for it. That is the correct answer, not a failure.
 4. `~/.claude/projects/` is read only to populate the bind picker with recent
    sessions. It is the `internal` interface: it names things, it never infers
    state, and if the mangling changes tomorrow the only casualty is a
    convenience list.
+
+On 2.1.220 the missing-status branch of step 2 is the only one that runs, so
+cold start recovers bindings and labels but no state. The board is still grey
+after a restart; what changes is that the right tiles are on it, bound to the
+right sessions, under the right names. The `busy` mapping stays because it
+costs nothing if the key returns, not because it fires today.
 
 The `pid` from the same call is what Reveal should match a host window on,
 in preference to window-title heuristics, since a title is a guess and a
