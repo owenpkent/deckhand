@@ -35,6 +35,9 @@ desktop.ini
 # Spike evidence logs (findings are recorded in docs/, raw logs stay local)
 spike-log.jsonl
 
+# Compiled surface (rebuilt by scripts/build-app.ps1)
+app/ui/dist/
+
 # AI/LLM scratch space
 _scratch/
 _draft_*

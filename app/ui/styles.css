@@ -1,0 +1,296 @@
+/* Deckhand surface. Colours come from theme tokens set by theme.ts;
+   nothing here names a hex for a state colour. Interaction rules:
+   single clicks only, 44 px minimum targets, no hover-only reveals,
+   no keyboard anything (docs/ACCESSIBILITY.md). */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+#surface {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 8px;
+  transition: opacity 600ms ease;
+}
+
+/* Idle dim after 3 minutes without pointer or state change. Dim, not
+   hide: a status board that hides is not a status board. */
+#surface.dimmed {
+  opacity: 0.55;
+}
+
+#strip {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---- Tiles ---------------------------------------------------------- */
+
+.tile {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  background: var(--tile);
+  border: 3px solid var(--tile-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.tile.selected {
+  border-width: 5px;
+}
+
+.tile.selected::after {
+  /* The chevron notch that marks selection without relying on the
+     thicker ring alone. */
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid var(--ring, var(--tile-border));
+}
+
+.tile[data-state="idle"] {
+  --ring: var(--c-idle);
+}
+.tile[data-state="thinking"] {
+  --ring: var(--c-thinking);
+}
+.tile[data-state="needs_input"] {
+  --ring: var(--c-needs-input);
+  background: color-mix(in srgb, var(--c-needs-input) 20%, var(--tile));
+}
+.tile[data-state="complete"] {
+  --ring: var(--c-complete);
+  background: color-mix(in srgb, var(--c-complete) 10%, var(--tile));
+}
+.tile[data-state="error"] {
+  --ring: var(--c-error);
+  background: color-mix(in srgb, var(--c-error) 20%, var(--tile));
+}
+.tile[data-state="unknown"] {
+  --ring: var(--c-unknown);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--tile),
+    var(--tile) 6px,
+    color-mix(in srgb, var(--c-unknown) 18%, var(--tile)) 6px,
+    color-mix(in srgb, var(--c-unknown) 18%, var(--tile)) 12px
+  );
+}
+
+.tile[data-state] {
+  border-color: var(--ring, var(--tile-border));
+}
+
+/* Ended and unbound: no ring, dashed outline. */
+.tile[data-state="ended"],
+.tile.unbound {
+  --ring: transparent;
+  border: 3px dashed var(--tile-border);
+  background: var(--tile);
+}
+
+.glyph {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: var(--ring, var(--subtext));
+}
+
+.tile.unbound .glyph {
+  color: var(--subtext);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.glyph.spinning {
+  animation: spin 1.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glyph.spinning {
+    animation: none;
+  }
+}
+
+.slot1 {
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 86px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot2 {
+  font-size: 10px;
+  color: var(--subtext);
+  max-width: 86px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot3 {
+  font-size: 10px;
+  color: var(--subtext);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Corner badges: read, never clicked. */
+.badge-mode {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  font-size: 9px;
+  color: var(--subtext);
+  pointer-events: none;
+}
+
+.badge-children {
+  position: absolute;
+  bottom: 3px;
+  right: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  pointer-events: none;
+}
+
+/* ---- Side buttons --------------------------------------------------- */
+
+#side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.side-btn {
+  min-width: 52px;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--tile-border);
+  background: var(--tile);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.side-btn .side-label {
+  font-size: 9px;
+  color: var(--subtext);
+}
+
+.side-btn:active {
+  background: var(--tile-border);
+}
+
+/* ---- Bind picker ---------------------------------------------------- */
+
+#picker {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px;
+  z-index: 10;
+}
+
+#picker[hidden] {
+  display: none;
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--subtext);
+  padding: 2px 4px;
+}
+
+.picker-rows {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.picker-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--tile-border);
+  background: var(--tile);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+}
+
+.picker-row .row-state {
+  color: var(--subtext);
+  font-size: 11px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.picker-row .row-cwd {
+  color: var(--subtext);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.picker-btn {
+  min-width: 44px;
+  min-height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--tile-border);
+  background: var(--tile);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 10px;
+}

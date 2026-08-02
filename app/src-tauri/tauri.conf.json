@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "deckhand",
+  "version": "0.1.0",
+  "identifier": "dev.deckhand.app",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Deckhand",
+        "width": 720,
+        "height": 132,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "focus": false,
+        "decorations": false,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.ico"]
+  }
+}

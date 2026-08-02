@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Surface window default capability",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

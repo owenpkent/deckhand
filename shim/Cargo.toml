@@ -1,0 +1,11 @@
+[package]
+name = "deckhand-shim"
+version = "0.1.0"
+description = "Forwards a Claude Code hook payload to the Deckhand daemon"
+edition = "2021"
+publish = false
+
+# No async runtime, no TLS, no DNS: the shim talks plain HTTP to
+# 127.0.0.1 and its entire value is starting fast and never blocking
+# the session it is observing.
+[dependencies]
