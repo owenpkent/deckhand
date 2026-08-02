@@ -1,7 +1,8 @@
 /* Deckhand surface. Colours come from theme tokens set by theme.ts;
    nothing here names a hex for a state colour. Interaction rules:
-   single clicks only, 44 px minimum targets, no hover-only reveals,
-   no keyboard anything (docs/ACCESSIBILITY.md). */
+   single clicks only, 44 px minimum hit targets, no hover-only
+   reveals, no keyboard anything (docs/ACCESSIBILITY.md). Disabled
+   controls stay visible and clicking one reveals why in the panel. */
 
 * {
   margin: 0;
@@ -22,30 +23,52 @@ body {
 #surface {
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
   height: 100%;
   padding: 8px;
+  gap: 8px;
   transition: opacity 600ms ease;
 }
 
-/* Idle dim after 3 minutes without pointer or state change. Dim, not
-   hide: a status board that hides is not a status board. */
 #surface.dimmed {
   opacity: 0.55;
 }
+
+#strip-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  height: 112px;
+  flex: 0 0 auto;
+}
+
+/* ---- Drag grip ------------------------------------------------------ */
+
+#grip {
+  width: 14px;
+  border-radius: 7px;
+  background: repeating-linear-gradient(
+    0deg,
+    var(--tile),
+    var(--tile) 4px,
+    var(--tile-border) 4px,
+    var(--tile-border) 6px
+  );
+  cursor: grab;
+}
+
+/* ---- Tiles ---------------------------------------------------------- */
 
 #strip {
   display: flex;
   gap: 8px;
 }
 
-/* ---- Tiles ---------------------------------------------------------- */
-
 .tile {
   position: relative;
   width: 96px;
   height: 96px;
+  align-self: center;
   border-radius: 10px;
   background: var(--tile);
   border: 3px solid var(--tile-border);
@@ -56,8 +79,6 @@ body {
   gap: 1px;
   cursor: pointer;
   overflow: hidden;
-  /* Buttons do not inherit these; without both lines every tile
-     renders black UA-default text on the dark theme. */
   color: var(--text);
   font-family: inherit;
 }
@@ -67,8 +88,6 @@ body {
 }
 
 .tile.selected::after {
-  /* The chevron notch that marks selection without relying on the
-     thicker ring alone. */
   content: "";
   position: absolute;
   bottom: 0;
@@ -112,7 +131,6 @@ body {
   border-color: var(--ring, var(--tile-border));
 }
 
-/* Ended and unbound: no ring, dashed outline. */
 .tile[data-state="ended"],
 .tile.unbound {
   --ring: transparent;
@@ -171,7 +189,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Corner badges: read, never clicked. */
 .badge-mode {
   position: absolute;
   top: 3px;
@@ -191,12 +208,117 @@ body {
   pointer-events: none;
 }
 
-/* ---- Side buttons --------------------------------------------------- */
+/* ---- Shared control chrome ----------------------------------------- */
+
+.ctl {
+  border-radius: 8px;
+  border: 1px solid var(--tile-border);
+  background: var(--tile);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.ctl:active {
+  background: var(--tile-border);
+}
+
+/* Disabled controls stay visible and clickable: the click reveals why
+   in the panel. Never a tooltip, never a silent no-op. */
+.ctl.off {
+  opacity: 0.45;
+}
+
+.ctl .k-glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.ctl .k-label {
+  font-size: 10px;
+  color: var(--subtext);
+}
+
+/* ---- Command keys: two rows of three ------------------------------- */
+
+#keys {
+  display: grid;
+  grid-template-columns: repeat(3, 66px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 6px;
+  align-self: center;
+}
+
+.key-approve .k-glyph {
+  color: var(--c-complete);
+}
+.key-deny .k-glyph,
+.key-interrupt .k-glyph {
+  color: var(--c-error);
+}
+
+/* ---- Stick: four-way pad ------------------------------------------- */
+
+#stick {
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 4px;
+  align-self: center;
+}
+
+/* ---- Dial ----------------------------------------------------------- */
+
+#dial {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: center;
+  align-items: center;
+}
+
+#dial .dial-commit {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+#dial .dial-steppers {
+  display: flex;
+  gap: 4px;
+}
+
+#dial .dial-steppers .ctl {
+  width: 46px;
+  height: 44px;
+}
+
+/* ---- Talk and send -------------------------------------------------- */
+
+#talkcol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: center;
+}
+
+#talkcol .ctl {
+  width: 48px;
+  height: 44px;
+}
+
+/* ---- Side ----------------------------------------------------------- */
 
 #side {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-self: center;
 }
 
 .side-btn {
@@ -206,6 +328,7 @@ body {
   border: 1px solid var(--tile-border);
   background: var(--tile);
   color: var(--text);
+  font-family: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -215,12 +338,96 @@ body {
 }
 
 .side-btn .side-label {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--subtext);
 }
 
 .side-btn:active {
   background: var(--tile-border);
+}
+
+/* ---- Detail panel ---------------------------------------------------- */
+
+#panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  border-top: 1px solid var(--tile-border);
+  padding-top: 8px;
+}
+
+#panel[hidden] {
+  display: none;
+}
+
+.panel-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-identity {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.panel-state {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.panel-item {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: var(--subtext);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.panel-message {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--tile);
+  border: 1px solid var(--tile-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.panel-message:empty {
+  display: none;
+}
+
+.panel-question {
+  font-size: 13px;
+}
+
+.answer-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.answer-targets .ctl {
+  min-height: 44px;
+  padding: 4px 14px;
+}
+
+.panel-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.panel-actions .ctl {
+  min-width: 96px;
+  min-height: 44px;
+  padding: 0 10px;
 }
 
 /* ---- Bind picker ---------------------------------------------------- */
@@ -231,7 +438,7 @@ body {
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  padding: 4px 8px;
+  padding: 8px;
   z-index: 10;
 }
 
@@ -243,7 +450,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--subtext);
   padding: 2px 4px;
 }
@@ -258,6 +465,7 @@ body {
 
 .picker-row {
   min-height: 44px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -266,35 +474,37 @@ body {
   border: 1px solid var(--tile-border);
   background: var(--tile);
   color: var(--text);
+  font-family: inherit;
   cursor: pointer;
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .picker-row .row-state {
   color: var(--subtext);
-  font-size: 11px;
+  font-size: 12px;
   margin-left: auto;
   white-space: nowrap;
 }
 
 .picker-row .row-cwd {
   color: var(--subtext);
-  font-size: 10px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 260px;
+  max-width: 420px;
 }
 
 .picker-btn {
   min-width: 44px;
-  min-height: 32px;
+  min-height: 36px;
   border-radius: 6px;
   border: 1px solid var(--tile-border);
   background: var(--tile);
   color: var(--text);
+  font-family: inherit;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   padding: 0 10px;
 }

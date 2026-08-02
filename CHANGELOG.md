@@ -12,6 +12,22 @@ and no past release is backfilled.
 
 ## [Unreleased]
 
+### Added
+
+- The rest of the control surface, so the strip matches the design
+  instead of stopping at six tiles: the six command keys (Approve, Deny,
+  Answer, Interrupt, Continue, Reveal), the stick (scroll, panel toggle,
+  previous tile; drawn as a 2 by 2 grid until the diamond geometry is
+  built), the dial as a disabled readout, Talk and Send placeholders,
+  and the detail panel (identity, state in words, current item, question
+  options, Reveal, Unbind, Scan). Disabled controls follow the spec
+  rule: visible, dimmed, and clicking one puts the honest reason in the
+  panel, never a silent no-op. Reveal actually acts: a pid-then-title
+  window match raises the selected session's host window. The window
+  gained a drag grip, a Move key that cycles screen-edge presets so
+  moving never requires a drag, and its position persists across
+  restarts.
+
 ### Changed
 
 - Live validation against Claude Code 2.1.220, recorded as ADR-026, put

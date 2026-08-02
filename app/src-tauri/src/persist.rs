@@ -36,6 +36,26 @@ struct SavedBinding {
     label: String,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct WindowPos {
+    pub x: i32,
+    pub y: i32,
+}
+
+pub fn save_window_pos(x: i32, y: i32) {
+    if let Some(dir) = data_dir() {
+        if let Ok(body) = serde_json::to_string(&WindowPos { x, y }) {
+            let _ = fs::write(dir.join("window.json"), body);
+        }
+    }
+}
+
+pub fn load_window_pos() -> Option<WindowPos> {
+    let dir = data_dir()?;
+    let body = fs::read_to_string(dir.join("window.json")).ok()?;
+    serde_json::from_str(&body).ok()
+}
+
 pub fn save_bindings(reg: &Registry) {
     let Some(dir) = data_dir() else { return };
     let list: Vec<Option<SavedBinding>> = reg

@@ -7,15 +7,23 @@
 </head>
 <body>
   <main id="surface" aria-label="Deckhand surface">
-    <div id="strip" role="group" aria-label="Agent tiles"></div>
-    <div id="side">
-      <button id="refresh" class="side-btn" aria-label="Refresh sessions">
-        <span class="side-glyph">&#8635;</span><span class="side-label">Scan</span>
-      </button>
-      <button id="quit" class="side-btn" aria-label="Quit Deckhand">
-        <span class="side-glyph">&#10005;</span><span class="side-label">Quit</span>
-      </button>
+    <div id="strip-row">
+      <div id="grip" data-tauri-drag-region title=""></div>
+      <div id="strip" role="group" aria-label="Agent tiles"></div>
+      <div id="keys" role="group" aria-label="Command keys"></div>
+      <div id="stick" role="group" aria-label="Stick"></div>
+      <div id="dial" role="group" aria-label="Dial"></div>
+      <div id="talkcol" role="group" aria-label="Talk and send"></div>
+      <div id="side">
+        <button id="move" class="side-btn" aria-label="Move the surface">
+          <span class="side-glyph">&#8690;</span><span class="side-label">Move</span>
+        </button>
+        <button id="quit" class="side-btn" aria-label="Quit Deckhand">
+          <span class="side-glyph">&#10005;</span><span class="side-label">Quit</span>
+        </button>
+      </div>
     </div>
+    <div id="panel" hidden></div>
     <div id="picker" hidden></div>
   </main>
   <script type="module" src="./dist/main.js"></script>
