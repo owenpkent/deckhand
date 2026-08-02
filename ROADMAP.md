@@ -52,12 +52,23 @@ Deliverables:
 - The Deckhand daemon (local background process, transport per
   `docs/ARCHITECTURE.md`).
 - The hook shim, installed via `settings.json`, reporting `SessionStart`,
-  `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`,
-  and `SessionEnd` events to the daemon.
+  `UserPromptSubmit`, `PreToolUse`, `PermissionDenied`, `PostToolUse`,
+  `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Notification`,
+  `Stop`, `StopFailure`, and `SessionEnd` events to the daemon: twelve
+  events, not seven, once the status inference fixes for failed turns,
+  failed tool calls and the classifier's own denials are accounted for, and
+  the child ledger and the liveness bracket both have something to read.
+  `PreToolUse` is installed twice, once gating and narrow and once
+  non-gating and match-all, so thirteen entries in total.
 - Six agent tiles in the surface, each showing live status colour for a
   bound session.
 - No write authority anywhere in this phase. It can watch and it can be
   wrong, but it cannot act on being wrong.
+- A spike: observe Stop-hook `decision: "block"` behaviour against a live
+  Claude Code install, including whether the turn stays in the same session
+  and what ceiling, if any, exists on holding it open. This is observation
+  of a mechanism, not a send capability; nothing in this phase gains a way
+  to put a prompt into a running session.
 
 **Done when** six concurrent Claude Code sessions can be watched at once
 with status that stays correct, including the unbound and error states, for
@@ -93,7 +104,9 @@ nothing is actually waiting.
 Deliverables:
 
 - Dial: stepping through session options, minus and plus, commit targets.
-- Stick: tile navigation and the detail panel it opens.
+- Stick: scrolling and expanding the detail panel, and returning to the
+  previously selected tile.
+- The Answer key and its answer targets, and the Reveal key.
 - Layer strip: profile switching.
 - Settings surface.
 - Theming.

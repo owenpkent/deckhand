@@ -5,8 +5,9 @@
 **A software Codex Micro for Claude Code**
 
 An always-on-top, mouse-only control surface for running several Claude Code
-sessions at once: six tiles with live status lights, approve and deny from the
-surface, and the rest of the macropad reimagined for a pointer.
+sessions at once: six tiles with live status lights so you can see every
+session, answer the questions it asks you, and approve the calls that need a
+human, plus the rest of the macropad reimagined for a pointer.
 
   <p>
     <a href="https://github.com/owenpkent/deckhand/actions/workflows/docs.yml"><img src="https://github.com/owenpkent/deckhand/actions/workflows/docs.yml/badge.svg" alt="Docs CI"/></a>
@@ -54,11 +55,19 @@ window switch is expensive. The author is a wheelchair user with muscular
 dystrophy; moving a pointer is cheap, pressing keys is not, and checking six
 terminals by keyboard is exactly the tax this project removes.
 
-Deckhand is designed as a **status board first**: six tiles you can read at a glance,
-using the Codex Micro's colour language. White idle, blue thinking, green
-done-and-unread, amber waiting on you, red problem. Then it is a control
-surface: when a tile goes amber because Claude wants permission to run a tool,
-Approve and Deny are one click, on the surface, without touching the terminal.
+Deckhand is designed as a **status board first**: six tiles you can read at a
+glance, using the Codex Micro's colour language. White idle, blue thinking,
+green done-and-unread, amber waiting on you, red problem. Amber is usually a
+question, not a permission prompt: on one machine running Claude Code with
+`permissions.defaultMode: "auto"`, the classifier answers most permission
+requests on its own, and the human is asked to pick an option far more often
+than asked to allow a tool, 322 `AskUserQuestion` calls across 155 of 240
+sessions, against 10 to 27 tool denials in the same corpus. That is one
+user's habits on one machine, not a claim about how everyone works, but it is
+why Deckhand leads with **see every session, answer its questions, and
+approve the calls that need a human**, rather than with approve and deny
+alone. Approve and Deny stay one click on the surface, without touching the
+terminal; they are simply not the whole story anymore.
 
 Everything is operable with a pointer alone. Keyboard and voice are
 conveniences, never requirements. That rule is load-bearing and
@@ -86,8 +95,8 @@ Where Deckhand diverges from the device, it says so and says why:
 | Control | On the device | In Deckhand |
 | --- | --- | --- |
 | 6 agent keys | One chat each, LED status | One Claude Code session each, live status tile |
-| 6 command keys | Approve, decline, continue, send... | Approve, Deny, Continue, Interrupt, Plan mode, Compact |
-| Stick | Plan mode, history, sidebar | Tile navigation and the detail panel |
+| 6 command keys | Approve, decline, continue, send... | Approve, Deny, Answer, Interrupt, Continue, Reveal |
+| Stick | Plan mode, history, sidebar | Scroll the detail panel, expand it, return to the last tile |
 | Dial | Composer options, reasoning default | Session options: model, effort, permission mode |
 | Mic key | Push-to-talk | Click-to-toggle talk, delegating speech to MacroVox |
 | Codex key | Send | Send (hosted mode; honest about attached mode) |
@@ -97,6 +106,10 @@ Where Deckhand diverges from the device, it says so and says why:
 
 These are **design mockups drawn from [docs/UI_SPEC.md](docs/UI_SPEC.md)**,
 not screenshots. Nothing runs yet; this is the target the spec commits to.
+They also predate the current command key set: the drawings still show Plan
+and Compact where the spec now has Answer and Reveal, and a "Raise window"
+button where it now says Reveal. Where a mockup and `docs/UI_SPEC.md`
+disagree, the spec wins and the drawing is the thing that is out of date.
 
 <img src="assets/surface-horizontal.svg" width="100%" alt="Mockup of the Deckhand surface: a dark horizontal panel. Left, six square tiles: undertow with a white idle ring, contour with a blue thinking ring and the subtitle Bash cmake, deckhand with a thick amber ring, a hand glyph, subtitle Bash approval, and a selection chevron, meshview with a green ring, a check and an unread dot, markcopy grey and hatched with a question mark and the words state unknown, and an empty dashed tile reading bind a session. Middle, six command keys: Approve and Deny enabled, Continue and Interrupt greyed out, Plan and Compact neutral. Right, a four-way arrow pad, a dial reading Opus, model, with minus and plus targets, and Talk and Send buttons. Bottom left, three layer dots labelled Layer 1: Claude Code."/>
 
@@ -128,8 +141,10 @@ you, none of them auto-allow.
 Two modes per session:
 
 - **Attached**: you started the session in your terminal. Full status, full
-  approve and deny. No prompt injection, because Claude Code does not offer
-  one; Deckhand does not fake it by default.
+  approve and deny. No prompt injection: the channels Claude Code documents
+  all deliver at a turn boundary, never into an idle session, and none has
+  been observed working here, so Deckhand ships no send rather than faking
+  one.
 - **Hosted** (later): Deckhand starts the session via the Claude Agent SDK and
   can do everything, at the cost of being the session's only UI.
 

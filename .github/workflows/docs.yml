@@ -1,6 +1,8 @@
 # Docs CI: the repo is specification-only, so CI guards the specification.
-# Two gates: house style (no em or en dashes in authored markdown) and link
-# integrity (every relative link and anchor in the repo resolves).
+# Three gates: house style (scripts/check-docs.ps1, which is also what the
+# local docs-gate command runs), link integrity (every relative link and
+# anchor resolves), and the one unconditional propagation cell (a docs/
+# change updates CHANGELOG.md).
 name: docs
 
 on:
@@ -11,33 +13,29 @@ on:
 permissions:
   contents: read
 
+# A push to a PR branch triggers both events. Keep the newest run only.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   style:
     name: House style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install ripgrep
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
-
-      # The repo's writing style bans em (U+2014) and en (U+2013) dashes.
-      # Inherited third-party texts (Contributor Covenant, the Constellation
-      # guide) are exempt; everything authored here is not.
-      - name: No em or en dashes in authored markdown
-        run: |
-          if rg -n "—|–" --glob "*.md" \
-               --glob "!CODE_OF_CONDUCT.md" \
-               --glob "!CONSTELLATION_INTEGRATION_GUIDE.md"; then
-            echo "::error::Em or en dash found. House style: use a comma, colon, parentheses, or a period."
-            exit 1
-          fi
+      # The rules live in the script, not here. One copy, two callers:
+      # this job and .claude/commands/docs-gate.md. pwsh is preinstalled
+      # on ubuntu-latest.
+      - name: House style, status lines, ADR numbering, Constellation
+        run: pwsh -NoProfile -File scripts/check-docs.ps1 -All
 
   links:
     name: Relative links resolve
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Offline mode: only file-to-file links and anchors are checked, so the
       # job is fast, deterministic, and never fails on someone else's outage.
@@ -46,3 +44,28 @@ jobs:
         with:
           args: --offline --include-fragments --no-progress "**/*.md"
           fail: true
+
+  changelog:
+    name: Spec change touches CHANGELOG
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      # docs/WORKFLOW.md section 2 marks CHANGELOG.md "Yes" in every row,
+      # so this cell is mechanical. The other cells depend on intent and
+      # are not inferable from a diff; the sync-check skill covers those.
+      - name: A docs/ change must update CHANGELOG.md
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files=$(git diff --name-only "$BASE_SHA" HEAD)
+          if echo "$files" | rg -q '^docs/' && ! echo "$files" | rg -q '^CHANGELOG\.md$'; then
+            echo "::error::A docs/ change must update CHANGELOG.md [Unreleased]."
+            exit 1
+          fi

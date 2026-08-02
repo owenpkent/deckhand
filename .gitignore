@@ -39,6 +39,11 @@ _draft_*
 .cascade/
 .cursor/
 
+# Claude Code local overrides (.claude/settings.json itself is committed:
+# it holds the shared style gate). The *.local pattern below does not
+# match this filename.
+.claude/settings.local.json
+
 # Local runtime state (never commit real session data)
 *.local
 .env

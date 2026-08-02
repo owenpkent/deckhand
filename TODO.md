@@ -42,6 +42,46 @@ Checking a box here means the item is done, not that it is perfect. See
       `docs/CLAUDE_CODE_ADAPTER.md` against a real, current Claude Code
       install. The spec was written from documentation, not a packet
       capture.
+      Partially done, against Claude Code 2.1.220 on 2026-07-30. Actually
+      run or read on this machine (`observed`): `claude agents --json`, the
+      captured status line payload keys, the `~/.claude/projects/`
+      mangling, and the `--permission-mode` value set from `claude --help`
+      (`acceptEdits`, `auto`, `bypassPermissions`, `manual`, `dontAsk`,
+      `plan`; `default` is not one of them). Read from official
+      documentation, not seen to fire here
+      (`documented`): the `hookSpecificOutput` wrapper and the
+      `allow`/`deny`/`ask`/`defer` vocabulary, `matcher: "*"` plus the `if`
+      field, hook timeouts in seconds, and the common payload fields
+      including `prompt_id`, `permission_mode`, `effort.level`, and
+      `tool_use_id`. Still unverified: hook overhead at six concurrent
+      sessions, what the user sees when a hook times out on Claude Code's
+      side, how conflicting decisions across two hook entries resolve, any
+      behaviour outside `manual` permission mode (the mode names are
+      observed, what each mode does is not), and whether the settings key
+      `permissions.defaultMode` accepts a value spelled `default` even
+      though the CLI flag does not. See
+      `docs/CLAUDE_CODE_ADAPTER.md` for the full per-claim stamp.
+      Advanced again on 2026-08-02: a `PreToolUse` hook was seen to fire,
+      with `tool_name` and `tool_input` populated, and its
+      `permissionDecision: "deny"` was honoured and blocked the call. That
+      is the first hook observed firing here, and it fired from a session
+      running inside the VS Code extension. Also observed that run: no
+      `status` key on any `claude agents --json` row, correcting the
+      2026-07-30 note. This item stays unchecked: one event with two fields
+      confirmed is not every field of every event.
+- [ ] Enumerate the remaining `PreToolUse` payload fields now that the
+      event is known to fire. `session_id`, `cwd`, `transcript_path`,
+      `prompt_id`, `permission_mode`, `effort.level`, and `tool_use_id` are
+      each still `documented` only, and the gate that logs them is already
+      in this repo at `.claude/hooks/style-gate.js`.
+- [ ] Confirm the host discriminator ADR-023 assumes. The plan is to read
+      the process argv and parent, since `claude agents --json` reports
+      `kind: "interactive"` for a VS Code extension session and a terminal
+      session alike (observed 2.1.220). Verify that
+      `--input-format stream-json` and a `Code.exe` parent are a reliable
+      test, including for a session in VS Code's integrated terminal, which
+      is a `pty` host inside an editor window and must not be misread as
+      `vscode-extension`.
 - [ ] Measure hook call overhead with six Claude Code sessions running
       concurrently. If it is not negligible, `docs/ARCHITECTURE.md` needs an
       answer for it, not just a hope.
@@ -72,6 +112,13 @@ Checking a box here means the item is done, not that it is perfect. See
 - [ ] Resolve whether `docs/SECURITY_MODEL.md`'s trust boundary needs to
       account for a compromised hook shim, not only a compromised tool
       call.
+- [ ] Choose the narrow gate's default pattern set: the `if` condition that
+      scopes `PreToolUse` gating to shell execution and file deletion, so it
+      stops matching every tool call in `auto` mode. See
+      `docs/SECURITY_MODEL.md`.
+- [ ] Prove an answer channel for `AskUserQuestion` exists before promoting
+      `answer_question` past optional and unproven. No documented interface
+      is known to deliver an answer back into a pending question today.
 - [ ] Get at least one outside accessibility review of the mouse-only claim
       before Phase 1 starts, not after.
 
@@ -124,10 +171,16 @@ Checking a box here means the item is done, not that it is perfect. See
 - [ ] Implement the dial: step through options.
 - [ ] Implement the dial: minus and plus targets.
 - [ ] Implement the dial: commit target.
-- [ ] Implement the four-way stick for tile navigation.
+- [ ] Implement the four-way stick: scroll the detail panel up and down,
+      expand or collapse it, and return to the previously selected tile. No
+      tile stepping.
 - [ ] Implement the detail panel the stick opens.
 - [ ] Implement continue and interrupt command keys.
-- [ ] Implement plan mode and compact command keys.
+- [ ] Implement the Answer command key and the per-option answer targets,
+      full option labels, disabled until `answer_question` is proven.
+- [ ] Implement the Reveal command key and its pid-based host match.
+- [ ] Implement plan mode and compact in the detail panel, not as command
+      keys.
 - [ ] Implement the layer strip and profile switching.
 - [ ] Implement the settings surface.
 - [ ] Implement theming.

@@ -63,45 +63,224 @@ decided.
 | State | Tile | Entered when | Left when |
 | --- | --- | --- | --- |
 | `IDLE` | White | Session starts, or you select a `COMPLETE` tile | A turn begins |
-| `THINKING` | Blue | A turn begins, or a tool starts | A turn ends, or input is required |
-| `NEEDS_INPUT` | Amber | A permission decision is pending, or Claude asked a question | The decision is made, or the question is answered |
-| `COMPLETE` | Green | A turn finished and you have not selected the tile since | You select the tile |
+| `THINKING` | Blue | A turn begins, or an operation opens | The turn ends with nothing open, or input is required |
+| `NEEDS_INPUT` | Amber | A permission decision is pending, or the session asked a question | The decision is made, or the question is answered |
+| `COMPLETE` | Green | A turn finished, the child ledger is empty, and you have not selected the tile since | You select the tile, or a new turn begins |
 | `ERROR` | Red | The turn failed, or the process died without a clean exit | You select the tile (a crashed session then shows `ENDED`), or the session recovers |
-| `ENDED` | Off | The session exited cleanly, or you acknowledged a crashed `ERROR` tile | Rebound |
+| `ENDED` | Off | The session exited for good, or you acknowledged a crashed `ERROR` tile | Rebound |
 | `UNKNOWN` | Grey, hatched | The daemon cannot currently tell | Any authoritative event arrives |
+
+Amber carries a kind, `permission` or `question`, on the update that raises it.
+This is a discriminator on the state's detail, not a new state and not a new
+colour: amber is still amber. Approve and Deny are enabled only when the kind
+is `permission`. A question renders its options as targets instead, because a
+button that cannot answer what is on screen is the silently wrong button.
+See [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types),
+[UI_SPEC.md](UI_SPEC.md#command-keys), and
+[DECISIONS.md](DECISIONS.md#adr-013).
+
+Green means finished and unread. It clears when you select the tile, and it is
+also left when a new turn begins, because the session is no longer finished.
+The daemon records `unreadSince`, the moment the tile went green, and the
+detail panel shows it. Unread stays a colour and never becomes a badge, per
+[ACCESSIBILITY.md](ACCESSIBILITY.md#the-economics) and
+[DECISIONS.md](DECISIONS.md#adr-008).
 
 `UNKNOWN` is deliberate and load-bearing. A status board that guesses is worse
 than one that admits it does not know, because the whole value is being able to
 trust a glance. Any time the daemon loses its footing, for example after a
 restart with sessions already running, tiles go grey rather than assuming idle.
 
-### Liveness
+### Events that must not be taken at face value
+
+Two lifecycle events read like state changes and are not. Both are frequent,
+and either one taken literally paints a wrong colour on a tile someone is
+watching.
+
+| Event | The naive mapping | What the daemon does |
+| --- | --- | --- |
+| A session-start event whose source is a compaction | `IDLE` | Nothing. It fires mid-turn, so the naive mapping flips a live blue tile white |
+| A session-end event whose reason is a clear or a resume | `ENDED` | Nothing. Each is followed by a new session start, under a session that never stopped |
+
+Both splits are `documented` for Claude Code and unverified against a live
+install. The field names are in
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md#status-inference). The rule
+generalises past one runtime: an adapter reports a lifecycle change only when
+the lifecycle actually changed, and the daemon takes no state change from an
+event whose reason it does not recognise.
+
+### The child ledger
+
+A turn can finish while work it started is still running. On the owner's
+corpus roughly one turn in ten ended with children still live, which is one
+machine and one user, so read it as indicative rather than general. A tile that
+goes green there says the session is done when it is not, and that falsifies
+the one promise the board makes.
+
+Each session holds a ledger of its open children. Entries are `kind:
+"subagent"` only: `SubagentStart` adds one, `SubagentStop` removes it.
+
+- `COMPLETE` is unreachable while the ledger is non-empty. A turn that ends
+  with children live stays `THINKING`.
+- The count renders as a corner badge, never a hit target. See
+  [UI_SPEC.md](UI_SPEC.md#tile-anatomy).
+- Background Bash tasks emit no hook, so the ledger cannot see them and the
+  count does not include them. That is stated plainly because a count which
+  silently undercounts is worse than no count at all.
+- No per-child list, no per-child approval targets, no subagent layer.
+
+Recorded in [DECISIONS.md](DECISIONS.md#adr-019).
+
+### Liveness, by open operation
 
 Events are the primary signal, but absence of events is ambiguous: a session
-thinking hard and a session whose terminal was closed both emit nothing. The
-daemon therefore holds a per-session deadline. A session in `THINKING` with no
-event for longer than the deadline moves to `UNKNOWN`, not `ERROR`, because a
-long tool call is normal. A clean exit moves it to `ENDED`; confirmed process
-death without one is a crash and moves it to `ERROR`.
+thinking hard and a session whose terminal was closed both emit nothing. Turn
+duration cannot separate them. Measured on the owner's corpus, p90 turn
+duration is 660 s and p99 is over 40 minutes, so a turn-duration deadline set
+anywhere useful greys healthy sessions.
 
-The deadline default and how process death is confirmed on Windows are both
-unresolved. See [open questions](#open-questions).
+The daemon brackets operations instead. An operation is open from the first
+event below until its partner arrives:
 
-## Modes
+| Opened by | Closed by |
+| --- | --- |
+| `PreToolUse` | The matching `PostToolUse` or `PostToolUseFailure` |
+| `SubagentStart` | The matching `SubagentStop` |
+
+While any operation is open the session stays `THINKING`, and the tile shows
+elapsed-in-operation rather than elapsed-in-state, because "this tool call has
+been running four minutes" is the number a person can act on.
+
+`Task*` events are not in that table. They are teammate-task hooks rather than
+the `/tasks` ones, and they bracket nothing the daemon models.
+
+A `PreToolUse` can also end without a post-tool event, and each way has to be
+handled or the bracket leaks. Bracketing is the daemon's rule, not the
+adapter's: an adapter reports the events, this file decides what they close.
+[ADR-016](DECISIONS.md#adr-016) says "the adapter defines what closes a
+`PreToolUse` that ends in denial or interrupt", which reads as the opposite;
+what it means is that the adapter has to report those ends at all, which is
+the obligation [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types) states. The
+three cases:
+
+- **Denied.** No tool runs, so nothing follows. The bracket closes when
+  Deckhand answers `deny`, and when Deckhand observes the runtime denying the
+  call itself.
+- **Interrupted.** An interrupt closes every operation open on that session.
+  Which events actually fire on an interrupt is unverified, so `T_unknown`
+  below is the backstop if the runtime disagrees.
+- **Handed back with `ask`.** The bracket stays open, because the call may
+  still run once the runtime's own prompt is answered. It closes on the
+  post-tool event, on an observed denial, or on `T_unknown`.
+
+One deadline, not two:
+
+- **`T_unknown`, default 900 s**, measured from the last event of any kind.
+  On expiry the session moves to `UNKNOWN`, never to `ERROR`, because a long
+  tool call is normal and a wrong red costs more than an honest grey.
+- The stale clock, meaning "nothing has been heard for a while", is suspended
+  while an operation is open. `T_unknown` is not suspended by anything.
+
+The asymmetry is the whole point. A terminal killed mid-tool-call leaves an
+operation open that nothing will ever close, so letting an open operation
+suspend `T_unknown` as well would pin that tile blue until the daemon
+restarted. There is no second stale tier and no stale badge: one deadline, one
+grey. Recorded in [DECISIONS.md](DECISIONS.md#adr-016).
+
+A clean exit moves the session to `ENDED`; confirmed process death without one
+is a crash and moves it to `ERROR`. How process death is confirmed on Windows,
+cheaply enough to poll, is still unresolved. See
+[open questions](#open-questions).
+
+## Observation channels
+
+Hooks are the primary channel, and the only one that can hold a tool call open
+while a human decides. They have one structural weakness: they report only what
+happens after they are installed, so a daemon that starts while sessions are
+already running knows nothing about them until each one next emits an event.
+
+A second channel closes part of that gap. Claude Code ships a session
+enumeration, `claude agents --json`. `observed` on this machine on 2026-07-30
+and re-run on 2026-08-02, both against version 2.1.220: it needs no TTY, and
+it returned the live sessions with `pid`, `cwd`, `kind`, `startedAt`,
+`sessionId`, and `name`. The 2026-07-30 note also listed a `status` key; no
+row carried one on the re-run, so nothing may depend on it
+([ADR-024](DECISIONS.md#adr-024)). It is a poll rather than a push, and it
+says nothing about a pending permission, so it supplements hooks and does not
+replace them.
+
+Cold start therefore runs like this:
+
+1. Enumerate the live sessions and rebind tiles by session id.
+2. Map a `busy` status to `THINKING`, where a status is reported at all.
+3. Map everything else, including a status the daemon does not recognise and a
+   status that is absent, to `UNKNOWN`.
+
+On 2.1.220 no row carries a status, so step 2 never fires and every enumerated
+session lands in step 3. The rule is kept rather than deleted because it costs
+nothing if the key comes back, not because state recovery works today. What
+this channel actually buys at cold start is rebinding and labelling: the board
+is still grey after a restart, but the tiles are the right tiles, bound to the
+right sessions, under the right names. That is a smaller claim than the one
+[ADR-017](DECISIONS.md#adr-017) made, and it is the one the observation
+supports.
+
+Step 3 is not a formality. `IDLE` is the one guess that looks like knowledge:
+a white tile says "nothing here needs you", which is exactly the claim the
+daemon cannot make about a session it has never observed. The daemon never
+guesses idle.
+
+This narrows [ADR-005](DECISIONS.md#adr-005), which named hooks as the status
+source. ADR-005 stands as written; [ADR-017](DECISIONS.md#adr-017) supersedes
+that part of it.
+
+One limitation belongs here and not only in the adapter. `documented`: the
+switches that turn hooks off (`disableAllHooks`, `--safe-mode`, `--bare`) turn
+the status line off with them, so both push channels die together and
+silently. The enumeration survives all three but has an off switch of its own.
+When the daemon can enumerate a session and has never received a hook from it,
+the tile must say that hooks are disabled rather than sit grey with no
+explanation. See
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md#known-limitations).
+
+## Modes and hosts
 
 The mode is a property of a session, not of the application. A single surface
 can show attached sessions and hosted sessions side by side, and the tile should
 make clear which is which.
 
+Mode is not the whole story. It says who started a session; the **host** says
+what is holding its process, and that is what decides which controls can act
+on it. The two are separate axes, and attached mode spans two hosts: a `pty`,
+whether in its own terminal window or an editor's, and `vscode-extension`,
+where the process runs under the editor with no window of its own. Capabilities
+therefore belong to a session rather than to an adapter. See
+[DECISIONS.md](DECISIONS.md#adr-023) and
+[ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types).
+
 ### Attached mode
 
-Deckhand watches a `claude` session that you started in your own terminal.
+Deckhand watches a `claude` session that you started, in a terminal or in the
+editor.
 
-- Status observation: **full**, through hooks.
-- Approve and deny: **full**, through the `PreToolUse` hook.
-- Send, continue, interrupt: **not available through any supported interface.**
-  An opt-in fallback synthesises keystrokes at the session's terminal window.
-  It is off by default and clearly marked as unreliable.
+- Status observation: **full**, through hooks, with the enumeration above as a
+  second channel. The host makes no difference: hooks come out of `claude.exe`
+  and not out of whatever holds its pipes.
+- Approve and deny: **full**, through the `PreToolUse` hook, subject to the
+  session's permission mode. Observed working on a `vscode-extension` host
+  against 2.1.220.
+- Send and continue: **unproven on a `pty` host, absent on a
+  `vscode-extension` host.** The documented channels deliver at a turn
+  boundary, never into an idle session, which is exactly when a person wants
+  to type, and none has been observed. Inside the extension there is no such
+  channel at all and stdin belongs to the editor. `send_prompt` is `false` on
+  both. See [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md),
+  [DECISIONS.md](DECISIONS.md#adr-020), and
+  [DECISIONS.md](DECISIONS.md#adr-023).
+- Interrupt: no channel proven from outside the session. On a `pty` host an
+  opt-in fallback synthesises keystrokes at the session's terminal window; it
+  is off by default and clearly marked as unreliable. On a `vscode-extension`
+  host there is no window to type into, so the fallback does not exist.
 
 ### Hosted mode
 
@@ -153,7 +332,7 @@ right.
  1. Claude decides to run a tool
  2. PreToolUse hook fires, shim POSTs the tool name and input, then blocks
  3. Daemon creates a pending approval, moves the session to NEEDS_INPUT
- 4. Tile goes amber; Approve and Deny become enabled
+ 4. Tile goes amber with kind `permission`; Approve and Deny become enabled
  5. You click. Or a rule decides. Or the timeout expires
  6. Daemon answers the still-open request
  7. Shim writes the permission decision to stdout and exits
@@ -174,6 +353,19 @@ never returns stalls a session:
 If the daemon is not running at all, the shim must fail in the direction that
 leaves Claude Code working normally rather than blocking every tool call
 forever. That behaviour is a correctness requirement, not a nicety.
+
+What an `ask` actually reaches depends on the session's permission mode, which
+is a property of the session and not something Deckhand sets. `documented`: in
+`manual` it returns the decision to a human; in `auto` it returns it to
+Claude Code's own classifier, which is a second gate Deckhand neither controls
+nor sees; in `dontAsk` it becomes a denial. Handing back is still the safe
+direction in all of them, and the fail-closed answer is still `ask` and never
+`allow` ([DECISIONS.md](DECISIONS.md#adr-006)). The mode travels on
+`SessionInfo`, the tile shows it as text rather than colour, the six values
+are listed in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types), and what each
+of the six does to a Deckhand `ask`, including the three where the answer is
+"not observed, and not asserted", is in
+[SECURITY_MODEL.md](SECURITY_MODEL.md#1-fail-closed-in-the-correct-direction).
 
 ## The surface
 
@@ -222,7 +414,9 @@ These are real and unresolved. They are tracked in [TODO.md](../TODO.md).
 2. **Whether `ERROR` is detectable at all.** Amber and blue and green are
    straightforward. A failed turn may not surface as a distinct hook event. If
    it does not, red may only ever mean "the process died", and the spec should
-   say so honestly rather than promise a colour that never lights.
+   say so honestly rather than promise a colour that never lights. A candidate
+   event is now `documented` (`StopFailure`), but nothing has been observed
+   firing here, so this question stays open and red stays a narrow promise.
 3. **Confirming process death on Windows** cheaply enough to poll.
 4. **Whether the terminal keystroke fallback is worth shipping at all.** It may
    be that attached mode should simply not offer send, and that wanting to send
