@@ -54,10 +54,11 @@ asked to choose between options far more often than asked to allow a tool:
 322 `AskUserQuestion` calls across 155 of 240 sessions, against 10 to 27
 tool denials in the same corpus. That is one user's corpus on one machine,
 not a general finding about how Claude Code is used, and this document
-treats it that way rather than generalising from it. None of it exists yet:
-Deckhand is at Phase 0, a specification, and this document describes a
-design (see the Status section at the end). It is independent software, not
-affiliated with or endorsed by OpenAI, Work Louder, or Anthropic.
+treats it that way rather than generalising from it. The status board
+half of this exists and watches live sessions; everything that acts on a
+session is still design (see the Status section at the end). Deckhand is
+independent software, not affiliated with or endorsed by OpenAI, Work
+Louder, or Anthropic.
 
 It has two ways of relating to a Claude Code session, called attached mode
 and hosted mode, and which one is in use matters more than any other single
@@ -144,13 +145,13 @@ This section is here because leaving it out would be dishonest.
 
 ## Status and what happens next
 
-Deckhand is at Phase 0: specification. The only code is a small spike
-under `spikes/`, which proved that the always-on-top window can take
-clicks without stealing focus on Windows; the application itself is not
-started. The purpose of this phase is to get the architecture, the adapter
-contract, and the security model precise enough that Phase 1, which builds
-the status board and nothing else, can proceed without re-deciding
-fundamentals midway through. See `ROADMAP.md` for the phase breakdown and `TODO.md` for what is
+Deckhand is at Phase 1: observation. The specification is complete, and
+the first real code exists: a daemon and tile surface in one desktop
+application plus the small program Claude Code's hooks call, watching
+live sessions and painting their status. Nothing in it can approve,
+deny, or send anything yet; that authority arrives in Phase 2, after
+the watching has earned trust. One Phase 0 item remains open alongside:
+validating the last few hook events against a live install. See `ROADMAP.md` for the phase breakdown and `TODO.md` for what is
 currently open, including the specific validation work, against a real
 Claude Code install rather than just its documentation, that Phase 0 still
 owes before Phase 1 can start on solid ground.

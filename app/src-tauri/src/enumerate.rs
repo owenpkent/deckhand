@@ -15,6 +15,7 @@ pub struct Row {
     pub id: String,
     pub name: Option<String>,
     pub cwd: Option<String>,
+    pub pid: Option<u32>,
 }
 
 pub fn fetch() -> Option<Vec<Row>> {
@@ -43,6 +44,7 @@ pub fn fetch() -> Option<Vec<Row>> {
                     id: row.get("sessionId")?.as_str()?.to_string(),
                     name: row.get("name").and_then(Value::as_str).map(String::from),
                     cwd: row.get("cwd").and_then(Value::as_str).map(String::from),
+                    pid: row.get("pid").and_then(Value::as_u64).map(|p| p as u32),
                 })
             })
             .collect(),
@@ -56,6 +58,7 @@ pub fn register(reg: &mut Registry, rows: &[Row], now_ms: i64) -> bool {
             &row.id,
             row.name.as_deref(),
             row.cwd.as_deref(),
+            row.pid,
             now_ms,
         );
     }

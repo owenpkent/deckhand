@@ -27,9 +27,10 @@ every issue gets read.
 
 ## What "supported" means right now
 
-Deckhand is at **Phase 0: specification**. There is no application to install
-yet. Issues about the design, the control mapping, and the adapter contract are
-in scope and welcome. Issues about a build that does not exist are not.
+Deckhand is at **Phase 1: observation**. There is no installer yet; the
+board builds from source on Windows (`python scripts/run.py`) and only
+watches, never acts. Issues about the design, the control mapping, the
+adapter contract, and the Phase 1 board are in scope and welcome.
 
 Windows 11 is the reference platform. macOS and Linux are intended, not proven.
 

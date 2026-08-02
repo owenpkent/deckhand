@@ -76,12 +76,20 @@ impl Registry {
         id: &str,
         name: Option<&str>,
         cwd: Option<&str>,
+        pid: Option<u32>,
         now_ms: i64,
     ) -> bool {
-        if self.sessions.contains_key(id) {
+        if let Some(existing) = self.sessions.get_mut(id) {
+            // State is never taken from the enumeration, but a pid is:
+            // hooks cannot carry one and Reveal wants it.
+            if existing.pid.is_none() && pid.is_some() {
+                existing.pid = pid;
+                return true;
+            }
             return false;
         }
         let mut s = Session::new(id.to_string(), now_ms);
+        s.pid = pid;
         if let Some(cwd) = cwd {
             s.cwd = Some(cwd.to_string());
             s.label = crate::state::dir_name(cwd);
@@ -225,7 +233,7 @@ mod tests {
             &json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}),
             1,
         );
-        assert!(!r.register_enumerated("s1", Some("name"), None, 2));
+        assert!(!r.register_enumerated("s1", Some("name"), None, None, 2));
         assert_eq!(
             r.sessions["s1"].state,
             crate::state::SessionState::Thinking,

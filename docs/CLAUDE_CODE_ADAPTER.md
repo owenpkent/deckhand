@@ -52,10 +52,14 @@ against Claude Code.
 >   `is_interrupt`; there is **no** `error_type` field), `Stop`
 >   (`stop_hook_active`, `last_assistant_message`, `background_tasks`,
 >   `session_crons`), `SessionEnd` (`reason: "other"`, a value the
->   documented list did not name), and `SubagentStart` and
->   `SubagentStop` (`agent_id`, `agent_type`; the stop also carries
->   `agent_transcript_path` and the `Stop` extras). Still never seen
->   firing: `Notification`, `StopFailure`, `PermissionDenied`.
+>   documented list did not name), `SubagentStart` and `SubagentStop`
+>   (`agent_id`, `agent_type`; the stop also carries
+>   `agent_transcript_path` and the `Stop` extras), and, later the same
+>   day, `PermissionDenied`: the common fields plus `tool_name`,
+>   `tool_input`, `tool_use_id`, and `reason`, whose live value was
+>   exactly the fixed string "Blocked by classifier" this file
+>   predicted. Ten of twelve. Still never seen firing: `Notification`
+>   and `StopFailure`.
 > - **Payloads can carry `permission_mode: "default"`.** The headless
 >   session reported it on `UserPromptSubmit` and `Stop`, even though
 >   the CLI flag rejects that spelling. What `default` does to an `ask`
@@ -250,9 +254,10 @@ binary is not an observation.
 
 **`PermissionDenied` says less than its name suggests.** Since 2.1.208 it
 carries `reason` (not `denial_reason`), and that reason is usually the fixed
-string "Blocked by classifier". Treat it as "a call was refused by something
-that is not you", which is enough to keep the tile blue and to make the
-second gate visible, and not enough for anything else.
+string "Blocked by classifier"; observed firing here with exactly that
+string on 2026-08-02. Treat it as "a call was refused by something that is
+not you", which is enough to keep the tile blue and to make the second gate
+visible, and not enough for anything else.
 
 **`AskUserQuestion` is why `PreToolUse` is watched twice.** It is an ordinary
 tool call, so the narrow gate never sees it. The non-gating `matcher: "*"`

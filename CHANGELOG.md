@@ -4,13 +4,37 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a
 Changelog](https://keepachangelog.com/en/1.1.0/), and dates are ISO 8601
-(`YYYY-MM-DD`). There are no releases yet: Deckhand is at Phase 0
-(specification), so everything so far lives under `[Unreleased]`. Once there
-is something to version, releases here will follow [Semantic
-Versioning](https://semver.org/); until then, no version number is invented
-and no past release is backfilled.
+(`YYYY-MM-DD`). There are no releases yet, so everything so far lives
+under `[Unreleased]`. Once there is something to version, releases here
+will follow [Semantic Versioning](https://semver.org/); until then, no
+version number is invented and no past release is backfilled.
 
 ## [Unreleased]
+
+### Added
+
+- `scripts/run.py`: build and restart the board in one command
+  (`--no-build` to skip the build, `--stop` to stop it), and a
+  documentation sweep that moved every stale "Phase 0, no code" claim
+  across the README, roadmap, changelog intro, executive summary,
+  architecture, and community files to the Phase 1 reality. Reveal
+  attempts now also log what they searched for and what won to
+  `%LOCALAPPDATA%\deckhand\reveal.log`, because the owner's first live
+  try did not visibly work and the next report should be diagnosable.
+
+- The rest of the control surface, so the strip matches the design
+  instead of stopping at six tiles: the six command keys (Approve, Deny,
+  Answer, Interrupt, Continue, Reveal), the stick (scroll, panel toggle,
+  previous tile; drawn as a 2 by 2 grid until the diamond geometry is
+  built), the dial as a disabled readout, Talk and Send placeholders,
+  and the detail panel (identity, state in words, current item, question
+  options, Reveal, Unbind, Scan). Disabled controls follow the spec
+  rule: visible, dimmed, and clicking one puts the honest reason in the
+  panel, never a silent no-op. Reveal actually acts: a pid-then-title
+  window match raises the selected session's host window. The window
+  gained a drag grip, a Move key that cycles screen-edge presets so
+  moving never requires a drag, and its position persists across
+  restarts.
 
 ### Changed
 

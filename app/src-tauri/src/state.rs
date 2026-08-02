@@ -63,6 +63,9 @@ pub struct Session {
     /// Rendered as text on the tile badge; "unknown" when absent, which
     /// is not rare. Never a colour (docs/UI_SPEC.md#corner-badges).
     pub permission_mode: Option<String>,
+    /// From the enumeration where known; hooks do not carry one. Feeds
+    /// Reveal's window match, nothing else.
+    pub pid: Option<u32>,
     pub state: SessionState,
     pub state_since_ms: i64,
     pub detail_kind: Option<InputKind>,
@@ -93,6 +96,7 @@ impl Session {
             id,
             label: String::new(),
             cwd: None,
+            pid: None,
             permission_mode: None,
             // A session first seen by enumeration rather than by an
             // event starts here. Never idle: idle is the one guess that

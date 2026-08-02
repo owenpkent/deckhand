@@ -12,7 +12,7 @@ human, plus the rest of the macropad reimagined for a pointer.
   <p>
     <a href="https://github.com/owenpkent/deckhand/actions/workflows/docs.yml"><img src="https://github.com/owenpkent/deckhand/actions/workflows/docs.yml/badge.svg" alt="Docs CI"/></a>
     <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"/>
-    <img src="https://img.shields.io/badge/status-Phase%200%3A%20specification-orange" alt="Status: Phase 0 specification"/>
+    <img src="https://img.shields.io/badge/status-Phase%201%3A%20observation-blue" alt="Status: Phase 1 observation"/>
     <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome"/></a>
     <a href="https://github.com/owenpkent/deckhand/discussions"><img src="https://img.shields.io/badge/discussions-join-8A2BE2" alt="Join the discussions"/></a>
   </p>
@@ -33,9 +33,10 @@ human, plus the rest of the macropad reimagined for a pointer.
 **Phase 1: observation, started.** The specification is complete and the
 first code exists: a daemon and tile surface in one Tauri application
 plus the hook shim, building and passing their tests, with the
-observation pipeline proven end to end against synthetic events. One
+observation pipeline proven end to end against live sessions. One
 Phase 0 item stays open alongside it: hook payload validation against a
-live install is done for `PreToolUse` and open for the other events.
+live install has ten of the twelve documented events observed, with
+`Notification` and `StopFailure` still unseen.
 
 | Piece | State |
 | --- | --- |
@@ -45,13 +46,14 @@ live install is done for `PreToolUse` and open for the other events.
 | Security model for permission gating | ✅ Written |
 | UI and accessibility specification | ✅ Written |
 | Tauri no-focus-steal window spike | ✅ Passed on Windows 11 (ADR-025) |
-| Hook payload validation spike | ⏳ Nine of twelve events observed live; three remain |
+| Hook payload validation spike | ⏳ Ten of twelve events observed live; two remain |
 | Daemon, shim, state machine, six tiles | ✅ Phase 1 skeleton; live sessions paint real tiles |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet |
 
-Build it with `powershell -NoProfile -File scripts/build-app.ps1`, which
-compiles the TypeScript surface and then the Rust workspace, and run
-`target\debug\deckhand.exe`.
+Build and run it with `python scripts/run.py`, which compiles the
+TypeScript surface, builds the Rust workspace, and restarts the app
+(`--no-build` to just restart, `--stop` to stop it).
+`scripts/build-app.ps1` is the build-only equivalent.
 
 ---
 
@@ -174,21 +176,27 @@ deckhand/
 │   ├── ACCESSIBILITY.md       The rules everything else answers to
 │   ├── DECISIONS.md           ADRs: what was decided and why
 │   └── WORKFLOW.md            Source-of-truth map, change propagation
+├── app/                   The Phase 1 application: Rust daemon plus
+│                          TypeScript surface, one Tauri window
+├── shim/                  The tiny program Claude Code's hooks call
+├── spikes/                Frozen Phase 0 evidence (ADR-025)
+├── scripts/               Build, run, and docs-gate tooling
 ├── .github/               CI, issue and PR templates
-└── (no code yet: that is Phase 1)
+└── ...
 ```
 
 ## Getting started
 
-There is nothing to install yet. To read or contribute:
+To read, start with the executive summary, then the control mapping. To
+run the Phase 1 board (Windows, with Rust, Node, and Python installed):
 
 ```powershell
 git clone https://github.com/owenpkent/deckhand.git
 cd deckhand
+python scripts/run.py
 ```
 
-Start with the executive summary, then the control mapping. If you want to
-help before code exists, the most valuable work is challenging the spec:
+The most valuable contribution is still challenging the spec:
 [CONTRIBUTING.md](CONTRIBUTING.md) lists concrete starting points.
 
 ## Accessibility
@@ -217,14 +225,14 @@ through its documented extension points.
 
 ## Roadmap
 
-Phase 0 specification (now) → 1 observation-only tiles → 2 approve and deny →
-3 the full surface → 4 hosted mode → 5 talk → 6 a second adapter. Details and
-exit criteria: [ROADMAP.md](ROADMAP.md).
+Phase 0 specification → 1 observation-only tiles (now) → 2 approve and
+deny → 3 the full surface → 4 hosted mode → 5 talk → 6 a second adapter.
+Details and exit criteria: [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 
 Spec review, accessibility feedback, and attempts to break the security model
-are the Phase 0 contributions that matter most. See
+are the contributions that matter most right now. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [discussions](https://github.com/owenpkent/deckhand/discussions).
 

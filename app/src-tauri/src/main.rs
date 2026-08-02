@@ -12,7 +12,13 @@ mod enumerate;
 mod http;
 mod persist;
 mod registry;
+mod reveal;
 mod state;
+
+/// Window geometry (logical px). Height toggles with the detail panel.
+const WIN_W: f64 = 1200.0;
+const WIN_H: f64 = 132.0;
+const WIN_H_EXPANDED: f64 = 330.0;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -117,6 +123,92 @@ fn quit(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Raise the host window of the session bound to a tile. Returns a
+/// sentence for the detail panel either way; Reveal never fails
+/// silently (docs/UI_SPEC.md#command-keys).
+#[tauri::command]
+fn reveal_session(index: usize, shared: State<Shared>) -> String {
+    let (label, dir, pid) = {
+        let reg = shared.0.lock().unwrap();
+        let Some(session) = (index < registry::TILE_COUNT)
+            .then(|| reg.bindings[index].as_ref())
+            .flatten()
+            .and_then(|id| reg.sessions.get(id))
+        else {
+            return "No session is bound to this tile.".to_string();
+        };
+        (
+            session.label.clone(),
+            session.cwd.as_deref().map(state::dir_name),
+            session.pid,
+        )
+    };
+    reveal::reveal(&label, dir.as_deref(), pid)
+}
+
+/// Grow or shrink the window for the detail panel. Resizing from the
+/// daemon keeps the surface free of window-geometry authority.
+#[tauri::command]
+fn set_panel_expanded(expanded: bool, app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let h = if expanded { WIN_H_EXPANDED } else { WIN_H };
+        let _ = window.set_size(tauri::LogicalSize::new(WIN_W, h));
+    }
+}
+
+/// Click-to-place move: cycle through edge presets so moving the window
+/// never requires a drag (docs/ACCESSIBILITY.md). The drag grip also
+/// works; this is the route that must always exist.
+#[tauri::command]
+fn cycle_position(app: tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let scale = monitor.scale_factor();
+    let mon_size = monitor.size().to_logical::<f64>(scale);
+    let mon_pos = monitor.position().to_logical::<f64>(scale);
+    let cur = window
+        .outer_position()
+        .map(|p| p.to_logical::<f64>(scale))
+        .unwrap_or(tauri::LogicalPosition::new(0.0, 0.0));
+    let cur_h = window
+        .outer_size()
+        .map(|s| s.to_logical::<f64>(scale).height)
+        .unwrap_or(WIN_H);
+
+    let margin = 12.0;
+    let xs = [
+        mon_pos.x + (mon_size.width - WIN_W) / 2.0, // centre
+        mon_pos.x + margin,                         // left
+        mon_pos.x + mon_size.width - WIN_W - margin, // right
+    ];
+    let ys = [
+        mon_pos.y + mon_size.height - cur_h - 48.0, // bottom (above taskbar)
+        mon_pos.y + margin,                         // top
+    ];
+    // Presets in glance-friendly order.
+    let presets = [
+        (xs[0], ys[0]),
+        (xs[1], ys[0]),
+        (xs[2], ys[0]),
+        (xs[0], ys[1]),
+        (xs[1], ys[1]),
+        (xs[2], ys[1]),
+    ];
+    // Advance to the preset after the nearest current one.
+    let nearest = presets
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, (x, y))| ((x - cur.x).abs() + (y - cur.y).abs()) as i64)
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let (nx, ny) = presets[(nearest + 1) % presets.len()];
+    let _ = window.set_position(tauri::LogicalPosition::new(nx, ny));
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -126,14 +218,22 @@ fn main() {
             unbind_tile,
             bindable_sessions,
             refresh_sessions,
-            quit
+            quit,
+            reveal_session,
+            set_panel_expanded,
+            cycle_position
         ])
         .setup(|app| {
-            #[cfg(windows)]
             {
                 let window = app.get_webview_window("main").expect("main window");
-                let hwnd = window.hwnd()?.0 as isize;
-                win_style::apply_noactivate(hwnd);
+                if let Some(pos) = persist::load_window_pos() {
+                    let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
+                }
+                #[cfg(windows)]
+                {
+                    let hwnd = window.hwnd()?.0 as isize;
+                    win_style::apply_noactivate(hwnd);
+                }
             }
 
             let shared = Arc::new(Mutex::new(registry::Registry::default()));
@@ -196,9 +296,16 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, event| {
-            if let tauri::RunEvent::Exit = event {
+        .run(|_app, event| match event {
+            tauri::RunEvent::Exit => {
                 persist::remove_daemon_contact();
             }
+            tauri::RunEvent::WindowEvent {
+                event: tauri::WindowEvent::Moved(pos),
+                ..
+            } => {
+                persist::save_window_pos(pos.x, pos.y);
+            }
+            _ => {}
         });
 }

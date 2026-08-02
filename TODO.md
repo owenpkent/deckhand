@@ -74,9 +74,12 @@ Checking a box here means the item is done, not that it is perfect. See
       documented events have now fired here with their fields captured,
       correcting `PostToolUseFailure`'s shape (`error` string plus
       `is_interrupt`, no `error_type`) and adding `permission_mode:
-      "default"` as a live payload value. This item stays unchecked until
-      `Notification`, `StopFailure`, and `PermissionDenied` are seen
-      firing.
+      "default"` as a live payload value. A fifth advance later that day:
+      `PermissionDenied` fired live (the auto-mode classifier blocking a
+      call) carrying the common fields plus `tool_name`, `tool_input`,
+      `tool_use_id`, and `reason: "Blocked by classifier"`, exactly as
+      predicted. This item stays unchecked until `Notification` and
+      `StopFailure` are seen firing.
 - [x] Enumerate the remaining `PreToolUse` payload fields now that the
       event is known to fire. Done 2026-08-02: a capture tap (first inside
       the style gate, now the dedicated `.claude/hooks/payload-capture.js`)
@@ -182,9 +185,8 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       window, only against the spike's; do that before trusting it.
 - [x] Implement manual tile binding, including the unbound (off) state.
       Done 2026-08-02: unbound tiles render dashed with a plus and open
-      the bind picker; first-heard sessions auto-fill free tiles. The
-      unbind control ships with the detail panel (Phase 3); the daemon
-      command exists.
+      the bind picker; first-heard sessions auto-fill free tiles. Unbind
+      landed the same day in the detail panel.
 - [ ] Implement the transcript JSONL fallback path for a missed hook
       event.
 - [x] Handle daemon restart without losing which tile is bound to which
@@ -223,12 +225,29 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 - [ ] Implement the dial: commit target.
 - [ ] Implement the four-way stick: scroll the detail panel up and down,
       expand or collapse it, and return to the previously selected tile. No
-      tile stepping.
-- [ ] Implement the detail panel the stick opens.
-- [ ] Implement continue and interrupt command keys.
+      tile stepping. All four functions work as of 2026-08-02; the
+      rendering is a 2 by 2 grid rather than the specified diamond, so
+      this stays open until the geometry matches UI_SPEC.
+- [ ] Implement the detail panel the stick opens. A working subset landed
+      2026-08-02: identity line, state in words, current or pending item,
+      question with disabled answer targets, the reveal-reason landing
+      area, Reveal, Unbind, and Scan. Context bar, cost, plan mode,
+      compact, and per-session settings are still owed.
+- [ ] Implement continue and interrupt command keys. Both render, both
+      disabled with their honest reasons; there is no channel for either
+      yet (ADR-020).
 - [ ] Implement the Answer command key and the per-option answer targets,
       full option labels, disabled until `answer_question` is proven.
+      Rendered and disabled as of 2026-08-02, with full labels.
 - [ ] Implement the Reveal command key and its pid-based host match.
+      Implemented 2026-08-02 as a pid-then-title heuristic
+      (`app/src-tauri/src/reveal.rs`) behind the Reveal key and the
+      panel action, with the ALT-tap foreground workaround. The owner's
+      first live try the same day did not visibly work; every attempt
+      now appends what it searched for and what won to
+      `%LOCALAPPDATA%\deckhand\reveal.log`, so the next report is
+      diagnosable. Stays unchecked until a live click is seen to raise
+      the right window.
 - [ ] Implement plan mode and compact in the detail panel, not as command
       keys.
 - [ ] Implement the layer strip and profile switching.
