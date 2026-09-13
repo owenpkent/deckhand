@@ -50,9 +50,10 @@ live install has ten of the twelve documented events observed, with
 | Daemon, shim, state machine, six tiles | ✅ Phase 1 skeleton; live sessions paint real tiles |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet |
 
-Build and run it with `python scripts/run.py`, which compiles the
-TypeScript surface, builds the Rust workspace, and restarts the app
-(`--no-build` to just restart, `--stop` to stop it).
+Build and run it with `python run.py`, which checks the toolchain,
+compiles the TypeScript surface, builds the Rust workspace, and restarts
+the app (`--test` to run the suites first, `--no-build` to just restart,
+`--check` to report the toolchain, `--stop` to stop it).
 `scripts/build-app.ps1` is the build-only equivalent, and it runs the
 tests: `cargo test --workspace` for the daemon and shim, `npm test` in
 `app/ui` for the surface.
@@ -195,7 +196,7 @@ run the Phase 1 board (Windows, with Rust, Node, and Python installed):
 ```powershell
 git clone https://github.com/owenpkent/deckhand.git
 cd deckhand
-python scripts/run.py
+python run.py
 ```
 
 The most valuable contribution is still challenging the spec:

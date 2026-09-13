@@ -28,7 +28,7 @@ every issue gets read.
 ## What "supported" means right now
 
 Deckhand is at **Phase 1: observation**. There is no installer yet; the
-board builds from source on Windows (`python scripts/run.py`) and only
+board builds from source on Windows (`python run.py`) and only
 watches, never acts. Issues about the design, the control mapping, the
 adapter contract, and the Phase 1 board are in scope and welcome.
 

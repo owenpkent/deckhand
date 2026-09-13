@@ -28,8 +28,9 @@ version number is invented and no past release is backfilled.
   `.github/workflows/tests.yml` runs all of it on Windows, and
   `scripts/build-app.ps1` runs it locally.
 
-- `scripts/run.py`: build and restart the board in one command
-  (`--no-build` to skip the build, `--stop` to stop it), and a
+- `run.py` at the repo root: check the toolchain with install hints,
+  build, optionally test, and restart the board in one command
+  (`--check`, `--test`, `--no-build`, `--stop`), and a
   documentation sweep that moved every stale "Phase 0, no code" claim
   across the README, roadmap, changelog intro, executive summary,
   architecture, and community files to the Phase 1 reality. Reveal
