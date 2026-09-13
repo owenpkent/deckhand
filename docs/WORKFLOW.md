@@ -68,6 +68,12 @@ Columns: **CM** `docs/CONTROL_MAPPING.md`, **UI** `docs/UI_SPEC.md`,
 | Change the hook event set | | | Yes | Yes | Yes | Yes | | | Yes |
 | Change a control label or wording | Yes | Yes | | | | | Yes | | Yes |
 | Upgrade or correct a verification stamp | | | | Yes | | | | Yes | Yes |
+| Add an implementation proposal without changing behavior | | | Yes | | Yes | | | | Yes |
+
+For a proposal, the marked contract files link to the plan and clarify
+its status; they do not adopt future behavior implicitly. If the plan
+touches security boundaries, link its scope from the security model too.
+An accepted contract change additionally matches its corresponding row.
 
 `docs/ARCHITECTURE.md` is authoritative for the session state machine, so any
 change that adds, removes, or re-times a state belongs in the ARCH column and

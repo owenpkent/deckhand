@@ -12,6 +12,12 @@ which can mean running a shell command, editing a file, or touching the
 network. That single capability is what this document is about. Everything else
 is ordinary local-app hygiene.
 
+The [OpenAI integration plan](OPENAI_INTEGRATION_PLAN.md) is a proposed
+extension, initially limited to observation. Its later control packages
+must prove request identity, safe native handback, credential handling,
+and reconnect behavior before any capability is enabled. This plan does
+not extend today's permission authority or weaken the fail-to-ask rule.
+
 ## Assets
 
 | Asset | Why it matters |

@@ -160,6 +160,11 @@ recognition logic living inside Deckhand itself.
 **Goal:** prove the adapter contract generalises by implementing a second
 adapter.
 
+The [OpenAI integration plan](docs/OPENAI_INTEGRATION_PLAN.md) proposes
+Codex observation first, followed by a separately gated App Server
+integration. It defines requirements and evidence gates without
+changing the phase order or declaring a supported second adapter.
+
 Deliverables:
 
 - A second adapter (target chosen when this phase starts).

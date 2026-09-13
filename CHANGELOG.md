@@ -13,6 +13,13 @@ version number is invented and no past release is backfilled.
 
 ### Added
 
+- A proposed
+  [OpenAI integration implementation plan](docs/OPENAI_INTEGRATION_PLAN.md)
+  with requirements, evidence limits, adapter and identity changes,
+  migration, security gates, work packages, and validation criteria.
+  Codex observation is the proposed first target; no OpenAI adapter or
+  additional control capability is implemented by this planning change.
+
 - A test suite across all three parts. The daemon crate gained a
   `lib.rs` so tests can reach its modules; window matching, the
   enumeration parser, and persistence were split at pure seams and

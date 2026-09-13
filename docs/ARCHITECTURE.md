@@ -299,10 +299,16 @@ already exists. Hosted mode is Phase 4.
 
 ## The adapter boundary
 
-The daemon knows nothing about Claude Code. It talks to adapters, which
+The target boundary keeps runtime details out of the daemon. Adapters
 implement the contract in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md). The
 Claude Code adapter is the reference implementation and is documented in
 [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md).
+
+The current Phase 1 code still parses Claude hook payloads inside the
+registry and state machine. The proposed
+[OpenAI integration plan](OPENAI_INTEGRATION_PLAN.md) stages that
+extraction before adding a second runtime. Its requirements are a plan,
+not evidence that the Rust adapter interface exists today.
 
 This boundary is not speculative generality. It exists because the Claude Code
 integration deliberately mixes documented interfaces with fragile ones, and the

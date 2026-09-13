@@ -301,6 +301,15 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 ## Phase 6: Beyond Claude Code
 
 - [ ] Choose the second adapter target.
+- [ ] Validate Codex as the proposed target using W0 in the
+      [OpenAI integration plan](docs/OPENAI_INTEGRATION_PLAN.md): collect
+      redacted fixtures and a per-host, per-version evidence matrix.
+- [ ] Reconcile the normalized event contract and composite session
+      identity with protocol version 0 before implementing W1 and W2.
+- [ ] Prove mixed Claude/Codex observation, migration recovery, and
+      per-session capability behavior before enabling the second adapter.
+- [ ] Validate App Server connection ownership and safe native handback
+      before scheduling any OpenAI control capability.
 - [ ] Implement it against the existing `docs/ADAPTER_PROTOCOL.md`.
 - [ ] Record every point where the contract had to bend, and fix the
       contract rather than the adapter where possible.
