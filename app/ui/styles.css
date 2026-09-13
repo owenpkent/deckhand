@@ -38,7 +38,12 @@ body {
   display: flex;
   align-items: stretch;
   gap: 8px;
-  padding: 8px;
+  /* 56px total, matching HEADER_H_LOGICAL in window.rs: 44px controls
+     plus 6px above and below. A taller header than the daemon sizes for
+     spills into the list and puts a scrollbar on a list that fits. */
+  box-sizing: border-box;
+  height: 56px;
+  padding: 6px;
   flex: 0 0 auto;
 }
 

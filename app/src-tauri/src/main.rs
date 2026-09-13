@@ -11,6 +11,7 @@
 
 use deckhand::{enumerate, http, persist, registry, reveal, state, window};
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -46,14 +47,22 @@ fn emit_snapshot(app: &tauri::AppHandle, reg: &registry::Registry) {
 fn after_change(app: &tauri::AppHandle, reg: &registry::Registry) {
     persist::save_bindings(reg);
     let row_count = reg.bindings.len();
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(win) = handle.get_webview_window("main") {
-            resize_for_rows(&win, row_count);
-        }
-    });
+    // Hook traffic calls this constantly; the window only needs touching
+    // when the row count actually moved.
+    if LAST_ROW_COUNT.swap(row_count, Ordering::SeqCst) != row_count {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Some(win) = handle.get_webview_window("main") {
+                resize_for_rows(&win, row_count);
+            }
+        });
+    }
     emit_snapshot(app, reg);
 }
+
+/// Row count the window was last sized for; `usize::MAX` until the
+/// startup sizing in `setup` has run.
+static LAST_ROW_COUNT: AtomicUsize = AtomicUsize::new(usize::MAX);
 
 /// The monitor's work area under the window right now, in physical
 /// pixels. `None` when the window has no monitor at all (a headless
@@ -86,20 +95,31 @@ fn all_work_areas(win: &tauri::WebviewWindow) -> Vec<window::Rect> {
 fn resize_for_rows(win: &tauri::WebviewWindow, row_count: usize) {
     let Ok(scale) = win.scale_factor() else { return };
     let Some(area) = current_work_area(win) else { return };
-    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else {
+    let (Ok(pos), Ok(outer), Ok(inner)) = (win.outer_position(), win.outer_size(), win.inner_size()) else {
         return;
     };
-    let cur = window::Rect::new(pos.x, pos.y, size.width as i32, size.height as i32);
+    // `set_size` sets the inner (client) size while `outer_size` includes
+    // the invisible frame Windows keeps around even an undecorated window,
+    // so the two must never be mixed: feeding the outer width back into
+    // set_size grew the window by one frame on every call. The width is
+    // always the constant; only the height follows the row count.
+    let frame_w = outer.width as i32 - inner.width as i32;
+    let frame_h = outer.height as i32 - inner.height as i32;
+    let cur = window::Rect::new(pos.x, pos.y, outer.width as i32, outer.height as i32);
 
-    let max_h_logical = (area.h as f64 / scale).round() as i32;
+    let max_h_logical = ((area.h - frame_h) as f64 / scale).round() as i32;
     let new_h_logical = window::window_height(row_count, max_h_logical);
-    let new_h_physical = (new_h_logical as f64 * scale).round() as i32;
+    let inner_w = (window::WINDOW_W_LOGICAL * scale).round() as i32;
+    let inner_h = (new_h_logical as f64 * scale).round() as i32;
 
     let bottom_anchored = window::is_bottom_anchored(cur, area);
-    let desired = window::reflow_height(cur, new_h_physical, bottom_anchored);
+    let with_width = window::Rect::new(cur.x, cur.y, inner_w + frame_w, cur.h);
+    let desired = window::reflow_height(with_width, inner_h + frame_h, bottom_anchored);
     let clamped = window::clamp_into(desired, area);
 
-    let _ = win.set_size(tauri::PhysicalSize::new(clamped.w.max(1) as u32, clamped.h.max(1) as u32));
+    let set_w = (clamped.w - frame_w).max(1) as u32;
+    let set_h = (clamped.h - frame_h).max(1) as u32;
+    let _ = win.set_size(tauri::PhysicalSize::new(set_w, set_h));
     let _ = win.set_position(tauri::PhysicalPosition::new(clamped.x, clamped.y));
 }
 
@@ -291,7 +311,9 @@ fn main() {
             let shared = Arc::new(Mutex::new(registry::Registry::default()));
             persist::load_bindings(&mut shared.lock().unwrap(), now_ms());
             app.manage(Shared(shared.clone()));
-            resize_for_rows(&window, shared.lock().unwrap().bindings.len());
+            let initial_rows = shared.lock().unwrap().bindings.len();
+            LAST_ROW_COUNT.store(initial_rows, Ordering::SeqCst);
+            resize_for_rows(&window, initial_rows);
 
             // Ingest: shim POSTs land on this channel; one thread owns
             // the application of events so ordering is deterministic.
