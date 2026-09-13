@@ -675,4 +675,89 @@ mod tests {
         ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit", "permission_mode": "auto"}));
         assert_eq!(x.permission_mode.as_deref(), Some("auto"));
     }
+
+    #[test]
+    fn dir_name_handles_windows_posix_trailing_and_edge_cases() {
+        assert_eq!(dir_name("C:\\Users\\o\\dev\\undertow"), "undertow");
+        assert_eq!(dir_name("/home/o/dev/undertow"), "undertow");
+        assert_eq!(dir_name("/home/o/dev/undertow/"), "undertow", "a trailing separator must not leave an empty name");
+        assert_eq!(dir_name("bare-name"), "bare-name");
+        assert_eq!(dir_name(""), "");
+    }
+
+    #[test]
+    fn truncate_at_and_past_the_boundary() {
+        assert_eq!(truncate("hello", 5), "hello", "exactly at the boundary must not be cut");
+        assert_eq!(truncate("hello!", 5), "hello...", "one byte past the boundary is cut and marked");
+    }
+
+    #[test]
+    fn parse_question_reads_the_first_question_and_its_option_labels() {
+        let input = json!({"questions": [{"question": "Which?", "options": [{"label": "A"}, {"label": "B"}]}]});
+        let (q, opts) = parse_question(Some(&input));
+        assert_eq!(q.as_deref(), Some("Which?"));
+        assert_eq!(opts, vec!["A", "B"]);
+    }
+
+    #[test]
+    fn parse_question_on_missing_or_malformed_input_gives_no_question_and_no_options() {
+        assert_eq!(parse_question(None), (None, Vec::new()));
+        assert_eq!(parse_question(Some(&json!({"not_questions": []}))), (None, Vec::new()));
+        assert_eq!(parse_question(Some(&json!({"questions": []}))), (None, Vec::new()));
+        assert_eq!(parse_question(Some(&json!({"questions": [{"no_question_field": true}]}))), (None, Vec::new()));
+    }
+
+    #[test]
+    fn post_tool_use_closes_only_the_matching_operation() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_use_id": "t2"}));
+        ev(&mut x, 3, json!({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        assert_eq!(x.open_ops.len(), 1);
+        assert_eq!(x.open_ops[0].id.as_deref(), Some("t2"), "the unrelated operation stays open");
+    }
+
+    #[test]
+    fn post_tool_use_failure_without_interrupt_closes_only_its_own_op() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_use_id": "t2"}));
+        let long = "z".repeat(300);
+        ev(&mut x, 3, json!({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_use_id": "t1", "error": long, "is_interrupt": false}));
+        assert_eq!(x.open_ops.len(), 1);
+        assert_eq!(x.open_ops[0].id.as_deref(), Some("t2"), "a non-interrupt failure closes only its own bracket");
+        assert!(x.error.as_ref().unwrap().message.as_ref().unwrap().ends_with("..."), "the long error text is truncated");
+    }
+
+    #[test]
+    fn stop_with_live_children_sets_pending_complete_flag() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SubagentStart", "agent_id": "a1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "Stop"}));
+        assert!(x.pending_complete, "green is deferred while a child is still open");
+        ev(&mut x, 3, json!({"hook_event_name": "SubagentStop", "agent_id": "a1"}));
+        assert!(!x.pending_complete, "the flag clears once the ledger empties");
+        assert_eq!(x.state, SessionState::Complete);
+    }
+
+    #[test]
+    fn notification_with_an_unknown_type_only_updates_liveness() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        let changed = ev(&mut x, 5, json!({"hook_event_name": "Notification", "notification_type": "mystery"}));
+        assert!(!changed);
+        assert_eq!(x.state, SessionState::Thinking, "an unrecognised notification type must not move state");
+        assert_eq!(x.last_event_at_ms, 5, "liveness still updates");
+    }
+
+    #[test]
+    fn state_since_ms_moves_only_on_a_state_change() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert_eq!(x.state_since_ms, 1);
+        ev(&mut x, 5, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        assert_eq!(x.state_since_ms, 1, "staying in thinking must not bump the timestamp");
+        ev(&mut x, 9, json!({"hook_event_name": "Stop"}));
+        assert_eq!(x.state_since_ms, 9, "an actual state change updates it");
+    }
 }

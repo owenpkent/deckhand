@@ -53,7 +53,9 @@ live install has ten of the twelve documented events observed, with
 Build and run it with `python scripts/run.py`, which compiles the
 TypeScript surface, builds the Rust workspace, and restarts the app
 (`--no-build` to just restart, `--stop` to stop it).
-`scripts/build-app.ps1` is the build-only equivalent.
+`scripts/build-app.ps1` is the build-only equivalent, and it runs the
+tests: `cargo test --workspace` for the daemon and shim, `npm test` in
+`app/ui` for the surface.
 
 ---
 

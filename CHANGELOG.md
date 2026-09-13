@@ -13,6 +13,21 @@ version number is invented and no past release is backfilled.
 
 ### Added
 
+- A test suite across all three parts. The daemon crate gained a
+  `lib.rs` so tests can reach its modules; window matching, the
+  enumeration parser, and persistence were split at pure seams and
+  covered, the loopback ingest endpoint is exercised over a real socket,
+  and the state machine and registry tests grew. A headless pipeline
+  test drives six sessions through the real endpoint into six tiles of
+  six different colours, which is the six-session colour test from
+  TODO.md without the screenshots. The shim has black-box tests that
+  spawn the built binary against a fake daemon and pin its silence and
+  its fail-open exits. The surface's pure helpers moved to their own
+  module and run under `node:test` with no new dependencies, including
+  a check that every state has a glyph and a stylesheet rule.
+  `.github/workflows/tests.yml` runs all of it on Windows, and
+  `scripts/build-app.ps1` runs it locally.
+
 - `scripts/run.py`: build and restart the board in one command
   (`--no-build` to skip the build, `--stop` to stop it), and a
   documentation sweep that moved every stale "Phase 0, no code" claim

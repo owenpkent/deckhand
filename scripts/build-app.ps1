@@ -13,6 +13,8 @@ try {
     }
     npx tsc
     if ($LASTEXITCODE -ne 0) { throw "tsc failed" }
+    npm test
+    if ($LASTEXITCODE -ne 0) { throw "npm test failed" }
 } finally {
     Pop-Location
 }

@@ -247,4 +247,105 @@ mod tests {
         assert!(!r.apply_hook(&json!({"hook_event_name": "Stop"}), 1));
         assert!(r.sessions.is_empty());
     }
+
+    #[test]
+    fn select_on_a_bound_tile_returns_true_and_runs_on_selected() {
+        let mut r = Registry::default();
+        // A fresh session's own first Stop goes straight to Complete
+        // (an empty child ledger), so selecting it exercises on_selected.
+        r.apply_hook(&json!({"hook_event_name": "Stop", "session_id": "s1"}), 1);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Complete);
+        assert!(r.select(0, 2));
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Idle, "on_selected clears complete to idle");
+        assert!(r.sessions["s1"].unread_since_ms.is_none(), "on_selected clears the unread mark");
+    }
+
+    #[test]
+    fn reselecting_an_already_selected_empty_tile_returns_false() {
+        // Selecting an empty tile for the first time still reports a
+        // change: the highlighted tile itself moved from none to one.
+        // Only a repeat select of the same already-selected empty tile
+        // has nothing left to change.
+        let mut r = Registry::default();
+        assert!(r.select(1, 1));
+        assert!(!r.select(1, 2));
+    }
+
+    #[test]
+    fn bind_onto_an_occupied_tile_replaces_the_binding() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s2"}), 1);
+        assert_eq!(r.bindings[0].as_deref(), Some("s1"));
+        assert_eq!(r.bindings[1].as_deref(), Some("s2"));
+        assert!(r.bind(0, "s2", 2));
+        assert_eq!(r.bindings[0].as_deref(), Some("s2"), "tile 0 now holds s2");
+        assert_eq!(r.bindings[1], None, "s2 must vacate its old tile when it moves");
+    }
+
+    #[test]
+    fn unbind_returns_false_on_empty_true_on_bound_and_keeps_the_session() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        assert!(!r.unbind(3), "tile 3 was never bound");
+        assert!(r.unbind(0), "s1 auto-filled tile 0");
+        assert_eq!(r.bindings[0], None);
+        assert!(r.sessions.contains_key("s1"), "unbinding a tile must not forget the session");
+    }
+
+    #[test]
+    fn the_seventh_first_heard_session_gets_no_tile_but_is_bindable() {
+        let mut r = Registry::default();
+        for i in 0..7 {
+            r.apply_hook(
+                &json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": format!("s{i}")}),
+                1,
+            );
+        }
+        assert!(r.bindings.iter().all(Option::is_some), "the first six fill every tile");
+        assert!(!r.is_bound("s6"), "the seventh session has no tile");
+        assert!(r.bindable().iter().any(|b| b.id == "s6"), "but it is still bindable");
+    }
+
+    #[test]
+    fn bindable_includes_already_bound_sessions_with_their_tile() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        let entry = r
+            .bindable()
+            .into_iter()
+            .find(|b| b.id == "s1")
+            .expect("a bound session still appears in bindable()");
+        assert_eq!(entry.bound_to, Some(0));
+    }
+
+    #[test]
+    fn tick_flips_a_quiet_session_to_unknown_once() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        assert!(r.tick(1 + crate::state::T_UNKNOWN_MS + 1));
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Unknown);
+        assert!(!r.tick(1 + crate::state::T_UNKNOWN_MS + 2), "an immediate second tick has nothing left to flip");
+    }
+
+    #[test]
+    fn snapshot_has_tile_count_tiles_with_correct_indices_and_selected_flag() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.select(0, 2);
+        let snap = r.snapshot(3);
+        assert_eq!(snap.tiles.len(), TILE_COUNT);
+        for (i, t) in snap.tiles.iter().enumerate() {
+            assert_eq!(t.index, i);
+            assert_eq!(t.selected, i == 0);
+        }
+    }
+
+    #[test]
+    fn register_enumerated_never_overwrites_a_pid_already_present() {
+        let mut r = Registry::default();
+        assert!(r.register_enumerated("s1", None, None, Some(111), 1));
+        assert!(!r.register_enumerated("s1", None, None, Some(222), 2), "a second pid on a known id changes nothing");
+        assert_eq!(r.sessions["s1"].pid, Some(111));
+    }
 }

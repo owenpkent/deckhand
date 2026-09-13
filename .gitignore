@@ -37,6 +37,7 @@ spike-log.jsonl
 
 # Compiled surface (rebuilt by scripts/build-app.ps1)
 app/ui/dist/
+app/ui/dist-test/
 
 # AI/LLM scratch space
 _scratch/

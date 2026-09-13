@@ -1,4 +1,4 @@
-# Docs CI: the repo is specification-only, so CI guards the specification.
+# Docs CI: guards the specification. The code is covered by tests.yml.
 # Three gates: house style (scripts/check-docs.ps1, which is also what the
 # local docs-gate command runs), link integrity (every relative link and
 # anchor resolves), and the one unconditional propagation cell (a docs/

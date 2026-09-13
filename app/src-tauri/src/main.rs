@@ -8,12 +8,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod enumerate;
-mod http;
-mod persist;
-mod registry;
-mod reveal;
-mod state;
+use deckhand::{enumerate, http, persist, registry, reveal, state};
 
 /// Window geometry (logical px). Height toggles with the detail panel.
 const WIN_W: f64 = 1200.0;

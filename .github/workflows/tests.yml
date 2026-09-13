@@ -1,0 +1,74 @@
+# Code CI: the daemon, the shim, and the surface. Windows only on purpose:
+# the daemon's window styling and Reveal are Win32, and the shim tests
+# spawn the built binary, so the platform that ships is the platform that
+# is tested. The specification is guarded separately by docs.yml.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A push to a PR branch triggers both events. Keep the newest run only.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  surface:
+    name: Surface (tsc and node:test)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app/ui
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # package-lock.json is gitignored, so there is nothing for npm ci
+      # to pin to; the only dependency is the TypeScript compiler.
+      - name: Install the compiler
+        run: npm install --no-audit --no-fund
+
+      - name: Surface tests
+        run: npm test
+
+      - name: Surface builds
+        run: npx tsc
+
+  rust:
+    name: Daemon and shim (cargo test)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Tauri embeds app/ui, dist included, at compile time, so the
+      # surface is compiled before the workspace. scripts/build-app.ps1
+      # does the same locally.
+      - name: Compile the surface
+        working-directory: app/ui
+        run: |
+          npm install --no-audit --no-fund
+          npx tsc
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the workspace
+        run: cargo build --workspace
+
+      - name: Daemon and shim tests
+        run: cargo test --workspace

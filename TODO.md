@@ -196,8 +196,10 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 - [ ] Write a manual test script that induces every status colour across
       six concurrent sessions, and decide what gets logged and at what
       verbosity. `scripts/phase1-smoke.ps1` induces five states across
-      three tiles and screenshots them; the six-session version and the
-      logging decision are still owed.
+      three tiles and screenshots them. The six-session version exists
+      headless since 2026-09-13 as `app/src-tauri/tests/pipeline.rs`,
+      six sessions through the real endpoint into six colours; the
+      screenshot walk and the logging decision are still owed.
 - [ ] Capture the session pid and host at the hook instead of guessing
       later: the shim wraps the payload with `CLAUDE_PID`,
       `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`, and

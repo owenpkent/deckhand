@@ -64,3 +64,116 @@ fn random_token() -> String {
     let _ = getrandom::getrandom(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    // A hand-rolled request over TcpStream rather than a pulled-in HTTP
+    // client: this is the only place the daemon needs one, and it is a
+    // handful of lines. Connection: close means the server ends this
+    // request's connection once it has replied, so read_to_end returns.
+    fn post(port: u16, path: &str, token: Option<&str>, header_name: &str, body: &[u8]) -> u16 {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect to the ingest server");
+        stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
+        let mut req = format!(
+            "POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nContent-Length: {}\r\n",
+            body.len()
+        );
+        if let Some(t) = token {
+            req.push_str(&format!("{header_name}: {t}\r\n"));
+        }
+        req.push_str("\r\n");
+        stream.write_all(req.as_bytes()).expect("write request headers");
+        stream.write_all(body).expect("write request body");
+
+        let mut resp = Vec::new();
+        stream.read_to_end(&mut resp).expect("read response");
+        let text = String::from_utf8_lossy(&resp);
+        // "HTTP/1.1 204 No Content" -> the second whitespace-separated token.
+        text.lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|code| code.parse::<u16>().ok())
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn correct_token_hook_valid_json_gives_204_and_the_value_arrives() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let status = post(server.port, "/hook", Some(&server.token), "X-Deckhand-Token", br#"{"a":1}"#);
+        assert_eq!(status, 204);
+        let v = rx.recv_timeout(Duration::from_millis(500)).expect("the value arrives on the channel");
+        assert_eq!(v, serde_json::json!({"a": 1}));
+    }
+
+    #[test]
+    fn missing_token_gives_401_and_nothing_arrives() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let status = post(server.port, "/hook", None, "X-Deckhand-Token", br#"{"a":1}"#);
+        assert_eq!(status, 401);
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "a rejected request must never reach the channel");
+    }
+
+    #[test]
+    fn wrong_token_gives_401() {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let status = post(server.port, "/hook", Some("not-the-token"), "X-Deckhand-Token", br#"{"a":1}"#);
+        assert_eq!(status, 401);
+    }
+
+    #[test]
+    fn correct_token_wrong_path_gives_404() {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let status = post(server.port, "/other", Some(&server.token), "X-Deckhand-Token", br#"{"a":1}"#);
+        assert_eq!(status, 404);
+    }
+
+    #[test]
+    fn correct_token_invalid_json_gives_400() {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let status = post(server.port, "/hook", Some(&server.token), "X-Deckhand-Token", b"not json");
+        assert_eq!(status, 400);
+    }
+
+    #[test]
+    fn a_leading_utf8_bom_is_accepted() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let mut body = vec![0xEF, 0xBB, 0xBF];
+        body.extend_from_slice(br#"{"a":2}"#);
+        let status = post(server.port, "/hook", Some(&server.token), "X-Deckhand-Token", &body);
+        assert_eq!(status, 204);
+        let v = rx.recv_timeout(Duration::from_millis(500)).expect("the BOM must be tolerated, not rejected");
+        assert_eq!(v, serde_json::json!({"a": 2}));
+    }
+
+    #[test]
+    fn the_header_name_is_matched_case_insensitively() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let status = post(server.port, "/hook", Some(&server.token), "X-DECKHAND-TOKEN", br#"{"a":3}"#);
+        assert_eq!(status, 204);
+        assert!(rx.recv_timeout(Duration::from_millis(500)).is_ok());
+    }
+
+    #[test]
+    fn two_sequential_posts_arrive_in_order() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        post(server.port, "/hook", Some(&server.token), "X-Deckhand-Token", br#"{"n":1}"#);
+        post(server.port, "/hook", Some(&server.token), "X-Deckhand-Token", br#"{"n":2}"#);
+        let first = rx.recv_timeout(Duration::from_millis(500)).unwrap();
+        let second = rx.recv_timeout(Duration::from_millis(500)).unwrap();
+        assert_eq!(first, serde_json::json!({"n": 1}));
+        assert_eq!(second, serde_json::json!({"n": 2}));
+    }
+}

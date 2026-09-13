@@ -7,11 +7,18 @@
 // words, expanding the panel first if it was collapsed
 // (docs/UI_SPEC.md#command-keys).
 
+import {
+  displayName,
+  escapeHtml,
+  fmtElapsed,
+  GLYPHS,
+  slot2Text,
+  STATE_WORDS,
+} from "./format.js";
 import { applyTheme, dark } from "./theme.js";
 import {
   BindableSession,
   SessionSnap,
-  SessionState,
   Snapshot,
   tauri,
   TileSnapshot,
@@ -37,46 +44,7 @@ const stick = document.getElementById("stick")!;
 const dial = document.getElementById("dial")!;
 const talkcol = document.getElementById("talkcol")!;
 
-// ---- Glyphs: drawn, never emoji (docs/UI_SPEC.md#state-rendering) ----
-
-const GLYPHS: Record<string, string> = {
-  idle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>`,
-  thinking: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 4 a8 8 0 0 1 8 8"/></svg>`,
-  needs_input: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11V6a1.5 1.5 0 0 1 3 0v4V5a1.5 1.5 0 0 1 3 0v5V6.5a1.5 1.5 0 0 1 3 0V12v-2a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4.6 14a1.6 1.6 0 0 1 2.6-1.8L8.5 14"/></svg>`,
-  complete: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4 10-10"/></svg>`,
-  error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
-  unknown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 9a3 3 0 1 1 4.2 2.8c-.9.4-1.2 1-1.2 2.2"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></svg>`,
-  ended: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 12h10"/></svg>`,
-  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 6v12M6 12h12"/></svg>`,
-};
-
-const STATE_WORDS: Record<SessionState, string> = {
-  idle: "idle",
-  thinking: "thinking",
-  needs_input: "waiting on you",
-  complete: "complete",
-  error: "error",
-  ended: "ended",
-  unknown: "unknown",
-};
-
 // ---- Small helpers --------------------------------------------------
-
-function fmtElapsed(fromMs: number, nowMs: number): string {
-  const s = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
-  const m = Math.floor(s / 60);
-  if (m >= 60) {
-    return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
-  }
-  return `${m}:${String(s % 60).padStart(2, "0")}`;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 function selectedTile(): TileSnapshot | null {
   return snapshot.tiles.find((t) => t.selected) ?? null;
@@ -112,21 +80,6 @@ function noteMessage(text: string): void {
 
 // ---- Tiles ----------------------------------------------------------
 
-function slot2Text(s: SessionSnap): string {
-  if (s.state === "needs_input") {
-    if (s.detailKind === "question") return "question";
-    if (s.detailKind === "permission") return "permission";
-    return "input needed";
-  }
-  if (s.state === "error" && s.error) return s.error.kind;
-  if (s.openOps.length > 0) {
-    const newest = s.openOps[s.openOps.length - 1];
-    if (newest) return newest.tool;
-  }
-  if (s.detailTool) return s.detailTool;
-  return STATE_WORDS[s.state];
-}
-
 function renderTile(t: TileSnapshot): HTMLElement {
   const el = document.createElement("button");
   el.className = "tile";
@@ -153,7 +106,7 @@ function renderTile(t: TileSnapshot): HTMLElement {
     <span class="badge-mode">${escapeHtml(s.permissionMode ?? "unknown")}</span>
     ${s.children > 0 ? `<span class="badge-children">&#215;${s.children}</span>` : ""}
     <div class="glyph${spinning}">${glyph}</div>
-    <div class="slot1">${escapeHtml(s.label || s.id.slice(0, 8))}</div>
+    <div class="slot1">${escapeHtml(displayName(s))}</div>
     <div class="slot2">${escapeHtml(slot2Text(s))}</div>
     <div class="slot3" data-from="${elapsedFrom}">${fmtElapsed(elapsedFrom, Date.now())}</div>`;
 
@@ -388,7 +341,7 @@ function renderPanel(): void {
   identity.className = "panel-identity";
   identity.textContent = t
     ? s
-      ? `tile ${t.index + 1} · ${s.label || s.id.slice(0, 8)} · ${s.permissionMode ?? "unknown"} · attached`
+      ? `tile ${t.index + 1} · ${displayName(s)} · ${s.permissionMode ?? "unknown"} · attached`
       : `tile ${t.index + 1} · unbound`
     : "no tile selected";
 
@@ -518,7 +471,7 @@ async function openPicker(tileIndex: number): Promise<void> {
     const row = document.createElement("button");
     row.className = "picker-row";
     const name = document.createElement("span");
-    name.textContent = s.label || s.id.slice(0, 8);
+    name.textContent = displayName(s);
     const cwd = document.createElement("span");
     cwd.className = "row-cwd";
     cwd.textContent = s.cwd ?? "";

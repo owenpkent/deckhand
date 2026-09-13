@@ -70,7 +70,9 @@ security specs and trying to find a real scenario they do not cover.
    ```
 
 2. To read, start from `README.md`. To run the Phase 1 board on Windows
-   (needs Rust, Node, and Python): `python scripts/run.py`.
+   (needs Rust, Node, and Python): `python scripts/run.py`. To run the
+   tests: `cargo test --workspace` at the root and `npm test` in
+   `app/ui`; CI runs the same two on every pull request.
 
 3. Ready to propose a change? See Conventions below for commit and branch
    naming, then Pull requests for how to submit it.
