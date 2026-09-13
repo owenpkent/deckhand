@@ -232,9 +232,10 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       work area, with a saved position validated against the monitors
       actually connected at startup.
 - [ ] Exclude Deckhand's own window from the raise match (ADR-028).
-- [ ] Register the shim in user-level Claude Code settings so sessions in
-      every repo report state, not only this one. (run
-      scripts/install-hooks.ps1)
+- [x] Register the shim in user-level Claude Code settings so sessions in
+      every repo report state, not only this one (done on the owner's
+      machine with scripts/install-hooks.ps1 on 2026-09-13; the repo-local
+      wiring was removed at the same time).
 
 ---
 
