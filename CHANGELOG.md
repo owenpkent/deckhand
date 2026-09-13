@@ -35,9 +35,7 @@ version number is invented and no past release is backfilled.
   candidates. `docs/CONTROL_MAPPING.md`, `docs/UI_SPEC.md`,
   `docs/ARCHITECTURE.md`, `docs/ACCESSIBILITY.md`,
   `docs/EXECUTIVE_SUMMARY.md`, `README.md`, `TODO.md`, and `ROADMAP.md`
-  are updated to match; `app/` still implements the wider control set
-  the change just before this one added and has not yet been brought
-  down to it.
+  are updated to match, and `app/` implements the list.
 
 ### Added
 

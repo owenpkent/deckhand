@@ -31,15 +31,15 @@ to the front in a single click.
 ## Status
 
 **Phase 1: observation, started.** The specification is complete and the
-first code exists: a daemon and tile surface in one Tauri application
+first code exists: a daemon and list surface in one Tauri application
 plus the hook shim, building and passing their tests, with the
 observation pipeline proven end to end against live sessions.
-[ADR-028](docs/DECISIONS.md#adr-028) (2026-09-13) narrowed the target
-surface to a session list plus Move and Quit, and replaced the six-slot
-binding with an auto-binding, unbounded list; the code below still
-implements the wider control set the change just before it added, and
-has not yet been brought down to match. One Phase 0 item also stays
-open alongside it: hook payload validation against a live install has
+[ADR-028](docs/DECISIONS.md#adr-028) (2026-09-13) narrowed the surface
+to a session list plus Move and Quit, and replaced the six-slot binding
+with an auto-binding, unbounded list; the code implements that list,
+and on its first run bound ten live sessions across four repos. One
+Phase 0 item also stays open alongside it: hook payload validation
+against a live install has
 ten of the twelve documented events observed, with `Notification` and
 `StopFailure` still unseen.
 
@@ -53,7 +53,7 @@ ten of the twelve documented events observed, with `Notification` and
 | Tauri no-focus-steal window spike | ✅ Passed on Windows 11 (ADR-025) |
 | Hook payload validation spike | ⏳ Ten of twelve events observed live; two remain |
 | Daemon, shim, state machine | ✅ Phase 1 skeleton; live sessions paint real status |
-| Session-list surface, auto-binding | ⏳ Designed (ADR-028); code not yet updated to match |
+| Session-list surface, auto-binding | ✅ Built (ADR-028); binds every enumerated session, prunes ended ones |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet, and not currently planned on the surface |
 
 Build and run it with `python run.py`, which checks the toolchain,
