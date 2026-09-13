@@ -15,7 +15,10 @@ import test from "node:test";
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dist-test/test -> dist-test -> app/ui, where styles.css actually lives.
 const cssPath = path.join(here, "../../styles.css");
-const css = readFileSync(cssPath, "utf8");
+// Normalise line endings first: a checkout with autocrlf, which is what
+// the GitHub Windows runners do, hands back CRLF, and the multi-line
+// selectors matched below are written with plain newlines.
+const css = readFileSync(cssPath, "utf8").replace(/\r\n/g, "\n");
 
 // Returns the declaration body of the first rule whose selector text is
 // `selector`. Requires selector to include enough of the following
