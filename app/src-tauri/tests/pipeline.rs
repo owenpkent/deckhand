@@ -1,7 +1,10 @@
 // End-to-end pipeline test: a raw HTTP POST, through the real ingest
 // server and an apply loop shaped like main.rs's, into a Registry, read
 // back out through Registry::snapshot. This is the six-session colour
-// test run headless, without Tauri or a real shim.
+// test run headless, without Tauri or a real shim, updated for the
+// unbounded auto-binding list: there is no fixed slot count any more,
+// and an ended session never appears in the list at all rather than
+// occupying a slot nothing can reclaim.
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -104,8 +107,12 @@ fn six_sessions_paint_six_distinct_colours_end_to_end() {
         assert_eq!(status, 204, "the shim's payload shape for {id} must be accepted");
     }
 
-    let ready = wait_until(&reg, |r| r.bindings.iter().all(Option::is_some) && r.sessions.len() >= 6);
-    assert!(ready, "the pipeline must bind all six sessions within the wait budget");
+    // Five sessions land in the list (idle, thinking, needs-input,
+    // complete, error); the ended one never does, since apply_hook
+    // unbinds on the very same event that ends it and it was never
+    // bound before that.
+    let ready = wait_until(&reg, |r| r.bindings.len() == 5 && r.sessions.len() >= 6);
+    assert!(ready, "the pipeline must bind the five live sessions within the wait budget");
 
     {
         let r = reg.lock().unwrap();
@@ -115,18 +122,19 @@ fn six_sessions_paint_six_distinct_colours_end_to_end() {
             ("sess-needs-input", "needs-input-proj", SessionState::NeedsInput),
             ("sess-complete", "complete-proj", SessionState::Complete),
             ("sess-error", "error-proj", SessionState::Error),
-            ("sess-ended", "ended-proj", SessionState::Ended),
         ];
         for (i, (id, label, st)) in expect.iter().enumerate() {
-            assert_eq!(r.bindings[i].as_deref(), Some(*id), "tile {i} must hold the session heard {i}th");
+            assert_eq!(r.bindings[i], *id, "row {i} must hold the session heard {i}th");
             let session = &r.sessions[*id];
             assert_eq!(session.state, *st, "{id} must show the state its event maps to");
             assert_eq!(&session.label, label, "{id}'s label must come from its cwd");
         }
+        assert!(!r.is_bound("sess-ended"), "an ended session must never occupy a row");
+        assert_eq!(r.sessions["sess-ended"].state, SessionState::Ended);
     }
 
-    // A seventh session: every tile is already full, so it gets none,
-    // but it must still show up as a candidate to bind.
+    // A seventh session: there is no fixed slot count, so it binds too,
+    // landing after the five already in the list.
     let seventh = json!({
         "hook_event_name": "UserPromptSubmit",
         "session_id": "sess-seventh",
@@ -134,12 +142,11 @@ fn six_sessions_paint_six_distinct_colours_end_to_end() {
     });
     let status = post(server.port, &server.token, &seventh);
     assert_eq!(status, 204);
-    let seen = wait_until(&reg, |r| r.sessions.contains_key("sess-seventh"));
-    assert!(seen, "the seventh session must still be registered even with no free tile");
+    let seen = wait_until(&reg, |r| r.is_bound("sess-seventh"));
+    assert!(seen, "a seventh session must still bind: the list is unbounded");
     {
         let r = reg.lock().unwrap();
-        assert!(!r.is_bound("sess-seventh"), "a seventh session gets no tile");
-        assert!(r.bindable().iter().any(|b| b.id == "sess-seventh"), "but it must still be bindable");
+        assert_eq!(r.bindings.last().map(String::as_str), Some("sess-seventh"));
     }
 
     // The T_unknown watchdog: every live session goes quiet, but an

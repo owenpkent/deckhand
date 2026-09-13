@@ -5,13 +5,14 @@
 // workspace or directory name in the window title, which is the only
 // route on a vscode-extension host where every window shares one
 // process, and a decent heuristic for terminals. Confidence is
-// synthetic; a miss returns an honest sentence for the detail panel
-// instead of pretending.
+// synthetic; a miss returns an honest sentence the surface shows as an
+// inline row note instead of pretending.
 //
-// Scoring (`pick`) is plain data in, data out, so it is tested without a
-// window manager. Everything that actually touches Win32 is cfg-gated
-// per item instead of at module scope, so `Candidate` and `pick` build
-// and test on any host.
+// Scoring (`pick`) and the own-process filter (`exclude_own_process`)
+// are plain data in, data out, so both are tested without a window
+// manager. Everything that actually touches Win32 is cfg-gated per item
+// instead of at module scope, so `Candidate`, `pick`, and
+// `exclude_own_process` build and test on any host.
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::{HWND, LPARAM};
@@ -77,6 +78,17 @@ fn log_attempt(
     }
 }
 
+/// Remove every window owned by this very process before scoring
+/// (PR review P2). Without this, Deckhand's own board can tie a real
+/// host on label or dir text and, as whichever candidate EnumWindows
+/// happened to visit first, win the tie outright (`pick` keeps the
+/// first candidate on a tie). Filtering by pid rather than by title
+/// means a project actually named "Deckhand" is still found correctly;
+/// only this process's own window is ever excluded.
+pub fn exclude_own_process(windows: Vec<Candidate>, own_pid: u32) -> Vec<Candidate> {
+    windows.into_iter().filter(|c| c.pid != own_pid).collect()
+}
+
 /// Score every candidate against a session's label, cwd directory name,
 /// and pid, and return the best. A pid match is worth more than either
 /// text match because it is exact rather than a guess; a candidate with
@@ -130,6 +142,7 @@ pub fn reveal(label: &str, dir: Option<&str>, pid: Option<u32>) -> String {
     unsafe {
         EnumWindows(Some(collect), &mut windows as *mut _ as LPARAM);
     }
+    let windows = exclude_own_process(windows, std::process::id());
 
     let best = pick(&windows, label, dir, pid);
 
@@ -214,5 +227,37 @@ mod tests {
     fn a_candidate_with_score_zero_is_never_returned() {
         let windows = vec![c(1, "unrelated", 1)];
         assert!(pick(&windows, "deckhand", Some("undertow"), Some(2)).is_none());
+    }
+
+    // ---- PR review P2: Deckhand's own window must never win Reveal -----
+
+    #[test]
+    fn excluding_the_own_process_lets_a_tied_valid_host_win() {
+        const OWN_PID: u32 = 1000;
+        // The board itself is enumerated first and ties the real host on
+        // the label text alone; pick()'s own tie-break (first candidate
+        // wins) would hand Reveal to the board.
+        let windows = vec![c(1, "deckhand", OWN_PID), c(2, "deckhand - undertow", 2000)];
+        let (_, unfiltered_best) = pick(&windows, "deckhand", None, None).unwrap();
+        assert_eq!(unfiltered_best.hwnd, 1, "sanity: without filtering, the board wins the tie by being first");
+
+        let filtered = exclude_own_process(windows, OWN_PID);
+        let (_, best) = pick(&filtered, "deckhand", None, None).unwrap();
+        assert_eq!(best.hwnd, 2, "the board must never win a Reveal, even on a tie it would otherwise take");
+    }
+
+    #[test]
+    fn exclude_own_process_leaves_every_other_window_untouched() {
+        let windows = vec![c(1, "a", 1), c(2, "b", 2), c(3, "c", 3)];
+        let filtered = exclude_own_process(windows, 999);
+        assert_eq!(filtered.len(), 3);
+    }
+
+    #[test]
+    fn exclude_own_process_can_remove_more_than_one_window_of_its_own() {
+        let windows = vec![c(1, "deckhand", 42), c(2, "deckhand settings", 42), c(3, "host", 7)];
+        let filtered = exclude_own_process(windows, 42);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].hwnd, 3);
     }
 }

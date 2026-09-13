@@ -54,14 +54,6 @@ export interface Snapshot {
   nowMs: number;
 }
 
-export interface BindableSession {
-  id: string;
-  label: string;
-  cwd: string | null;
-  state: SessionState;
-  boundTo: number | null;
-}
-
 // The pieces of the injected Tauri global this surface uses.
 export interface TauriApi {
   core: { invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> };

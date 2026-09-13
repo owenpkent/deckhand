@@ -2,7 +2,7 @@
 // document, Tauri, or module-level mutable state, so these are safe to
 // unit-test without a browser (docs/ARCHITECTURE.md#the-surface).
 
-import { SessionSnap, SessionState } from "./types.js";
+import { SessionState } from "./types.js";
 
 // ---- Glyphs: drawn, never emoji (docs/UI_SPEC.md#state-rendering) ----
 
@@ -14,7 +14,6 @@ export const GLYPHS: Record<string, string> = {
   error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
   unknown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 9a3 3 0 1 1 4.2 2.8c-.9.4-1.2 1-1.2 2.2"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></svg>`,
   ended: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 12h10"/></svg>`,
-  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 6v12M6 12h12"/></svg>`,
 };
 
 export const STATE_WORDS: Record<SessionState, string> = {
@@ -45,23 +44,16 @@ export function escapeHtml(text: string): string {
     .replaceAll(">", "&gt;");
 }
 
-// Shared by tiles, the panel identity line, and picker rows: prefer the
-// human label, fall back to a short id fragment.
+// Shared by session rows: prefer the human label, fall back to a short
+// id fragment.
 export function displayName(s: { id: string; label: string }): string {
   return s.label || s.id.slice(0, 8);
 }
 
-export function slot2Text(s: SessionSnap): string {
-  if (s.state === "needs_input") {
-    if (s.detailKind === "question") return "question";
-    if (s.detailKind === "permission") return "permission";
-    return "input needed";
-  }
-  if (s.state === "error" && s.error) return s.error.kind;
-  if (s.openOps.length > 0) {
-    const newest = s.openOps[s.openOps.length - 1];
-    if (newest) return newest.tool;
-  }
-  if (s.detailTool) return s.detailTool;
-  return STATE_WORDS[s.state];
+// Reveal always returns a sentence, success or miss. A successful raise
+// is visible on its own (the host window comes forward), so only a miss
+// is worth showing as a row note; this is the plain-data decision behind
+// that, pulled out so it is testable without touching the DOM.
+export function isRevealSuccess(text: string): boolean {
+  return text.startsWith("Raised ");
 }

@@ -8,3 +8,4 @@ pub mod persist;
 pub mod registry;
 pub mod reveal;
 pub mod state;
+pub mod window;

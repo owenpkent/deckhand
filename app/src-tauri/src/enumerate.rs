@@ -1,13 +1,23 @@
-// Cold start: `claude agents --json`. Documented, keys observed 2.1.220:
-// pid, cwd, kind, startedAt, sessionId, name. No status key exists on
-// 2.1.220 (ADR-024), so this channel recovers bindings and labels, never
-// state: every session it registers lands in unknown and stays there
-// until a hook event colours it.
+// Cold start and the periodic rescan: `claude agents --json`.
+// Documented, keys observed 2.1.220: pid, cwd, kind, startedAt,
+// sessionId, name. No status key exists on 2.1.220 (ADR-024), so this
+// channel recovers bindings and labels, never state: every session it
+// registers lands in unknown and stays there until a hook event colours
+// it.
 //
 // Fetching shells out and can take a second, so it is split from
 // registering: fetch without the registry lock, register with it. The
 // JSON-shape logic is further split from the shelling out (`parse`) so
 // it can be tested without a `claude` binary on PATH.
+//
+// `register` also prunes: a session bound from a previous run that this
+// run does not report is dropped from the list (unless a hook has heard
+// from it inside the grace window; see registry::prune_missing). That
+// pruning is only sound because `fetch` failing returns `None` rather
+// than `Some(vec![])`, so a dead or unparseable `claude` can never be
+// mistaken for "nobody is running" and empty the whole list.
+
+use std::collections::HashSet;
 
 use serde_json::Value;
 
@@ -60,9 +70,16 @@ pub fn parse(stdout: &[u8]) -> Option<Vec<Row>> {
     )
 }
 
+/// Register every row from a successful enumeration, then prune any
+/// bound session this run does not report. Only call this with rows from
+/// a run that actually succeeded (`fetch` returned `Some`, even if the
+/// vec is empty): a failed run must never reach here, or an empty
+/// `present` set would prune every session in the list.
 pub fn register(reg: &mut Registry, rows: &[Row], now_ms: i64) -> bool {
     let mut changed = false;
+    let mut present: HashSet<String> = HashSet::with_capacity(rows.len());
     for row in rows {
+        present.insert(row.id.clone());
         changed |= reg.register_enumerated(
             &row.id,
             row.name.as_deref(),
@@ -71,6 +88,7 @@ pub fn register(reg: &mut Registry, rows: &[Row], now_ms: i64) -> bool {
             now_ms,
         );
     }
+    changed |= reg.prune_missing(&present, now_ms);
     changed
 }
 
@@ -133,6 +151,31 @@ mod tests {
     fn a_top_level_string_or_number_gives_none() {
         assert!(parse(b"\"hello\"").is_none());
         assert!(parse(b"42").is_none());
+    }
+
+    #[test]
+    fn register_prunes_a_bound_session_a_successful_run_no_longer_reports() {
+        let mut reg = Registry::default();
+        // s1 was bound by an earlier successful run; this run reports
+        // only s2, and s1 has not been heard from since (well past the
+        // enumeration grace window).
+        assert!(register(&mut reg, &parse(&json!([{"sessionId": "s1"}]).to_string().into_bytes()).unwrap(), 0));
+        let later = crate::registry::ENUM_GRACE_MS + 1;
+        let rows = parse(&json!([{"sessionId": "s2"}]).to_string().into_bytes()).unwrap();
+        assert!(register(&mut reg, &rows, later));
+        assert!(!reg.is_bound("s1"), "a session missing from a successful run must be pruned");
+        assert!(reg.is_bound("s2"));
+    }
+
+    #[test]
+    fn register_never_prunes_within_the_grace_window() {
+        let mut reg = Registry::default();
+        assert!(register(&mut reg, &parse(&json!([{"sessionId": "s1"}]).to_string().into_bytes()).unwrap(), 0));
+        // A run moments later that no longer reports s1 must not drop it
+        // yet: enumeration can lag a live hook by a beat or two.
+        let rows = parse(&json!([{"sessionId": "s2"}]).to_string().into_bytes()).unwrap();
+        register(&mut reg, &rows, 10);
+        assert!(reg.is_bound("s1"), "a session inside the grace window must survive");
     }
 
     #[test]

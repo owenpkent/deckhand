@@ -1,8 +1,9 @@
 /* Deckhand surface. Colours come from theme tokens set by theme.ts;
    nothing here names a hex for a state colour. Interaction rules:
    single clicks only, 44 px minimum hit targets, no hover-only
-   reveals, no keyboard anything (docs/ACCESSIBILITY.md). Disabled
-   controls stay visible and clicking one reveals why in the panel. */
+   reveals, no keyboard anything (docs/ACCESSIBILITY.md). Colour is
+   never the only channel for a session's state: every row also carries
+   a glyph and a state word. */
 
 * {
   margin: 0;
@@ -21,12 +22,9 @@ body {
 }
 
 #surface {
-  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 8px;
-  gap: 8px;
   transition: opacity 600ms ease;
 }
 
@@ -34,15 +32,15 @@ body {
   opacity: 0.55;
 }
 
-#strip-row {
+/* ---- Header: drag grip, Move, Quit ---------------------------------- */
+
+#header {
   display: flex;
   align-items: stretch;
   gap: 8px;
-  height: 112px;
+  padding: 8px;
   flex: 0 0 auto;
 }
-
-/* ---- Drag grip ------------------------------------------------------ */
 
 #grip {
   width: 14px;
@@ -57,272 +55,8 @@ body {
   cursor: grab;
 }
 
-/* ---- Tiles ---------------------------------------------------------- */
-
-#strip {
-  display: flex;
-  gap: 8px;
-}
-
-.tile {
-  position: relative;
-  width: 96px;
-  height: 96px;
-  align-self: center;
-  border-radius: 10px;
-  background: var(--tile);
-  border: 3px solid var(--tile-border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  cursor: pointer;
-  overflow: hidden;
-  color: var(--text);
-  font-family: inherit;
-}
-
-.tile.selected {
-  border-width: 5px;
-}
-
-.tile.selected::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-bottom: 7px solid var(--ring, var(--tile-border));
-}
-
-.tile[data-state="idle"] {
-  --ring: var(--c-idle);
-}
-.tile[data-state="thinking"] {
-  --ring: var(--c-thinking);
-}
-.tile[data-state="needs_input"] {
-  --ring: var(--c-needs-input);
-  background: color-mix(in srgb, var(--c-needs-input) 20%, var(--tile));
-}
-.tile[data-state="complete"] {
-  --ring: var(--c-complete);
-  background: color-mix(in srgb, var(--c-complete) 10%, var(--tile));
-}
-.tile[data-state="error"] {
-  --ring: var(--c-error);
-  background: color-mix(in srgb, var(--c-error) 20%, var(--tile));
-}
-.tile[data-state="unknown"] {
-  --ring: var(--c-unknown);
-  background: repeating-linear-gradient(
-    45deg,
-    var(--tile),
-    var(--tile) 6px,
-    color-mix(in srgb, var(--c-unknown) 18%, var(--tile)) 6px,
-    color-mix(in srgb, var(--c-unknown) 18%, var(--tile)) 12px
-  );
-}
-
-.tile[data-state] {
-  border-color: var(--ring, var(--tile-border));
-}
-
-.tile[data-state="ended"],
-.tile.unbound {
-  --ring: transparent;
-  border: 3px dashed var(--tile-border);
-  background: var(--tile);
-}
-
-.glyph {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  color: var(--ring, var(--subtext));
-}
-
-.tile.unbound .glyph {
-  color: var(--subtext);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.glyph.spinning {
-  animation: spin 1.2s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glyph.spinning {
-    animation: none;
-  }
-}
-
-.slot1 {
-  font-size: 14px;
-  font-weight: 600;
-  max-width: 88px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.slot2 {
-  font-size: 12px;
-  color: var(--subtext);
-  max-width: 88px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.slot3 {
-  font-size: 12px;
-  color: var(--subtext);
-  font-variant-numeric: tabular-nums;
-}
-
-.badge-mode {
-  position: absolute;
-  top: 3px;
-  right: 7px;
-  font-size: 11px;
-  color: var(--subtext);
-  pointer-events: none;
-}
-
-.badge-children {
-  position: absolute;
-  bottom: 3px;
-  right: 7px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
-  pointer-events: none;
-}
-
-/* ---- Shared control chrome ----------------------------------------- */
-
-.ctl {
-  border-radius: 8px;
-  border: 1px solid var(--tile-border);
-  background: var(--tile);
-  color: var(--text);
-  font-family: inherit;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-}
-
-.ctl:active {
-  background: var(--tile-border);
-}
-
-/* Disabled controls stay visible and clickable: the click reveals why
-   in the panel. Never a tooltip, never a silent no-op. */
-.ctl.off {
-  opacity: 0.45;
-}
-
-.ctl .k-glyph {
-  font-size: 15px;
-  line-height: 1;
-}
-
-.ctl .k-label {
-  font-size: 10px;
-  color: var(--subtext);
-}
-
-/* ---- Command keys: two rows of three ------------------------------- */
-
-#keys {
-  display: grid;
-  grid-template-columns: repeat(3, 66px);
-  grid-template-rows: repeat(2, 44px);
-  gap: 6px;
-  align-self: center;
-}
-
-.key-approve .k-glyph {
-  color: var(--c-complete);
-}
-.key-deny .k-glyph,
-.key-interrupt .k-glyph {
-  color: var(--c-error);
-}
-
-/* ---- Stick: four-way pad ------------------------------------------- */
-
-#stick {
-  display: grid;
-  grid-template-columns: repeat(2, 44px);
-  grid-template-rows: repeat(2, 44px);
-  gap: 4px;
-  align-self: center;
-}
-
-/* ---- Dial ----------------------------------------------------------- */
-
-#dial {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-self: center;
-  align-items: center;
-}
-
-#dial .dial-commit {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-}
-
-#dial .dial-steppers {
-  display: flex;
-  gap: 4px;
-}
-
-#dial .dial-steppers .ctl {
-  width: 46px;
-  height: 44px;
-}
-
-/* ---- Talk and send -------------------------------------------------- */
-
-#talkcol {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-self: center;
-}
-
-#talkcol .ctl {
-  width: 48px;
-  height: 44px;
-}
-
-/* ---- Side ----------------------------------------------------------- */
-
-#side {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-self: center;
-}
-
 .side-btn {
-  min-width: 52px;
+  flex: 1;
   min-height: 44px;
   border-radius: 8px;
   border: 1px solid var(--tile-border);
@@ -346,165 +80,128 @@ body {
   background: var(--tile-border);
 }
 
-/* ---- Detail panel ---------------------------------------------------- */
+/* ---- Session list ---------------------------------------------------- */
 
-#panel {
+#list {
   flex: 1;
   min-height: 0;
-  display: flex;
-  gap: 12px;
-  border-top: 1px solid var(--tile-border);
-  padding-top: 8px;
-}
-
-#panel[hidden] {
-  display: none;
-}
-
-.panel-main {
-  flex: 1;
-  min-width: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
-.panel-identity {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.panel-state {
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.panel-item {
-  font-family: Consolas, monospace;
-  font-size: 12px;
-  color: var(--subtext);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.panel-message {
-  font-size: 13px;
-  color: var(--text);
-  background: var(--tile);
-  border: 1px solid var(--tile-border);
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-
-.panel-message:empty {
-  display: none;
-}
-
-.panel-question {
-  font-size: 13px;
-}
-
-.answer-targets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.answer-targets .ctl {
-  min-height: 44px;
-  padding: 4px 14px;
-}
-
-.panel-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.row {
+  position: relative;
+  min-height: 48px;
   flex: 0 0 auto;
-}
-
-.panel-actions .ctl {
-  min-width: 96px;
-  min-height: 44px;
-  padding: 0 10px;
-}
-
-/* ---- Bind picker ---------------------------------------------------- */
-
-#picker {
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  z-index: 10;
-}
-
-#picker[hidden] {
-  display: none;
-}
-
-.picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  color: var(--subtext);
-  padding: 2px 4px;
-}
-
-.picker-rows {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.picker-row {
-  min-height: 44px;
-  flex: 0 0 auto;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid var(--tile-border);
+  padding: 0 12px;
+  border: none;
+  border-left: 4px solid var(--ring, var(--tile-border));
+  border-bottom: 1px solid var(--tile-border);
   background: var(--tile);
   color: var(--text);
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  font-size: 13px;
 }
 
-.picker-row .row-state {
-  color: var(--subtext);
-  font-size: 12px;
-  margin-left: auto;
+.row.selected {
+  background: var(--tile-border);
+  border-left-width: 6px;
+}
+
+.row[data-state="idle"] {
+  --ring: var(--c-idle);
+}
+.row[data-state="thinking"] {
+  --ring: var(--c-thinking);
+}
+.row[data-state="needs_input"] {
+  --ring: var(--c-needs-input);
+  background: color-mix(in srgb, var(--c-needs-input) 15%, var(--tile));
+}
+.row[data-state="complete"] {
+  --ring: var(--c-complete);
+  background: color-mix(in srgb, var(--c-complete) 10%, var(--tile));
+}
+.row[data-state="error"] {
+  --ring: var(--c-error);
+  background: color-mix(in srgb, var(--c-error) 15%, var(--tile));
+}
+.row[data-state="unknown"] {
+  --ring: var(--c-unknown);
+}
+.row[data-state="ended"] {
+  --ring: transparent;
+}
+
+.row[data-state="unknown"],
+.row[data-state="ended"] {
+  border-left-style: dashed;
+}
+
+.row .glyph {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--ring, var(--subtext));
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.glyph.spinning {
+  animation: spin 1.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glyph.spinning {
+    animation: none;
+  }
+}
+
+.row-name {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
-}
-
-.picker-row .row-cwd {
-  color: var(--subtext);
-  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 420px;
 }
 
-.picker-btn {
-  min-width: 44px;
-  min-height: 36px;
-  border-radius: 6px;
-  border: 1px solid var(--tile-border);
-  background: var(--tile);
-  color: var(--text);
-  font-family: inherit;
-  cursor: pointer;
+.row-state {
+  font-size: 12px;
+  color: var(--subtext);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.row-note {
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  font-size: 11px;
+  color: var(--subtext);
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.row-empty {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--subtext);
   font-size: 13px;
-  padding: 0 10px;
+  cursor: default;
 }

@@ -9,7 +9,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::registry::{Registry, TILE_COUNT};
+use crate::registry::Registry;
 
 pub fn data_dir() -> Option<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")?;
@@ -78,24 +78,25 @@ pub fn load_window_pos_in(dir: &Path) -> Option<WindowPos> {
     serde_json::from_str(&body).ok()
 }
 
+/// The list is ordered and unbounded: index is row position, not a slot
+/// out of a fixed count. Every entry is a real binding; there are no
+/// gaps in a file this build writes.
 pub fn save_bindings(reg: &Registry) {
     let Some(dir) = data_dir() else { return };
     save_bindings_in(&dir, reg);
 }
 
 pub fn save_bindings_in(dir: &Path, reg: &Registry) {
-    let list: Vec<Option<SavedBinding>> = reg
+    let list: Vec<SavedBinding> = reg
         .bindings
         .iter()
-        .map(|b| {
-            b.as_ref().map(|id| SavedBinding {
-                id: id.clone(),
-                label: reg
-                    .sessions
-                    .get(id)
-                    .map(|s| s.label.clone())
-                    .unwrap_or_default(),
-            })
+        .map(|id| SavedBinding {
+            id: id.clone(),
+            label: reg
+                .sessions
+                .get(id)
+                .map(|s| s.label.clone())
+                .unwrap_or_default(),
         })
         .collect();
     if let Ok(body) = serde_json::to_string(&list) {
@@ -105,10 +106,16 @@ pub fn save_bindings_in(dir: &Path, reg: &Registry) {
 
 /// Restore bindings and materialise a placeholder session for any bound
 /// id the daemon has not seen: state unknown, saved label. That is the
-/// cold-start promise (docs/ARCHITECTURE.md): the tiles are the right
-/// tiles under the right names, and they are grey until an event or the
-/// enumeration says more. A bound tile must never render as unbound just
-/// because the daemon restarted.
+/// cold-start promise (docs/ARCHITECTURE.md): the rows are the right
+/// rows under the right names, and they are grey until an event or the
+/// enumeration says more. A bound row must never disappear just because
+/// the daemon restarted.
+///
+/// The file this build writes is a plain array of `{id,label}`, but a
+/// pre-list build wrote a fixed six-element array with `null` for an
+/// empty slot; that shape still parses here (each slot is
+/// `Option<SavedBinding>`) and the nulls are simply dropped, so a
+/// daemon upgraded in place keeps whatever it had bound, minus the gaps.
 pub fn load_bindings(reg: &mut Registry, now_ms: i64) {
     let Some(dir) = data_dir() else { return };
     load_bindings_in(&dir, reg, now_ms);
@@ -121,10 +128,10 @@ pub fn load_bindings_in(dir: &Path, reg: &mut Registry, now_ms: i64) {
     let Ok(list) = serde_json::from_str::<Vec<Option<SavedBinding>>>(&body) else {
         return;
     };
-    for (i, saved) in list.into_iter().take(TILE_COUNT).enumerate() {
-        if let Some(saved) = saved {
-            reg.ensure_session(&saved.id, &saved.label, now_ms);
-            reg.bindings[i] = Some(saved.id);
+    for saved in list.into_iter().flatten() {
+        reg.ensure_session(&saved.id, &saved.label, now_ms);
+        if !reg.bindings.contains(&saved.id) {
+            reg.bindings.push(saved.id);
         }
     }
 }
@@ -184,16 +191,16 @@ mod tests {
     }
 
     #[test]
-    fn bindings_round_trip_preserves_tile_index_id_and_label() {
+    fn bindings_round_trip_preserves_order_id_and_label() {
         let dir = temp_dir();
         let mut reg = Registry::default();
         reg.ensure_session("s1", "My Label", 1);
-        reg.bindings[2] = Some("s1".to_string());
+        reg.bindings.push("s1".to_string());
         save_bindings_in(&dir, &reg);
 
         let mut reg2 = Registry::default();
         load_bindings_in(&dir, &mut reg2, 5);
-        assert_eq!(reg2.bindings[2].as_deref(), Some("s1"));
+        assert_eq!(reg2.bindings, vec!["s1".to_string()]);
         assert_eq!(reg2.sessions["s1"].label, "My Label");
         cleanup(&dir);
     }
@@ -201,6 +208,7 @@ mod tests {
     #[test]
     fn a_bound_id_the_registry_has_never_seen_materialises_as_unknown_with_the_saved_label() {
         let dir = temp_dir();
+        // The legacy shape: a fixed six-element array with null gaps.
         let saved: Vec<Option<SavedBinding>> = vec![
             None,
             Some(SavedBinding { id: "ghost".into(), label: "Ghost Session".into() }),
@@ -213,7 +221,7 @@ mod tests {
 
         let mut reg = Registry::default();
         load_bindings_in(&dir, &mut reg, 99);
-        assert_eq!(reg.bindings[1].as_deref(), Some("ghost"));
+        assert_eq!(reg.bindings, vec!["ghost".to_string()], "the null gaps must be filtered, not preserved as empty rows");
         let s = &reg.sessions["ghost"];
         assert_eq!(s.label, "Ghost Session");
         assert_eq!(s.state, crate::state::SessionState::Unknown, "the cold start promise: grey, never guessed");
@@ -221,31 +229,39 @@ mod tests {
     }
 
     #[test]
-    fn a_saved_list_longer_than_tile_count_is_truncated() {
+    fn a_saved_list_longer_than_the_old_six_slot_limit_loads_in_full() {
+        // The whole point of the list: there is no fixed count to
+        // truncate against any more.
         let dir = temp_dir();
-        let saved: Vec<Option<SavedBinding>> = (0..TILE_COUNT + 2)
+        let saved: Vec<Option<SavedBinding>> = (0..9)
             .map(|i| Some(SavedBinding { id: format!("s{i}"), label: format!("L{i}") }))
             .collect();
         fs::write(dir.join("bindings.json"), serde_json::to_string(&saved).unwrap()).unwrap();
 
         let mut reg = Registry::default();
         load_bindings_in(&dir, &mut reg, 1);
-        assert!(reg.bindings.iter().all(|b| b.is_some()));
-        assert_eq!(reg.sessions.len(), TILE_COUNT, "rows past TILE_COUNT must never be registered");
+        let expected: Vec<String> = (0..9).map(|i| format!("s{i}")).collect();
+        assert_eq!(reg.bindings, expected);
+        assert_eq!(reg.sessions.len(), 9);
         cleanup(&dir);
     }
 
     #[test]
-    fn a_none_slot_stays_unbound() {
+    fn legacy_null_slots_are_dropped_and_the_remaining_order_is_kept() {
         let dir = temp_dir();
-        let saved: Vec<Option<SavedBinding>> =
-            vec![Some(SavedBinding { id: "s1".into(), label: "L1".into() }), None, None, None, None, None];
+        let saved: Vec<Option<SavedBinding>> = vec![
+            Some(SavedBinding { id: "s1".into(), label: "L1".into() }),
+            None,
+            Some(SavedBinding { id: "s2".into(), label: "L2".into() }),
+            None,
+            None,
+            None,
+        ];
         fs::write(dir.join("bindings.json"), serde_json::to_string(&saved).unwrap()).unwrap();
 
         let mut reg = Registry::default();
         load_bindings_in(&dir, &mut reg, 1);
-        assert_eq!(reg.bindings[0].as_deref(), Some("s1"));
-        assert!(reg.bindings[1].is_none());
+        assert_eq!(reg.bindings, vec!["s1".to_string(), "s2".to_string()]);
         cleanup(&dir);
     }
 
@@ -257,7 +273,7 @@ mod tests {
         let mut reg = Registry::default();
         load_bindings_in(&dir, &mut reg, 1);
         assert!(reg.sessions.is_empty());
-        assert!(reg.bindings.iter().all(|b| b.is_none()));
+        assert!(reg.bindings.is_empty());
         cleanup(&dir);
     }
 }

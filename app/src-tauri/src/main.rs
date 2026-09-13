@@ -1,24 +1,25 @@
 // Deckhand: daemon and surface in one Tauri application
 // (docs/ARCHITECTURE.md#processes). The Rust side is the daemon: it owns
 // every session state machine and the ingest endpoint. The webview draws
-// tiles and sends intents, and holds no authority and no inference.
+// a list of sessions and sends intents, and holds no authority and no
+// inference.
 //
 // Phase 1 is observation only. Nothing in this process can approve,
 // deny, send, or interrupt anything.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use deckhand::{enumerate, http, persist, registry, reveal, state};
-
-/// Window geometry (logical px). Height toggles with the detail panel.
-const WIN_W: f64 = 1200.0;
-const WIN_H: f64 = 132.0;
-const WIN_H_EXPANDED: f64 = 330.0;
+use deckhand::{enumerate, http, persist, registry, reveal, state, window};
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{Emitter, Manager, State};
+
+/// How often the background rescan re-runs `claude agents --json`. The
+/// first run happens immediately at startup; this is the repeat
+/// interval after that (cold start plus periodic rescan share one loop).
+const RESCAN_INTERVAL: Duration = Duration::from_secs(15);
 
 struct Shared(Arc<Mutex<registry::Registry>>);
 
@@ -31,6 +32,75 @@ fn now_ms() -> i64 {
 
 fn emit_snapshot(app: &tauri::AppHandle, reg: &registry::Registry) {
     let _ = app.emit("deckhand://snapshot", reg.snapshot(now_ms()));
+}
+
+/// Everything that follows a registry mutation which may have changed
+/// the row count: persist the (now ordered) list, resize the window to
+/// match, and repaint. Selection alone does not need this (the row count
+/// is unchanged), so it calls `emit_snapshot` directly instead.
+///
+/// Callers hold the registry lock, and sync commands take that same lock
+/// on the main thread, so the window calls must not block this thread on
+/// the main one: the resize is queued to run there later, after the
+/// lock is long gone, with only the row count captured.
+fn after_change(app: &tauri::AppHandle, reg: &registry::Registry) {
+    persist::save_bindings(reg);
+    let row_count = reg.bindings.len();
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = handle.get_webview_window("main") {
+            resize_for_rows(&win, row_count);
+        }
+    });
+    emit_snapshot(app, reg);
+}
+
+/// The monitor's work area under the window right now, in physical
+/// pixels. `None` when the window has no monitor at all (a headless
+/// environment), which callers treat as "nothing to clamp against".
+fn current_work_area(win: &tauri::WebviewWindow) -> Option<window::Rect> {
+    let monitor = win.current_monitor().ok().flatten()?;
+    let a = monitor.work_area();
+    Some(window::Rect::new(a.position.x, a.position.y, a.size.width as i32, a.size.height as i32))
+}
+
+/// Every connected monitor's work area, in physical pixels. Used only at
+/// startup to validate a saved position against the monitors actually
+/// present right now (PR review P1); empty on a headless environment.
+fn all_work_areas(win: &tauri::WebviewWindow) -> Vec<window::Rect> {
+    win.available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(|m| {
+            let a = m.work_area();
+            window::Rect::new(a.position.x, a.position.y, a.size.width as i32, a.size.height as i32)
+        })
+        .collect()
+}
+
+/// Resize the window for the given row count and reclamp it into the
+/// current monitor's work area, growing upward instead of off-screen
+/// when the window sits near the bottom of the monitor. Called after
+/// every registry change that can move the row count and once at
+/// startup once the restored bindings are known.
+fn resize_for_rows(win: &tauri::WebviewWindow, row_count: usize) {
+    let Ok(scale) = win.scale_factor() else { return };
+    let Some(area) = current_work_area(win) else { return };
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else {
+        return;
+    };
+    let cur = window::Rect::new(pos.x, pos.y, size.width as i32, size.height as i32);
+
+    let max_h_logical = (area.h as f64 / scale).round() as i32;
+    let new_h_logical = window::window_height(row_count, max_h_logical);
+    let new_h_physical = (new_h_logical as f64 * scale).round() as i32;
+
+    let bottom_anchored = window::is_bottom_anchored(cur, area);
+    let desired = window::reflow_height(cur, new_h_physical, bottom_anchored);
+    let clamped = window::clamp_into(desired, area);
+
+    let _ = win.set_size(tauri::PhysicalSize::new(clamped.w.max(1) as u32, clamped.h.max(1) as u32));
+    let _ = win.set_position(tauri::PhysicalPosition::new(clamped.x, clamped.y));
 }
 
 #[cfg(windows)]
@@ -81,56 +151,19 @@ fn select_tile(index: usize, shared: State<Shared>, app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn bind_tile(index: usize, session_id: String, shared: State<Shared>, app: tauri::AppHandle) {
-    let mut reg = shared.0.lock().unwrap();
-    if reg.bind(index, &session_id, now_ms()) {
-        persist::save_bindings(&reg);
-        emit_snapshot(&app, &reg);
-    }
-}
-
-#[tauri::command]
-fn unbind_tile(index: usize, shared: State<Shared>, app: tauri::AppHandle) {
-    let mut reg = shared.0.lock().unwrap();
-    if reg.unbind(index) {
-        persist::save_bindings(&reg);
-        emit_snapshot(&app, &reg);
-    }
-}
-
-#[tauri::command]
-fn bindable_sessions(shared: State<Shared>) -> Vec<registry::BindableSession> {
-    shared.0.lock().unwrap().bindable()
-}
-
-#[tauri::command]
-fn refresh_sessions(shared: State<Shared>, app: tauri::AppHandle) {
-    // Fetch without the lock: the enumeration shells out.
-    let rows = enumerate::fetch().unwrap_or_default();
-    let mut reg = shared.0.lock().unwrap();
-    if enumerate::register(&mut reg, &rows, now_ms()) {
-        emit_snapshot(&app, &reg);
-    }
-}
-
-#[tauri::command]
 fn quit(app: tauri::AppHandle) {
     app.exit(0);
 }
 
-/// Raise the host window of the session bound to a tile. Returns a
-/// sentence for the detail panel either way; Reveal never fails
-/// silently (docs/UI_SPEC.md#command-keys).
+/// Raise the host window of the session bound to a row. Returns a
+/// sentence the surface shows as a brief inline row note either way;
+/// Reveal never fails silently (docs/CONTROL_MAPPING.md).
 #[tauri::command]
 fn reveal_session(index: usize, shared: State<Shared>) -> String {
     let (label, dir, pid) = {
         let reg = shared.0.lock().unwrap();
-        let Some(session) = (index < registry::TILE_COUNT)
-            .then(|| reg.bindings[index].as_ref())
-            .flatten()
-            .and_then(|id| reg.sessions.get(id))
-        else {
-            return "No session is bound to this tile.".to_string();
+        let Some(session) = reg.bindings.get(index).and_then(|id| reg.sessions.get(id)) else {
+            return "No session is bound to this row.".to_string();
         };
         (
             session.label.clone(),
@@ -141,48 +174,48 @@ fn reveal_session(index: usize, shared: State<Shared>) -> String {
     reveal::reveal(&label, dir.as_deref(), pid)
 }
 
-/// Grow or shrink the window for the detail panel. Resizing from the
-/// daemon keeps the surface free of window-geometry authority.
-#[tauri::command]
-fn set_panel_expanded(expanded: bool, app: tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let h = if expanded { WIN_H_EXPANDED } else { WIN_H };
-        let _ = window.set_size(tauri::LogicalSize::new(WIN_W, h));
-    }
-}
-
 /// Click-to-place move: cycle through edge presets so moving the window
 /// never requires a drag (docs/ACCESSIBILITY.md). The drag grip also
-/// works; this is the route that must always exist.
+/// works; this is the route that must always exist. Presets use the
+/// window's actual current size (it grows and shrinks with the session
+/// list) and are clamped into the monitor's work area, the same as any
+/// other resize or restore.
 #[tauri::command]
 fn cycle_position(app: tauri::AppHandle) {
-    let Some(window) = app.get_webview_window("main") else {
+    let Some(win) = app.get_webview_window("main") else {
         return;
     };
-    let Ok(Some(monitor)) = window.current_monitor() else {
+    let Ok(Some(monitor)) = win.current_monitor() else {
         return;
     };
     let scale = monitor.scale_factor();
-    let mon_size = monitor.size().to_logical::<f64>(scale);
-    let mon_pos = monitor.position().to_logical::<f64>(scale);
-    let cur = window
+    let area = monitor.work_area();
+    let area_x = area.position.x as f64 / scale;
+    let area_y = area.position.y as f64 / scale;
+    let area_w = area.size.width as f64 / scale;
+    let area_h = area.size.height as f64 / scale;
+
+    let cur = win
         .outer_position()
         .map(|p| p.to_logical::<f64>(scale))
-        .unwrap_or(tauri::LogicalPosition::new(0.0, 0.0));
-    let cur_h = window
+        .unwrap_or(tauri::LogicalPosition::new(area_x, area_y));
+    let cur_size = win
         .outer_size()
-        .map(|s| s.to_logical::<f64>(scale).height)
-        .unwrap_or(WIN_H);
+        .map(|s| s.to_logical::<f64>(scale))
+        .unwrap_or(tauri::LogicalSize::new(
+            window::WINDOW_W_LOGICAL,
+            window::HEADER_H_LOGICAL + window::ROW_H_LOGICAL,
+        ));
 
     let margin = 12.0;
     let xs = [
-        mon_pos.x + (mon_size.width - WIN_W) / 2.0, // centre
-        mon_pos.x + margin,                         // left
-        mon_pos.x + mon_size.width - WIN_W - margin, // right
+        area_x + (area_w - cur_size.width) / 2.0, // centre
+        area_x + margin,                          // left
+        area_x + area_w - cur_size.width - margin, // right
     ];
     let ys = [
-        mon_pos.y + mon_size.height - cur_h - 48.0, // bottom (above taskbar)
-        mon_pos.y + margin,                         // top
+        area_y + area_h - cur_size.height - margin, // bottom
+        area_y + margin,                            // top
     ];
     // Presets in glance-friendly order.
     let presets = [
@@ -201,7 +234,16 @@ fn cycle_position(app: tauri::AppHandle) {
         .map(|(i, _)| i)
         .unwrap_or(0);
     let (nx, ny) = presets[(nearest + 1) % presets.len()];
-    let _ = window.set_position(tauri::LogicalPosition::new(nx, ny));
+
+    let target = window::Rect::new(
+        (nx * scale).round() as i32,
+        (ny * scale).round() as i32,
+        (cur_size.width * scale).round() as i32,
+        (cur_size.height * scale).round() as i32,
+    );
+    let area_physical = window::Rect::new(area.position.x, area.position.y, area.size.width as i32, area.size.height as i32);
+    let clamped = window::clamp_into(target, area_physical);
+    let _ = win.set_position(tauri::PhysicalPosition::new(clamped.x, clamped.y));
 }
 
 fn main() {
@@ -209,21 +251,36 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             snapshot,
             select_tile,
-            bind_tile,
-            unbind_tile,
-            bindable_sessions,
-            refresh_sessions,
             quit,
             reveal_session,
-            set_panel_expanded,
             cycle_position
         ])
         .setup(|app| {
+            let window = app.get_webview_window("main").expect("main window");
+
+            // PR review P1: a saved position is only trusted if it still
+            // intersects a monitor that is actually connected right now.
+            // A nominal one-row size stands in for the real size, which
+            // is not known until the bindings below are loaded.
             {
-                let window = app.get_webview_window("main").expect("main window");
-                if let Some(pos) = persist::load_window_pos() {
-                    let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y));
-                }
+                let areas = all_work_areas(&window);
+                let scale = window.scale_factor().unwrap_or(1.0);
+                let nominal_w = (window::WINDOW_W_LOGICAL * scale).round() as i32;
+                let nominal_h = (window::window_height(0, i32::MAX) as f64 * scale).round() as i32;
+                let fallback_area = areas
+                    .first()
+                    .copied()
+                    .unwrap_or_else(|| window::Rect::new(0, 0, nominal_w, nominal_h));
+                let fallback = window::default_rect(fallback_area, nominal_w, nominal_h);
+                let target = match persist::load_window_pos() {
+                    Some(pos) => {
+                        let saved = window::Rect::new(pos.x, pos.y, nominal_w, nominal_h);
+                        window::restore_or_fallback(saved, &areas, fallback)
+                    }
+                    None => fallback,
+                };
+                let _ = window.set_position(tauri::PhysicalPosition::new(target.x, target.y));
+
                 #[cfg(windows)]
                 {
                     let hwnd = window.hwnd()?.0 as isize;
@@ -234,6 +291,7 @@ fn main() {
             let shared = Arc::new(Mutex::new(registry::Registry::default()));
             persist::load_bindings(&mut shared.lock().unwrap(), now_ms());
             app.manage(Shared(shared.clone()));
+            resize_for_rows(&window, shared.lock().unwrap().bindings.len());
 
             // Ingest: shim POSTs land on this channel; one thread owns
             // the application of events so ordering is deterministic.
@@ -249,15 +307,14 @@ fn main() {
                     for payload in rx {
                         let mut reg = apply_reg.lock().unwrap();
                         if reg.apply_hook(&payload, now_ms()) {
-                            // Auto-fill may have taken a free tile.
-                            persist::save_bindings(&reg);
-                            emit_snapshot(&apply_handle, &reg);
+                            after_change(&apply_handle, &reg);
                         }
                     }
                 })
                 .expect("spawn apply thread");
 
-            // T_unknown watchdog.
+            // T_unknown watchdog. Liveness only: it never changes who is
+            // bound, so it repaints without touching persistence or size.
             let tick_handle = app.handle().clone();
             let tick_reg = shared.clone();
             std::thread::Builder::new()
@@ -271,21 +328,27 @@ fn main() {
                 })
                 .expect("spawn tick thread");
 
-            // Cold start: rebind and label from the enumeration; states
-            // stay unknown until events arrive (ADR-024).
-            let cold_handle = app.handle().clone();
-            let cold_reg = shared.clone();
+            // Cold start, then a periodic rescan every RESCAN_INTERVAL:
+            // `claude agents` shells out, so it always runs outside the
+            // registry lock; only applying the result takes it. States
+            // stay unknown until events arrive (ADR-024); a failed run
+            // (claude missing, unparseable output) changes nothing,
+            // including pruning nothing, since fetch's `None` carries no
+            // information about who is still alive.
+            let scan_handle = app.handle().clone();
+            let scan_reg = shared.clone();
             std::thread::Builder::new()
-                .name("deckhand-coldstart".into())
-                .spawn(move || {
+                .name("deckhand-scan".into())
+                .spawn(move || loop {
                     if let Some(rows) = enumerate::fetch() {
-                        let mut reg = cold_reg.lock().unwrap();
+                        let mut reg = scan_reg.lock().unwrap();
                         if enumerate::register(&mut reg, &rows, now_ms()) {
-                            emit_snapshot(&cold_handle, &reg);
+                            after_change(&scan_handle, &reg);
                         }
                     }
+                    std::thread::sleep(RESCAN_INTERVAL);
                 })
-                .expect("spawn cold start thread");
+                .expect("spawn scan thread");
 
             Ok(())
         })
