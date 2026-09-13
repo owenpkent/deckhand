@@ -123,8 +123,6 @@ Checking a box here means the item is done, not that it is perfect. See
 - [x] Write down the minimum hit target size as an actual number, with a
       rationale: 44 px, in `docs/ACCESSIBILITY.md`, echoed in
       `docs/UI_SPEC.md`.
-- [ ] Specify the bind picker (what it lists, how a session is chosen, what
-      it shows when the adapter's session list is `internal`-confidence).
 - [ ] Design the UI flow for presenting the hook block for confirmation.
       The policy is already set in `docs/CLAUDE_CODE_ADAPTER.md`: Deckhand
       writes only on explicit confirmation, composes, never clobbers.
@@ -213,6 +211,27 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 - [ ] Take liveness from the pid: hold a process handle per session and
       flip to `ended` the moment it exits, and stop greying a live idle
       session at the fifteen-minute mark. Same ADR as the pid capture.
+- [ ] Bring `app/` in line with ADR-028: replace the six-slot tile surface
+      and its manual bind picker, command keys, stick, dial, talk and
+      send placeholders, detail panel, layer strip, and corner badges
+      with the session-list surface (one row per session: colour, glyph,
+      name, state word) and a header holding only Move and Quit.
+- [ ] Replace the six-slot manual binding with ADR-028's auto-binding:
+      bind a session on its first hook event or enumeration hit, into an
+      ordered, unbounded list; drop the null slots when loading a legacy
+      six-slot `bindings.json`.
+- [ ] Rerun `claude agents` enumeration every 15 s on its own timer,
+      outside the registry lock, and remove a session when it ends or
+      when a successful enumeration no longer lists it and it has had no
+      hook event for 60 s; a failed enumeration must prune nothing
+      (ADR-028).
+- [ ] Size and place the window per ADR-028: about 360 px wide, height
+      following the row count at 48 px per row, clamped to the monitor
+      work area, with a saved position validated against the monitors
+      actually connected at startup.
+- [ ] Exclude Deckhand's own window from the raise match (ADR-028).
+- [ ] Register the shim in user-level Claude Code settings so sessions in
+      every repo report state, not only this one.
 
 ---
 
@@ -220,8 +239,11 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 
 - [ ] Implement `PreToolUse` hook response with an actual permission
       decision, and the daemon-side hold while that decision is pending.
-- [ ] Wire the approve command key to the held decision.
-- [ ] Wire the deny command key to the held decision.
+- [ ] Decide, in its own ADR, what approve and deny look like on the
+      session-list surface now that ADR-028 removed the command keys they
+      were going to be.
+- [ ] Wire the approve control to the held decision, once designed.
+- [ ] Wire the deny control to the held decision, once designed.
 - [ ] Implement a timeout policy for an unanswered permission decision.
 - [ ] Implement the audit trail of approvals and denials.
 - [ ] Test the failure mode where the daemon dies while a decision is
@@ -233,46 +255,18 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 
 ---
 
-## Phase 3: The rest of the surface
+## Phase 3: Retired (ADR-028)
 
-- [ ] Implement the dial: step through options.
-- [ ] Implement the dial: minus and plus targets.
-- [ ] Implement the dial: commit target.
-- [ ] Implement the four-way stick: scroll the detail panel up and down,
-      expand or collapse it, and return to the previously selected tile. No
-      tile stepping. All four functions work as of 2026-08-02; the
-      rendering is a 2 by 2 grid rather than the specified diamond, so
-      this stays open until the geometry matches UI_SPEC.
-- [ ] Implement the detail panel the stick opens. A working subset landed
-      2026-08-02: identity line, state in words, current or pending item,
-      question with disabled answer targets, the reveal-reason landing
-      area, Reveal, Unbind, and Scan. Context bar, cost, plan mode,
-      compact, and per-session settings are still owed.
-- [ ] Implement continue and interrupt command keys. Both render, both
-      disabled with their honest reasons; there is no channel for either
-      yet (ADR-020).
-- [ ] Implement the Answer command key and the per-option answer targets,
-      full option labels, disabled until `answer_question` is proven.
-      Rendered and disabled as of 2026-08-02, with full labels.
-- [ ] Implement the Reveal command key and its pid-based host match.
-      Implemented 2026-08-02 as a pid-then-title heuristic
-      (`app/src-tauri/src/reveal.rs`) behind the Reveal key and the
-      panel action, with the ALT-tap foreground workaround. The owner's
-      first live try the same day did not visibly work; every attempt
-      now appends what it searched for and what won to
-      `%LOCALAPPDATA%\deckhand\reveal.log`, so the next report is
-      diagnosable. Since 2026-09-13 the tile click itself raises
-      (ADR-027), so every click logs an attempt; the key and the panel
-      action repeat the raise, and the key's slot is open for
-      retabling. Stays unchecked until a live click is seen to raise
-      the right window.
-- [ ] Implement plan mode and compact in the detail panel, not as command
-      keys.
-- [ ] Implement the layer strip and profile switching.
-- [ ] Implement the settings surface.
-- [ ] Implement theming.
-- [ ] Confirm every control in this phase against the accessibility minimum
-      hit target.
+Every item this phase used to list, dial stepping and its minus, plus, and
+commit targets, the four-way stick, the detail panel, continue and
+interrupt keys, the Answer key and its answer targets, the Reveal key,
+plan mode and compact in a panel, a layer strip, a settings surface, and
+theming, is removed from the plan by
+[ADR-028](docs/DECISIONS.md#adr-028) on 2026-09-13. Some of it had
+partial code in `app/` from the change just before ADR-028; removing that
+code to match the session-list surface is tracked once, in Phase 1 above,
+rather than repeated per control here. A control returning to the surface
+needs its own ADR and its own line here.
 
 ---
 
@@ -288,13 +282,12 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 
 ---
 
-## Phase 5: Talk
+## Phase 5: Retired (ADR-028)
 
-- [ ] Define the MacroVox integration contract.
-- [ ] Implement the talk button (click to start, click to stop).
-- [ ] Implement the double-press hands-free toggle.
-- [ ] Implement graceful degradation when MacroVox is not running.
-- [ ] Route transcribed text into the composed message.
+The talk control and its MacroVox integration, listed here, are removed
+from the plan by [ADR-028](docs/DECISIONS.md#adr-028) on 2026-09-13. A
+talk control returning to the surface needs its own ADR and its own line
+here.
 
 ---
 

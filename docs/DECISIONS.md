@@ -908,3 +908,112 @@ selection rule (green clears on select, divergence 6 in the control
 mapping) is the same as before. The control mapping, the accessibility
 table, the UI spec, the architecture's focus rule, and the security
 model's residual risk on synthetic input are updated in the same change.
+
+---
+
+<a id="adr-028"></a>
+## ADR-028: The surface narrows to a session list
+
+Date: 2026-09-13
+
+**Context.** Two things landed at once and pulled in opposite directions.
+The change just before this one built out the rest of the physical
+control set against the observation-only surface: six command keys,
+a stick, a dial, talk and send placeholders, a detail panel, a bind
+picker, corner badges. None of it has write authority yet, all of it
+is Phase 2 or later, and Phase 1's actual goal is narrower than any of
+it: prove that session status can be watched reliably. The second thing
+is a use-it-and-find-out result. Hooks were only ever wired into this
+repo's own `.claude/settings.local.json`, and the `claude agents --json`
+enumeration channel from [ADR-017](#adr-017) and
+[ADR-024](#adr-024) has, since it was added, only ever rebound one of
+six fixed slots that a human had already bound by hand; it has never
+created a binding on its own. The practical result is that a session in
+any other repo has never once shown up on the board, which is the
+opposite of what a status board across several concurrent sessions is
+for.
+
+Both point at the same fix: cut the surface down to the part that is
+actually load-bearing for observation, and make binding automatic
+instead of a fixed, manually populated set of six.
+
+**Decision.** The surface becomes an ordered, vertical list, one row
+per session: status colour, glyph, session name, and the state word,
+[ADR-008](#adr-008) unchanged. Clicking a row selects the session,
+clears its unread green, and raises its host window in the same click,
+exactly as [ADR-027](#adr-027) already decided; only the container
+changes from a tile to a row. The header keeps exactly two controls:
+Move (the existing click-to-place alternative to dragging the window)
+and Quit. Everything else built out in the change just before this one
+comes back off the surface: the six command keys (approve, deny,
+answer, interrupt, continue, reveal), the stick, the dial, talk and
+send, the detail panel, the bind picker, the layer strip, and the two
+corner badges. Approve and deny stay exactly where [ROADMAP.md](../ROADMAP.md)
+already put them, Phase 2 work with no write authority yet; what changes
+is that they are no longer planned to land on this surface as
+designed here. A control returning to the surface, approve and deny
+included, needs its own ADR, because this entry is what removed the
+place they were going to go.
+
+Binding stops being a fixed set of six slots a human fills. It is now
+an unbounded, ordered list. A session is auto-bound the first time it
+is seen, from any hook event or from a `claude agents` enumeration,
+and the daemon now reruns that enumeration every 15 seconds on its own
+timer, outside the registry lock, so a slow or hanging enumeration
+call cannot stall hook ingestion. A session leaves the list when it
+ends, or when a successful enumeration no longer lists it and it has
+gone 60 seconds with no hook event either; a failed enumeration call
+prunes nothing; missing information is never grounds for removing a
+row. [ADR-024](#adr-024) still stands exactly as written: enumeration
+recovers a binding and a label, never a state, so a session bound only
+by enumeration renders `unknown` until a hook for it actually arrives.
+A legacy `bindings.json` from the six-slot design loads by dropping
+its null slots and keeping the rest, in order.
+
+The window becomes a vertical list about 360 logical pixels wide, its
+height following the row count with each row at least 48 px, and the
+whole window clamped into the monitor's work area. A saved window
+position is validated against the monitors actually connected at
+startup rather than trusted blindly, which fixes one of five findings
+from the PR 10 review: saved coordinates surviving a monitor's removal
+used to be able to place the window off every current screen. The
+raise (Reveal, in the old naming) now excludes Deckhand's own window
+from its candidates, which fixes a second finding from the same
+review: nothing stops a title match from finding Deckhand itself. The
+review's other three findings, panel expansion crowding a screen edge,
+the panel's scroll position resetting on an unrelated update, and
+repeated Back walking off the end of its history, are moot rather than
+fixed: the panel, its scrolling, and Back all leave with the stick and
+the detail panel that used them.
+
+**Consequences.** The surface is smaller than the one design and code
+had just converged on, and the work that built the removed controls
+out is not wasted so much as shelved: nothing here deletes the
+reasoning in [CONTROL_MAPPING.md](CONTROL_MAPPING.md) for what each
+control was going to do, it marks that reasoning superseded and gets
+the accessibility and UI documents to agree with what actually ships.
+Concretely superseded: [ADR-001](#adr-001)'s decision to keep the
+command keys, the stick, the dial, and push-to-talk as controls
+(its framing of the status board itself as the thing worth keeping
+stands); [ADR-013](#adr-013)'s kind discriminator driving which
+command key lit, since there is no command key left for it to drive
+(the `kind` field itself is untouched at the protocol level, for
+whatever control uses it next); and [ADR-019](#adr-019)'s tile budget
+and its two corner badges, since a row has neither (the child ledger
+gate it also recorded, that `COMPLETE` waits for the ledger to empty,
+is untouched). [ADR-010](#adr-010) (no speech recognition in this
+repo) is moot rather than reversed: there is no talk control left to
+delegate from. [ADR-024](#adr-024) is narrowed further, not
+superseded: what it recovers is unchanged, only the shape of what it
+recovers into (an unbounded list, not six fixed slots) and the cadence
+it runs on (continuous, not cold-start-only). ADR-008, ADR-025,
+ADR-026, and ADR-027 stand exactly as written.
+
+The gain is that a session in any repo can now actually appear on the
+board once the shim is registered somewhere that reaches it, which the
+six-slot design never delivered regardless of how the tiles looked;
+that registration itself, at user level rather than per-repo, is
+tracked as open work in `TODO.md`. The control mapping, the UI spec,
+the architecture document's binding and enumeration sections, the
+accessibility document's references to the removed controls, the
+roadmap, and the task list are updated in the same change.

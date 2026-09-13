@@ -4,6 +4,16 @@ Status: **proposed**, researched 2026-09-13. No OpenAI adapter is
 implemented or enabled by this document. Existing accepted behavior,
 phase boundaries, and security rules remain authoritative.
 
+[ADR-028](DECISIONS.md#adr-028), also 2026-09-13, narrowed Deckhand's
+surface to observation plus a raise-on-click, with no other control
+currently planned. That takes W5 (native controls) and the control
+capability gating that depends on it out of current scope, along with
+W6 (API applications, which assumes a controllable surface). W4 (server
+observation) is deferred rather than in scope: it is real future work,
+just not the relevant path right now. W0 through W3 remain the
+relevant path: evidence gathering, the common reducer, identity, and
+Codex observation through hooks, none of which this narrowing changes.
+
 ## Purpose and scope
 
 Extend Deckhand so Claude Code and Codex sessions can share the same

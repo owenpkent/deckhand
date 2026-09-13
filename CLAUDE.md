@@ -7,9 +7,12 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
 
 - **Name:** Deckhand (`owenpkent/deckhand`)
 - **What:** A software reimplementation of the Codex Micro macropad as an
-  always-on-top, mouse-only control surface for Claude Code sessions. Six
-  status tiles, approve and deny via the `PreToolUse` hook, dial, stick,
-  talk, layers.
+  always-on-top, mouse-only control surface for Claude Code sessions. An
+  ordered list of session rows (colour, glyph, name, state word), click
+  to select and raise, plus Move and Quit in the header. Approve and
+  deny via the `PreToolUse` hook are Phase 2 and not currently planned
+  on the surface (ADR-028); the dial, stick, talk, and layers this
+  overview used to list here are removed by the same decision.
 - **Status:** Phase 1, observation only, started 2026-08-02. The code
   lives in `app/` (daemon plus surface, one Tauri application) and
   `shim/`; `spikes/` is frozen Phase 0 evidence. Nothing has write
@@ -59,16 +62,16 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 434 | Daemon, shim, surface, state machine |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 170 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 476 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 347 | Daemon to runtime contract |
 | [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 617 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 295 | Visual and interaction contract |
-| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 858 | ADRs; append only |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 138 | Visual and interaction contract |
+| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 189 | The rules that win every conflict |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 1019 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 138 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 186 / 310 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 333 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -100,7 +103,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 028.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 029.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -147,7 +150,9 @@ the six-session colour test. ADR-023 added the host axis, ADR-024
 corrected the enumeration to bindings-not-state, and ADR-025 recorded
 the window spike pass that Phase 1's window builds on. ADR-027 folded
 the raise into the tile click: selecting a session brings its window
-forward.
+forward. ADR-028 then cut the surface down to that session list plus
+Move and Quit, replacing the six-slot binding with an auto-binding,
+unbounded list; `app/` implements that list.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

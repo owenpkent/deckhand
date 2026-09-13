@@ -11,6 +11,34 @@ version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Changed
+
+- **The surface narrows to a session list, recorded as ADR-028.** An
+  ordered, unbounded list replaces the six fixed tiles: one row per
+  session (colour, glyph, name, state word), click to select and raise
+  (ADR-027 unchanged), and a header holding only Move and Quit. Removed
+  from the plan: the command keys (approve, deny, answer, interrupt,
+  continue, reveal), the stick, the dial, talk and send, the detail
+  panel, the bind picker, the layer strip, and the two corner badges.
+  Approve and deny stay Phase 2 work; landing them, or anything else, on
+  this surface now needs its own ADR. Binding becomes automatic: a
+  session is bound on its first hook event or `claude agents`
+  enumeration hit, the daemon reruns that enumeration every 15 seconds
+  outside the registry lock, and a session is dropped on ending or on
+  going 60 seconds with no hook after a successful enumeration stops
+  listing it; a failed enumeration prunes nothing, and a legacy
+  six-slot `bindings.json` loads by dropping its null slots. The window
+  becomes a vertical list about 360 px wide, sized to the row count at
+  48 px per row, clamped to the monitor work area, with a saved
+  position validated against the monitors actually connected at
+  startup, and the raise now excludes Deckhand's own window from its
+  candidates. `docs/CONTROL_MAPPING.md`, `docs/UI_SPEC.md`,
+  `docs/ARCHITECTURE.md`, `docs/ACCESSIBILITY.md`,
+  `docs/EXECUTIVE_SUMMARY.md`, `README.md`, `TODO.md`, and `ROADMAP.md`
+  are updated to match; `app/` still implements the wider control set
+  the change just before this one added and has not yet been brought
+  down to it.
+
 ### Added
 
 - A proposed

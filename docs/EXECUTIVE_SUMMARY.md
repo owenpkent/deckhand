@@ -44,17 +44,13 @@ it was hardware.
 
 Deckhand is a piece of software: an always-on-top, frameless, on-screen
 surface, operated with a pointer alone, that lets you see the live status of
-up to six Claude Code sessions at a glance, answer the questions they ask
-you, and approve the calls that need a human, all from the surface instead
-of from each session's own terminal window. Approve, deny, continue, and
-interrupt stay on the surface; they are simply not the headline anymore. On
-one machine running Claude Code with `permissions.defaultMode: "auto"`, a
-classifier answers most permission prompts on its own, and the human is
-asked to choose between options far more often than asked to allow a tool:
-322 `AskUserQuestion` calls across 155 of 240 sessions, against 10 to 27
-tool denials in the same corpus. That is one user's corpus on one machine,
-not a general finding about how Claude Code is used, and this document
-treats it that way rather than generalising from it. The status board
+every Claude Code session on the machine at a glance, in an ordered list
+that grows and shrinks as sessions start and end, and raise any one of them
+to the front in the same click that selects it. As of
+[ADR-028](DECISIONS.md#adr-028) (2026-09-13), that click is currently the
+whole surface: approving a call, denying one, and answering a question stay
+Phase 2 or later work and are not currently planned to land on this
+surface; a control returning to it needs its own ADR. The status board
 half of this exists and watches live sessions; everything that acts on a
 session is still design (see the Status section at the end). Deckhand is
 independent software, not affiliated with or endorsed by OpenAI, Work
@@ -62,7 +58,7 @@ Louder, or Anthropic.
 
 It has two ways of relating to a Claude Code session, called attached mode
 and hosted mode, and which one is in use matters more than any other single
-fact about how a given tile behaves. Attached mode watches a session
+fact about how a given session behaves. Attached mode watches a session
 started by the user; it gets full status observation and full approve and
 deny authority through Claude Code's hook system, but it has no proven way
 to put a prompt into that session at the moment a person wants to type one.
@@ -112,9 +108,10 @@ small program at specific moments, for example when a session starts, when
 it is about to use a tool, or when it finishes a turn. Deckhand installs
 itself as that small program. Every time one of those moments happens,
 Deckhand's local background service hears about it and updates the status
-of whichever tile is watching that session. When a tile needs a permission
-decision, the same channel carries the answer back: the user clicks approve
-or deny on the surface, and that decision is what Claude Code receives.
+of that session's row in the list. The same channel could carry a
+permission answer back the other way, but that direction is Phase 2 or
+later work and is not wired up yet, nor currently planned on the surface
+(ADR-028); today the channel only reports.
 
 That is the whole mechanism. There is a fallback for reading a session's
 history directly from the log file Claude Code writes to disk, but that log
@@ -129,9 +126,10 @@ This section is here because leaving it out would be dishonest.
 - Whether status inferred from hook events is reliable enough to trust at a
   glance is not yet proven. Phase 1 exists specifically to test this before
   anything is built on top of it.
-- Whether hook call overhead stays negligible with six sessions reporting
-  concurrently is unmeasured. If it is not negligible, the architecture
-  needs to account for that honestly rather than hope it away.
+- Whether hook call overhead stays negligible as several sessions report
+  concurrently is unmeasured, and the list is unbounded rather than capped
+  at a fixed count. If overhead is not negligible, the architecture needs
+  to account for that honestly rather than hope it away.
 - Whether attached mode is genuinely useful without the ability to inject a
   prompt is an open question, not a settled one. It may turn out that
   attached mode is mostly a status board with limited action, and hosted

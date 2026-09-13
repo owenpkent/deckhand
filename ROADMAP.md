@@ -49,7 +49,7 @@ silently assumed, and both spikes have answered their questions.
 ## Phase 1: Observation only (current)
 
 **Goal:** prove that Claude Code session status can be inferred reliably
-enough to show on a tile, before any authority is put behind it.
+enough to show on the surface, before any authority is put behind it.
 
 Deliverables:
 
@@ -64,8 +64,9 @@ Deliverables:
   the child ledger and the liveness bracket both have something to read.
   `PreToolUse` is installed twice, once gating and narrow and once
   non-gating and match-all, so thirteen entries in total.
-- Six agent tiles in the surface, each showing live status colour for a
-  bound session.
+- An ordered, unbounded session list in the surface, one row per session,
+  each showing live status colour for a bound session
+  ([ADR-028](docs/DECISIONS.md#adr-028)).
 - No write authority anywhere in this phase. It can watch and it can be
   wrong, but it cannot act on being wrong.
 - A spike: observe Stop-hook `decision: "block"` behaviour against a live
@@ -74,9 +75,10 @@ Deliverables:
   of a mechanism, not a send capability; nothing in this phase gains a way
   to put a prompt into a running session.
 
-**Done when** six concurrent Claude Code sessions can be watched at once
-with status that stays correct, including the unbound and error states, for
-a normal working session without manual correction.
+**Done when** several concurrent Claude Code sessions, across more than one
+repository, can be watched at once with status that stays correct,
+including the error state and a session dropping off the list on its own,
+for a normal working session without manual correction.
 
 ---
 
@@ -88,8 +90,10 @@ Deliverables:
 
 - `PreToolUse` hook wired to return a permission decision, not just report
   one.
-- Approve and deny command keys routed through the daemon back to the
-  waiting hook.
+- Approve and deny controls routed through the daemon back to the waiting
+  hook. Their exact shape on the session-list surface is undecided: ADR-028
+  removed the command keys they were going to be, so this deliverable needs
+  its own ADR before it is built, not just a decision key mapping.
 - Amber status tied directly to an actual pending permission decision,
   never inferred indirectly.
 - A visible, auditable record of what was approved or denied, and for which
@@ -101,22 +105,16 @@ nothing is actually waiting.
 
 ---
 
-## Phase 3: The rest of the surface
+## Phase 3: Retired (ADR-028)
 
-**Goal:** finish the physical control set.
-
-Deliverables:
-
-- Dial: stepping through session options, minus and plus, commit targets.
-- Stick: scrolling and expanding the detail panel, and returning to the
-  previously selected tile.
-- The Answer key and its answer targets, and the Reveal key.
-- Layer strip: profile switching.
-- Settings surface.
-- Theming.
-
-**Done when** every control described in `docs/CONTROL_MAPPING.md` is
-implemented, and none of them require anything but a pointer.
+**Former goal:** finish the physical control set (dial, stick, an Answer
+key and its targets, a Reveal key, a layer strip, a settings surface,
+theming). [ADR-028](docs/DECISIONS.md#adr-028) removed all of it from the
+plan on 2026-09-13: none of it had shipped with write authority, and the
+observation goal Phase 1 exists to prove does not need it. Approve and
+deny remain real Phase 2 work; the rest is no longer planned. A control
+that returns to the surface needs its own ADR and, at that point, a new
+phase entry here.
 
 ---
 
@@ -139,19 +137,13 @@ surface, with attached mode unaffected.
 
 ---
 
-## Phase 5: Talk
+## Phase 5: Retired (ADR-028)
 
-**Goal:** add push-to-talk, delegating speech recognition to MacroVox
-rather than reimplementing it.
-
-Deliverables:
-
-- Talk button wired to MacroVox.
-- Transcribed text routed into the composed message for send.
-- Graceful behaviour when MacroVox is not installed or not running.
-
-**Done when** talk works as a thin client of MacroVox, with no speech
-recognition logic living inside Deckhand itself.
+**Former goal:** add push-to-talk, delegating speech recognition to
+MacroVox rather than reimplementing it. [ADR-028](docs/DECISIONS.md#adr-028)
+removed the talk control from the surface on 2026-09-13. There is no
+current plan to delegate to MacroVox from Deckhand; a talk control
+returning would need its own ADR.
 
 ---
 
