@@ -205,6 +205,25 @@ cd deckhand
 python run.py
 ```
 
+### Registering the shim
+
+A repo's sessions only report to the daemon once the shim is wired into
+a Claude Code hook. Wire it once, at the user level, and every repo's
+sessions are covered:
+
+```powershell
+powershell -NoProfile -File scripts\install-hooks.ps1
+```
+
+The script merges an entry for each of the twelve hook events into
+`%USERPROFILE%\.claude\settings.json`, backs the file up first, and is
+safe to run again: entries already installed are left alone. To remove
+everything it added:
+
+```powershell
+powershell -NoProfile -File scripts\install-hooks.ps1 -Uninstall
+```
+
 The most valuable contribution is still challenging the spec:
 [CONTRIBUTING.md](CONTRIBUTING.md) lists concrete starting points.
 

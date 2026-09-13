@@ -396,6 +396,14 @@ Rules for how Deckhand handles that block:
    seconds, and a longer per-hook timeout raises the ceiling rather than
    lowering it, so a value there slows every session exit for no gain.
 
+`scripts/install-hooks.ps1` automates the user-level half of this: it
+merges an async, non-gating entry for each of the twelve events into
+`~/.claude/settings.json`, skips events that already carry one, and
+`-Uninstall` removes exactly the entries it added; running it is the
+explicit confirmation rule 1 asks for. It does not install the gating
+`PreToolUse` entry above, which stays manual until Phase 2 wires an
+actual permission decision.
+
 Windows notes: hook commands run through Git Bash when present, with a
 PowerShell fallback; paths in the JSON use forward slashes. The shim is a small
 native binary so that neither shell dialect matters beyond launching it.

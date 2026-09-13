@@ -154,10 +154,12 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       reads stdin, POSTs to the daemon's loopback port with the token
       from `%LOCALAPPDATA%\deckhand\daemon.json`, exits 0 silently in
       every failure mode so it can never block a session.
-- [ ] Implement `settings.json` hook registration (install and
-      uninstall). The dogfood wiring on this machine is hand-written in
-      gitignored `.claude/settings.local.json`; the installable,
-      user-level version with an uninstall path is still owed.
+- [x] Implement `settings.json` hook registration (install and
+      uninstall). Done 2026-09-13: `scripts/install-hooks.ps1` merges
+      the twelve-event, non-gating wiring into the user-level file, is
+      idempotent, and `-Uninstall` reverses exactly what it added. The
+      hand-written, gitignored `.claude/settings.local.json` dogfood
+      wiring is unaffected and still works alongside it.
 - [x] Implement daemon ingestion for the hooked event types. Done
       2026-08-02 for all twelve documented events (the count in this
       item used to say seven; the twelve-event set and the reasons are
@@ -231,7 +233,8 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       actually connected at startup.
 - [ ] Exclude Deckhand's own window from the raise match (ADR-028).
 - [ ] Register the shim in user-level Claude Code settings so sessions in
-      every repo report state, not only this one.
+      every repo report state, not only this one. (run
+      scripts/install-hooks.ps1)
 
 ---
 
