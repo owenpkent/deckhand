@@ -38,6 +38,12 @@ version number is invented and no past release is backfilled.
 
 ### Changed
 
+- A tile click now selects the session and raises its host window in
+  the same click, recorded as ADR-027. The separate Reveal target on
+  the tile and the double-click accelerator are gone; the Reveal key
+  and the panel action repeat the raise for the selected session.
+  Deckhand's own window still never takes focus.
+
 - Live validation against Claude Code 2.1.220, recorded as ADR-026, put
   real sessions through the Phase 1 pipeline and corrected the spec and
   code in four places: `PostToolUseFailure`'s observed shape (`error`

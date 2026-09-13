@@ -56,7 +56,7 @@ declarations exist:
 | Interrupt | `interrupt` |
 | Continue | `send_prompt` |
 | Send | `send_prompt` |
-| Reveal | `focus_session` |
+| Tile click, Reveal | `focus_session` |
 | Dial commit target | `set_option` |
 
 A control whose capability is `false` ships visible and disabled, and names the

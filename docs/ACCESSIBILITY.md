@@ -74,15 +74,16 @@ These may not ship as the only way to do anything:
 | --- | --- | --- |
 | Press-and-hold | Sustained force is the exact cost being avoided | Click-to-toggle (talk defaults to this) |
 | Drag | Sustained force plus precision | Dial has click targets; windows move via a move mode, click destination |
-| Double-click | Timing windows exclude dwell clickers | Every double-click action also exists as a single-click affordance (select tile, then a Reveal target in the detail panel) |
+| Double-click | Timing windows exclude dwell clickers | Nothing is double-clicked: a tile click selects and raises in one click, and every other action is a single click on its own target |
 | Hover-only reveals | Dwell users cannot hover without clicking, and the surface never takes focus, so there is no keyboard route to a tooltip either | Everything visible is clickable; anything a tooltip would have said is revealed into the detail panel by a click |
 | Keyboard input | The whole premise | Text entry delegates to the system keyboard of choice, for example alpha-osk; naming things is optional everywhere |
 | Chorded or simultaneous inputs | One pointer, one action | Never used |
 
-The 350 ms double-click window inherited from the Codex Micro survives as an
-*optional accelerator* with an adjustable window (up to 2000 ms) and an off
-switch, because for a mouse user it is genuinely faster, and for everyone else
-it must not be load-bearing.
+The 350 ms double-click inherited from the Codex Micro has no accelerator
+here: since [ADR-027](DECISIONS.md#adr-027) the tile's single click already
+raises, so there is nothing for a double-click to be faster at. If one ever
+returns for some other action it must be optional, adjustable (up to 2000 ms),
+switchable off, and never load-bearing.
 
 Two consequences of the hover row are load-bearing enough to state outside the
 table.

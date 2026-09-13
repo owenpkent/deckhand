@@ -103,6 +103,13 @@ function showMessage(text: string): void {
   }
 }
 
+// Same as showMessage, but never opens a collapsed panel: for outcomes
+// the user can already see happened.
+function noteMessage(text: string): void {
+  panelMessage = text;
+  renderPanel();
+}
+
 // ---- Tiles ----------------------------------------------------------
 
 function slot2Text(s: SessionSnap): string {
@@ -153,7 +160,14 @@ function renderTile(t: TileSnapshot): HTMLElement {
   el.addEventListener("click", () => {
     const prev = selectedTile();
     if (prev && prev.index !== t.index) previousTile = prev.index;
-    void api.core.invoke("select_tile", { index: t.index });
+    // ADR-027: one click selects and raises. Select first so the panel
+    // shows the session the raise sentence refers to. A raise that
+    // worked is visible on its own, so its sentence does not force the
+    // panel open; a miss must explain itself, so it does.
+    void api.core
+      .invoke("select_tile", { index: t.index })
+      .then(() => api.core.invoke<string>("reveal_session", { index: t.index }))
+      .then((text) => (text.startsWith("Raised ") ? noteMessage(text) : showMessage(text)));
   });
   return el;
 }

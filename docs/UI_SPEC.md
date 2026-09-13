@@ -164,7 +164,7 @@ Approve and Deny.
 | Answer | Selected tile amber, `kind: question` | Neutral, opens the answer targets |
 | Interrupt | Selected tile thinking | Destructive |
 | Continue | Selected tile complete and a send channel exists | Neutral, normally disabled in attached mode |
-| Reveal | Selected tile bound to a locatable host | Neutral |
+| Reveal | Selected tile bound to a locatable host; repeats the raise the tile click made | Neutral |
 
 Plan mode and Compact are not keys. They live in the detail panel; the
 measurement that demoted them is in
@@ -257,9 +257,8 @@ mode, attached or hosted), the state in words, the current or pending item
 (tool name and input for amber `permission`, the question and its answer
 targets for amber `question`, last result line for green), Approve and Deny
 when amber `permission`, context bar with percentage, cost figure, then Reveal,
-Unbind, plan mode, compact, and per-session settings. The panel is also where
-every double-click accelerator has its single-click equivalent (Reveal, most
-importantly).
+Unbind, plan mode, compact, and per-session settings. Reveal here repeats the
+raise that the tile click already made for the selected session (ADR-027).
 
 It is also where reveals land. Clicking a disabled control puts the reason
 here, in words, and expands the panel first if it was collapsed. That is the

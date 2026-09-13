@@ -198,6 +198,19 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       verbosity. `scripts/phase1-smoke.ps1` induces five states across
       three tiles and screenshots them; the six-session version and the
       logging decision are still owed.
+- [ ] Capture the session pid and host at the hook instead of guessing
+      later: the shim wraps the payload with `CLAUDE_PID`,
+      `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`, and
+      `VSCODE_PID` from its own environment (all observed on 2.1.270
+      under the VS Code extension; the terminal case is not yet
+      observed), and the daemon finds the window by walking that pid's
+      ancestors to the first process owning a visible top-level window,
+      with the title match limited to that process's windows. Needs its
+      own ADR: it changes the shim contract and populates the ADR-023
+      `host` field.
+- [ ] Take liveness from the pid: hold a process handle per session and
+      flip to `ended` the moment it exits, and stop greying a live idle
+      session at the fifteen-minute mark. Same ADR as the pid capture.
 
 ---
 
@@ -246,7 +259,10 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       first live try the same day did not visibly work; every attempt
       now appends what it searched for and what won to
       `%LOCALAPPDATA%\deckhand\reveal.log`, so the next report is
-      diagnosable. Stays unchecked until a live click is seen to raise
+      diagnosable. Since 2026-09-13 the tile click itself raises
+      (ADR-027), so every click logs an attempt; the key and the panel
+      action repeat the raise, and the key's slot is open for
+      retabling. Stays unchecked until a live click is seen to raise
       the right window.
 - [ ] Implement plan mode and compact in the detail panel, not as command
       keys.

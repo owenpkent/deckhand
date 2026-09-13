@@ -246,12 +246,15 @@ answer no permission decision, and may carry whatever their own event supports,
    focus and never covers its own approval card, but it could sit over another
    app's dialog. Mitigation is placement control and a collapse gesture, not a
    claim that overlay problems are solved.
-3. **Synthetic input fallbacks** (attached-mode send, focus raising) type into
-   whatever window matches a heuristic. That is why they are off by default,
-   marked `synthetic`, and never combined with approval authority. The
-   heuristic is weaker on a `vscode-extension` host, where a pid identifies no
-   single window and the title is all there is, so send has no synthetic route
-   there at all and Reveal raises a window without selecting a tab. The
+3. **Synthetic input fallbacks** (attached-mode send) type into whatever
+   window matches a heuristic. That is why they are off by default, marked
+   `synthetic`, and never combined with approval authority. Raising a window
+   uses the same heuristic and is on by default since ADR-027, because its
+   worst case is the wrong window in front rather than keystrokes into it; it
+   types nothing. The heuristic is weaker on a `vscode-extension` host, where
+   a pid identifies no single window and the title is all there is, so send
+   has no synthetic route there at all and a raise brings up the window
+   without selecting a tab. The
    approval path is unaffected by any of this: it runs over hooks and is
    host-independent, which was observed rather than assumed
    ([DECISIONS.md](DECISIONS.md#adr-023)).

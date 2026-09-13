@@ -100,7 +100,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 027.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 028.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -145,7 +145,9 @@ for dogfooding. The open Phase 1 work is in [TODO.md](TODO.md): daemon
 lifecycle, installable hook registration, the transcript fallback, and
 the six-session colour test. ADR-023 added the host axis, ADR-024
 corrected the enumeration to bindings-not-state, and ADR-025 recorded
-the window spike pass that Phase 1's window builds on.
+the window spike pass that Phase 1's window builds on. ADR-027 folded
+the raise into the tile click: selecting a session brings its window
+forward.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

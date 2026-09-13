@@ -378,8 +378,11 @@ inference. It receives state and sends intents.
 Two window properties are hard requirements rather than preferences:
 
 1. **Always on top.**
-2. **Never takes focus.** Clicking a tile must not defocus the terminal you are
-   controlling. On Windows the Tauri and Qt-level flags are not sufficient on
+2. **Never takes focus.** Deckhand's own window is never activated: a click on
+   it must not hand focus to the board. Since ADR-027 a tile click raises the
+   clicked session's host window, which is the one focus change the surface
+   makes, and it goes to the session, never to Deckhand. On Windows the Tauri
+   and Qt-level flags are not sufficient on
    their own: the sibling project `alpha-osk` had to apply
    `WS_EX_NOACTIVATE | WS_EX_TOPMOST` through a raw `SetWindowLongW` call, and
    reapply it whenever the window becomes visible. Deckhand has to reproduce

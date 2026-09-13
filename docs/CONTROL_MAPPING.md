@@ -1,7 +1,8 @@
 # Control mapping: Codex Micro to Deckhand
 
 Status: **accepted**. The command keys, the stick, and Reveal were retabled on
-2026-07-30 against measured Claude Code usage. The measurement column in each
+2026-07-30 against measured Claude Code usage, and the tile click took over
+the raise on 2026-09-13 (ADR-027). The measurement column in each
 table is the evidence, and it is one user's corpus on one machine, not a
 general finding.
 
@@ -44,16 +45,17 @@ hardware did not. See [ACCESSIBILITY.md](ACCESSIBILITY.md#what-the-hardware-does
 | --- | --- |
 | 6 frosted keys, each following one chat | 6 tiles, each bound to one Claude Code session |
 | Key LED shows chat status | Tile background and status ring show session status |
-| Press once: switch chat silently | Click once: select the session as Deckhand's target, do not touch window focus |
-| Press twice within 350 ms: switch and bring ChatGPT forward | Click the tile's Reveal target: raise that session's host window. Double-click does the same as an off-by-default accelerator |
+| Press once: switch chat silently | Click once: select the session as Deckhand's target and raise its host window ([ADR-027](DECISIONS.md#adr-027)) |
+| Press twice within 350 ms: switch and bring ChatGPT forward | The same single click. The Reveal key and the panel action repeat the raise for the selected session; there is no double-click accelerator |
 | Selected chat's key pulses with its status light | Selected tile pulses; unselected tiles are steady |
 | Off means no assigned chat | Empty tile shows a bind affordance |
 
-Raising a window is a single click on a target, not a double-press. The
-device's 350 ms double-press survives as an accelerator that is off by default
-and has an adjustable window, which is what
-[ACCESSIBILITY.md](ACCESSIBILITY.md#forbidden-interactions) already requires of
-every double-click here. Nothing is reachable only by double-clicking.
+Raising a window is the tile's single click, not a double-press. The device's
+350 ms double-press has no accelerator here because there is nothing left for
+it to accelerate, which satisfies
+[ACCESSIBILITY.md](ACCESSIBILITY.md#forbidden-interactions) by construction.
+Deckhand's own window still never takes focus (ADR-025): the raise moves the
+foreground to the session, never to the board.
 
 Reveal matches a session to a window by pid where that works, since
 `claude agents --json` reports a `pid` per live session (observed on Claude
@@ -278,7 +280,7 @@ decision with a reason, recorded here so it is not silently re-litigated.
 
 | # | Divergence | Reason |
 | --- | --- | --- |
-| 1 | Single click never changes window focus | On a shared screen the surface must not steal focus from the terminal it is driving. The device is a separate object and does not have this problem. |
+| 1 | Single click selects and raises; the surface itself never takes focus | The device raises on a double press. Here the board exists to see every session and get to one, so one click does both, and the surface stays no-activate so the only focus change is to the session's window, never to Deckhand ([ADR-027](DECISIONS.md#adr-027)). |
 | 2 | Talk defaults to click-to-toggle, not hold | Sustained holds are the specific thing this project exists to remove. |
 | 3 | Stick is four-way discrete, not analog | A pointer cannot comfortably hold a deflection. |
 | 4 | Plan mode leaves the stick, and the stick does not navigate tiles | Plan mode fired twice in 240 sessions and both plan hooks are model-invocable, so it earns neither a stick direction nor a permanent key; it lives in the detail panel. Tile stepping went with it: six or more concurrent sessions happens 0.5% of the time, so stepping reached a tile that was already one click away. The stick scrolls the pending tool input instead. |
@@ -286,7 +288,7 @@ decision with a reason, recorded here so it is not silently re-litigated.
 | 6 | Green clears on select, not on any interaction | Makes "not white" a reliable unread signal. |
 | 7 | No speech recognition in this repo | MacroVox already does it. |
 | 8 | Command keys are retabled around answering, not the device's mode toggles | The device defaults to fast mode, approve, decline, continue, and send. Measured usage puts questions at 322 against plan mode at 2, so Answer and Reveal take the slots plan mode and compact held. |
-| 9 | Raise becomes Reveal, on a single click | The device raises on a double press. Here a double-click is an accelerator and never the only route, so Reveal is a single-click target on the tile and in the detail panel. |
+| 9 | Raise is the tile click; Reveal repeats it | A double-click is never the only route to anything, and since ADR-027 it is not a route at all: the tile click raises, and the Reveal key and panel action repeat the raise for the selected session. |
 
 ## Naming
 

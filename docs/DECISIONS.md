@@ -856,3 +856,55 @@ not an observation. The board itself ran through all of this live, with
 the owner's own session as the first tile. This entry reopens per event
 as the remaining three are seen, and per field if a release changes any
 observed shape.
+
+<a id="adr-027"></a>
+## ADR-027: A tile click selects and raises
+
+Date: 2026-09-13
+
+**Context.** The MVP is two things: see the state of every Claude Code
+session on this machine, and get to the window holding one of them in a
+single click. The control mapping had split that second half in two:
+clicking a tile selected the session and left window focus alone, and a
+separate Reveal target on the tile, plus the Reveal key and the panel
+action, raised the host window. Divergence 1 justified the split by the
+surface's need never to steal focus, which is a different thing: that
+rule is about Deckhand's own window, settled by ADR-025, and it is not
+touched by moving the foreground to a session's window on request.
+
+Three ways to fold the raise into the click were weighed. Keep the
+split, with the tile carrying two 44 px targets. Raise on the second
+click of an already selected tile, which keeps one target per tile but
+makes the raise a two-click action and depends on the selected state
+being obvious. Raise on every click, which gives up looking at a session
+without going to it.
+
+**Decision.** Clicking a bound tile selects the session and raises its
+host window in the same click. There is no separate Reveal target on
+the tile and no double-click accelerator, since there is nothing left
+for one to accelerate. Deckhand's own window still never activates
+(ADR-025): the one focus change the surface makes is to the session's
+window, never to itself. The Reveal command key and the panel action
+stay as a repeat of the raise for the selected session, which the same
+click on the selected tile also does; the key's slot is therefore
+redundant and is open for retabling in Phase 3.
+
+The window match itself is unchanged by this entry and remains
+unproven live: the pid the enumeration reports belongs to `claude.exe`,
+which owns no top-level window on any host observed so far, so the pid
+score never fires and the title heuristic carries the whole load. With
+every click now attempting the raise, `reveal.log` fills from normal
+use, which is how the match gets fixed. That fix, capturing the session
+pid and host from the hook process's own environment, is separate work
+and gets its own entry.
+
+**Consequences.** The cost is the one the owner accepted knowingly: a
+session cannot be inspected on the board without its window coming
+forward, and in Phase 2 approving a prompt on one tile brings that
+session's window up over whatever was being read. The gain is that the
+MVP's second half is one click on a full-size target. Approve and deny
+are unaffected: they act on the selected session over hooks, and the
+selection rule (green clears on select, divergence 6 in the control
+mapping) is the same as before. The control mapping, the accessibility
+table, the UI spec, the architecture's focus rule, and the security
+model's residual risk on synthetic input are updated in the same change.
