@@ -37,8 +37,9 @@ So the surface is judged on motion arithmetic:
   static target today; approve, deny, and answering a question will be too
   whenever they return to the surface (they are Phase 2 or later, and
   currently off it, see [ADR-028](DECISIONS.md#adr-028)).
-- **Short travel.** The session list sits together as one control and docks
-  to a screen edge so it lives near wherever the pointer already works.
+- **Short travel.** The session list sits together as one control and stays
+  where it was last placed, near wherever the pointer already works
+  (placing it is currently drag-only, see the exception below).
 - **No interaction taxes.** No hover-to-reveal with a timeout, no drag-only
   controls, no scroll-to-reach-the-button, no confirmation dialogs that appear
   at a different screen position than the action that raised them.
@@ -155,7 +156,7 @@ colour is the fastest channel, never the only one:
 | Needs input | Amber | Hand | Waiting on you |
 | Complete | Green | Check | Done, unread |
 | Error | Red | Cross | Problem |
-| Unknown | Grey | Question, hatched fill | Not heard yet, or Unknown |
+| Unknown | Grey | Question | Not heard yet, or Unknown |
 | Ended or unbound | None | Dash | Empty |
 
 Unknown carries two labels for the one state: "Not heard yet" for a session

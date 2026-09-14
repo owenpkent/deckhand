@@ -158,7 +158,7 @@ authoritative in [ARCHITECTURE.md](ARCHITECTURE.md#the-child-ledger).
 | Needs input | Amber | Hand | Slow breathe (static) |
 | Complete | Green | Check | One pulse on entry (none) |
 | Error | Red | Cross | None |
-| Unknown | Grey, hatched | Question | None |
+| Unknown | Grey, dimmed | Question | None |
 | Ended | Off | Dash | None |
 
 Glyphs are drawn, not emoji, so they render identically across platforms and

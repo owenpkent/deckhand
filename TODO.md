@@ -221,28 +221,28 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       session at the fifteen-minute mark. Not resolved by ADR-032, which
       only changed how Reveal finds a window for a pid it already has;
       this still needs its own ADR.
-- [ ] Bring `app/` in line with ADR-028: replace the six-slot tile surface
+- [x] Bring `app/` in line with ADR-028: replace the six-slot tile surface
       and its manual bind picker, command keys, stick, dial, talk and
       send placeholders, detail panel, layer strip, and corner badges
       with the session-list surface (one row per session: colour, glyph,
       name, state word) and a header holding a grey toggle and Quit
       (ADR-030 added Hide grey on top of ADR-028's Move and Quit;
       ADR-031 then removed Move and made the header the drag region).
-- [ ] Replace the six-slot manual binding with ADR-028's auto-binding:
+- [x] Replace the six-slot manual binding with ADR-028's auto-binding:
       bind a session on its first hook event or enumeration hit, into an
       ordered, unbounded list; drop the null slots when loading a legacy
       six-slot `bindings.json`.
-- [ ] Rerun `claude agents` enumeration every 15 s on its own timer,
+- [x] Rerun `claude agents` enumeration every 15 s on its own timer,
       outside the registry lock, and remove a session when it ends or
       when a successful enumeration no longer lists it and it has had no
       hook event for 60 s; a failed enumeration must prune nothing
       (ADR-028).
-- [ ] Size and place the window per ADR-028: about 360 px wide, height
+- [x] Size and place the window per ADR-028: about 360 px wide, height
       following the row count at 64 px per row plus a 52 px header
       (ADR-029 set it at 64 px; ADR-031 shrank it to 52), clamped to the
       monitor work area, with a saved position validated against the
       monitors actually connected at startup.
-- [ ] Exclude Deckhand's own window from the raise match (ADR-028).
+- [x] Exclude Deckhand's own window from the raise match (ADR-028).
 - [ ] Verify the console Reveal path (`AttachConsole` plus
       `GetConsoleWindow`, [ADR-032](docs/DECISIONS.md#adr-032)) against a
       real console-hosted session; so far it has only been exercised

@@ -70,11 +70,11 @@ source-of-truth map. This table is a reading budget, not a second map.
 | --- | --- | --- |
 | [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 228 | What every control does |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 515 | Daemon, shim, surface, state machine |
-| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 347 | Daemon to runtime contract |
+| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 352 | Daemon to runtime contract |
 | [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 679 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 299 | Approval path; fails to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 138 | Visual and interaction contract |
-| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 189 | The rules that win every conflict |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 207 | Visual and interaction contract |
+| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 219 | The rules that win every conflict |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 1473 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 151 | Map and change-propagation table |
 | [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 364 | Phases and open work |
@@ -162,8 +162,10 @@ unbounded list; ADR-030 added a third header control, Hide grey, that
 filters `unknown` rows out of the list and shows how many it hid on the
 button itself. ADR-031 then removed Move, made the whole header a drag
 region, relabelled and restyled the grey toggle, and dropped the dashed
-outline unknown and ended rows used to share; `app/` implements all
-three.
+outline unknown and ended rows used to share. ADR-029 had already
+restyled the list (64 px two-line rows, header counts, a bundled
+typeface), and ADR-032 made Reveal host-aware (VS Code, Windows
+Terminal, console); `app/` implements all of these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

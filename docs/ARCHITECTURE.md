@@ -71,7 +71,7 @@ decided.
 | `COMPLETE` | Green | A turn finished, the child ledger is empty, and you have not selected the tile since | You select the tile, or a new turn begins |
 | `ERROR` | Red | The turn failed, or the process died without a clean exit | You select the tile (a crashed session then shows `ENDED`), or the session recovers |
 | `ENDED` | Off | The session exited for good, or you acknowledged a crashed `ERROR` tile | Rebound |
-| `UNKNOWN` | Grey, hatched | The daemon cannot currently tell | Any authoritative event arrives |
+| `UNKNOWN` | Grey | The daemon cannot currently tell | Any authoritative event arrives |
 
 Amber carries a kind, `permission` or `question`, on the update that raises it.
 This is a discriminator on the state's detail, not a new state and not a new
@@ -434,7 +434,7 @@ its height following the row count at 64 px per row plus a 52 px header
 [ADR-029](DECISIONS.md#adr-029), and 48 px and 56 px before that),
 clamped into the monitor's work area so it can never render partly
 off-screen. Since [ADR-030](DECISIONS.md#adr-030) the row count that
-sizing uses is `visible_row_count`, the visible rows once the Hide grey
+sizing uses is `visible_row_count`, the visible rows once the grey toggle
 filter is applied, not the bound count; the `T_unknown` watchdog (see
 [Liveness, by open operation](#liveness-by-open-operation)) that can move
 a session into `unknown` while the filter is on routes through the same
@@ -481,7 +481,7 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 
 | Data | Where | Notes |
 | --- | --- | --- |
-| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown`, the Hide grey toggle's state ([ADR-030](DECISIONS.md#adr-030)); a missing field or a corrupt file loads as `false` |
+| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown`, the grey toggle's state ([ADR-030](DECISIONS.md#adr-030), relabelled by [ADR-031](DECISIONS.md#adr-031)); a missing field or a corrupt file loads as `false` |
 | Session bindings | Same | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
 | Session transcripts | Not stored | Deckhand reads them where they already are and copies nothing |
