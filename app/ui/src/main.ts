@@ -16,6 +16,7 @@ import {
   isRevealSuccess,
   revealNote,
   STATE_WORDS,
+  stateGlyph,
   stateWord,
   summaryCounts,
   unknownCount,
@@ -60,7 +61,7 @@ function renderRow(t: TileSnapshot): HTMLElement {
 
   el.dataset["state"] = s.state;
   const spinning = s.state === "thinking" ? " spinning" : "";
-  const glyph = s.state === "ended" ? GLYPHS["ended"] : GLYPHS[s.state];
+  const glyph = stateGlyph(s.state);
 
   el.innerHTML = `
     <div class="glyph${spinning}">${glyph}</div>

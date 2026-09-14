@@ -6,7 +6,7 @@ import { SessionState } from "./types.js";
 
 // ---- Glyphs: drawn, never emoji (docs/UI_SPEC.md#state-rendering) ----
 
-export const GLYPHS: Record<string, string> = {
+export const GLYPHS: Record<SessionState, string> = {
   idle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>`,
   thinking: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 4 a8 8 0 0 1 8 8"/></svg>`,
   needs_input: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11V6a1.5 1.5 0 0 1 3 0v4V5a1.5 1.5 0 0 1 3 0v5V6.5a1.5 1.5 0 0 1 3 0V12v-2a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4.6 14a1.6 1.6 0 0 1 2.6-1.8L8.5 14"/></svg>`,
@@ -26,12 +26,33 @@ export const STATE_WORDS: Record<SessionState, string> = {
   unknown: "unknown",
 };
 
+// Whether `state` is one of the SessionState variants STATE_WORDS and
+// GLYPHS actually have an entry for. TypeScript trusts the SessionState
+// annotation at every call site, but a session's state arrives over IPC
+// from the daemon: version skew, or a state one side knows and the other
+// doesn't yet, can hand the surface a string outside that union at
+// runtime regardless of what the compiler believes. Guarding the lookup
+// here is what stateWord/stateGlyph fall back on.
+function isKnownState(state: string): state is SessionState {
+  return Object.prototype.hasOwnProperty.call(STATE_WORDS, state);
+}
+
 // The word a row shows. Unknown has two roads in and says which one it
 // took: a session bound at startup that no hook has spoken for yet is
 // "not heard yet"; one that went silent past T_unknown stays "unknown".
-// Same state, same colour, same glyph (ADR-008).
+// Same state, same colour, same glyph (ADR-008). A state outside the
+// known set (see isKnownState) also reads as "unknown" rather than
+// returning undefined: an unguarded lookup used to reach escapeHtml and
+// throw, blanking the whole list.
 export function stateWord(s: { state: SessionState; heard: boolean }): string {
-  return s.state === "unknown" && !s.heard ? "not heard yet" : STATE_WORDS[s.state];
+  const state = isKnownState(s.state) ? s.state : "unknown";
+  return state === "unknown" && !s.heard ? "not heard yet" : STATE_WORDS[state];
+}
+
+// The glyph for a session's state, with the same unknown-state fallback
+// as stateWord and for the same reason.
+export function stateGlyph(state: SessionState): string {
+  return GLYPHS[isKnownState(state) ? state : "unknown"];
 }
 
 // The states the header counts, in display order: what needs a human

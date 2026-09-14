@@ -14,6 +14,7 @@ import {
   isRevealSuccess,
   revealNote,
   STATE_WORDS,
+  stateGlyph,
   stateWord,
   summaryCounts,
   unknownCount,
@@ -93,6 +94,22 @@ test("GLYPHS has a non-empty glyph for every session state", () => {
   }
 });
 
+// ---- stateGlyph -----------------------------------------------------------
+
+test("stateGlyph returns the matching glyph for every known state", () => {
+  for (const state of STATES) {
+    assert.equal(stateGlyph(state), GLYPHS[state]);
+  }
+});
+
+test("stateGlyph falls back to the unknown glyph for a state outside the union", () => {
+  // The daemon and surface can drift (a build mismatch, or a state one
+  // side knows and the other doesn't yet); the wire only carries a
+  // string, so this is reachable at runtime however TypeScript types it.
+  const bogus = "reticulating" as unknown as SessionState;
+  assert.equal(stateGlyph(bogus), GLYPHS.unknown);
+});
+
 // ---- STATE_WORDS ---------------------------------------------------------
 
 test("STATE_WORDS renders the expected word for every state", () => {
@@ -169,6 +186,17 @@ test("stateWord says not heard yet only for an unknown session no hook has spoke
     if (state === "unknown") continue;
     assert.equal(stateWord({ state, heard: false }), STATE_WORDS[state]);
   }
+});
+
+test("stateWord falls back to unknown for a state outside the union instead of returning undefined", () => {
+  // Regression: STATE_WORDS[state] used to be indexed unguarded, so a
+  // state the surface doesn't recognise returned undefined, and
+  // escapeHtml(undefined) threw and blanked the whole session list.
+  const bogus = "reticulating" as unknown as SessionState;
+  assert.equal(stateWord({ state: bogus, heard: true }), "unknown");
+  // Would throw before the fix (escapeHtml(undefined)); a plain call
+  // that fails the test on a throw is the regression check.
+  assert.equal(escapeHtml(stateWord({ state: bogus, heard: true })), "unknown");
 });
 
 // ---- unknownCount ---------------------------------------------------------
