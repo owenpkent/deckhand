@@ -13,6 +13,7 @@ import {
   greyLabel,
   isRevealSuccess,
   revealNote,
+  rowLabel,
   STATE_WORDS,
   stateGlyph,
   stateWord,
@@ -135,6 +136,29 @@ test("displayName prefers the label when present", () => {
 
 test("displayName falls back to the first 8 chars of id when label is empty", () => {
   assert.equal(displayName({ id: "session-id-long", label: "" }), "session-");
+});
+
+// ---- rowLabel -------------------------------------------------------------
+
+test("rowLabel joins the name and state word, with no note", () => {
+  assert.equal(
+    rowLabel({ id: "s1", label: "My Session", state: "thinking", heard: true }),
+    "My Session, thinking"
+  );
+});
+
+test("rowLabel appends the reveal note when one is showing", () => {
+  assert.equal(
+    rowLabel({ id: "s1", label: "My Session", state: "error", heard: true }, "No window found"),
+    "My Session, error, No window found"
+  );
+});
+
+test("rowLabel reflects not-heard-yet the same way stateWord does", () => {
+  assert.equal(
+    rowLabel({ id: "s1", label: "", state: "unknown", heard: false }),
+    "s1, not heard yet"
+  );
 });
 
 // ---- isRevealSuccess --------------------------------------------------------

@@ -15,6 +15,7 @@ import {
   greyLabel,
   isRevealSuccess,
   revealNote,
+  rowLabel,
   STATE_WORDS,
   stateGlyph,
   stateWord,
@@ -48,7 +49,6 @@ const grey = document.getElementById("grey")!;
 function renderRow(t: TileSnapshot): HTMLElement {
   const el = document.createElement("button");
   el.className = "row";
-  el.setAttribute("aria-label", `Session ${t.index + 1}`);
   if (t.selected) el.classList.add("selected");
 
   const s = t.session;
@@ -56,6 +56,7 @@ function renderRow(t: TileSnapshot): HTMLElement {
     // Defensive only: every bound row should resolve to a session.
     el.classList.add("row-empty");
     el.textContent = "…";
+    el.setAttribute("aria-label", "Unbound session slot");
     return el;
   }
 
@@ -75,6 +76,11 @@ function renderRow(t: TileSnapshot): HTMLElement {
     noteEl.textContent = note.text;
     el.append(noteEl);
   }
+  // setAttribute takes a literal string, not an HTML fragment, so this
+  // does not need escapeHtml the way the innerHTML above does; it is
+  // built from the same displayName/stateWord facts either way, just
+  // read by a screen reader instead of an eye.
+  el.setAttribute("aria-label", rowLabel(s, note?.text));
 
   el.addEventListener("click", () => {
     void api.core

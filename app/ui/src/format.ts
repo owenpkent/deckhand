@@ -121,6 +121,19 @@ export function displayName(s: { id: string; label: string }): string {
   return s.label || s.id.slice(0, 8);
 }
 
+// A row button's accessible name. The row is a <button>, so with no
+// aria-label the browser would compute one from its own text content
+// (name, then state word) and get this for free; the point of building
+// it explicitly is to fold in the Reveal-miss note when one is showing,
+// since that note is a sibling element added after the fact and a
+// generic "Session N" label was masking all of it, name and state word
+// included, from anyone not reading the screen.
+export function rowLabel(s: { id: string; label: string; state: SessionState; heard: boolean }, note?: string): string {
+  const parts = [displayName(s), stateWord(s)];
+  if (note) parts.push(note);
+  return parts.join(", ");
+}
+
 // Reveal always returns a sentence, success or miss. A successful raise
 // is visible on its own (the host window comes forward), so only a miss
 // is worth showing as a row note; this is the plain-data decision behind
