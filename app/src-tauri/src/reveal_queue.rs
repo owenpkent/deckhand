@@ -56,7 +56,15 @@ impl RevealQueue {
             .name("deckhand-reveal".into())
             .spawn(move || {
                 for job in rx {
-                    let text = reveal_fn(&job.request);
+                    // A panic in one reveal must not kill the only
+                    // worker, or every later click would miss until
+                    // restart. Drop that job's reply (the caller shows
+                    // its miss) and keep serving the queue.
+                    let Ok(text) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        reveal_fn(&job.request)
+                    })) else {
+                        continue;
+                    };
                     // The receiving end (the command's spawn_blocking
                     // closure) may itself have given up -- it never
                     // does today, but nothing here should panic if a
@@ -179,21 +187,16 @@ mod tests {
     }
 
     #[test]
-    fn a_dead_worker_is_eventually_reported_by_submit_itself() {
-        let queue = RevealQueue::spawn(|_r: &RevealRequest| panic!("always dies"));
-        let _ = queue.submit(req("first")).unwrap().recv(); // kills the worker thread
-
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
-        loop {
-            if queue.submit(req("probe")).is_err() {
-                return;
+    fn the_worker_keeps_serving_after_a_reveal_panics() {
+        let queue = RevealQueue::spawn(|r: &RevealRequest| {
+            if r.session_id == "boom" {
+                panic!("simulated reveal failure");
             }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "submit must eventually see the worker thread is gone once it has panicked"
-            );
-            std::thread::sleep(Duration::from_millis(5));
-        }
+            format!("done {}", r.session_id)
+        });
+        assert!(queue.submit(req("boom")).unwrap().recv().is_err());
+        let rx = queue.submit(req("next")).expect("the worker is still alive");
+        assert_eq!(rx.recv().unwrap(), "done next");
     }
 
     #[test]
