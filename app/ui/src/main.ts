@@ -22,6 +22,7 @@ import {
   summaryCounts,
   unknownCount,
 } from "./format.js";
+import { presentSessionIds, staleNoteIds } from "./notes.js";
 import { applyTheme, dark } from "./theme.js";
 import { Snapshot, TileSnapshot, tauri } from "./types.js";
 
@@ -34,10 +35,12 @@ const IDLE_DIM_MS = 3 * 60 * 1000;
 const NOTE_MS = 4000;
 
 // A row's inline note (a Reveal miss, shown for a few seconds), keyed by
-// row index. Indices shift as sessions bind and unbind, so a note is
-// scoped to "whatever is in this row right now", not to a session id;
-// that matches how briefly it is ever shown.
-const rowNotes = new Map<number, { text: string; timer: ReturnType<typeof setTimeout> }>();
+// session id (PR review: identity). Indices shift as sessions bind and
+// unbind; keying by id instead is what keeps a delayed miss pinned to
+// the session it was raised for, even if rows above it come or go
+// before the note is dropped. Pruned back to the present session set on
+// every render (see pruneRowNotes) so a note never outlives its session.
+const rowNotes = new Map<string, { text: string; timer: ReturnType<typeof setTimeout> }>();
 
 const surface = document.getElementById("surface")!;
 const list = document.getElementById("list")!;
@@ -69,7 +72,7 @@ function renderRow(t: TileSnapshot): HTMLElement {
     <div class="row-name">${escapeHtml(displayName(s))}</div>
     <div class="row-state">${escapeHtml(stateWord(s))}</div>`;
 
-  const note = rowNotes.get(t.index);
+  const note = rowNotes.get(s.id);
   if (note) {
     const noteEl = document.createElement("div");
     noteEl.className = "row-note";
@@ -82,26 +85,55 @@ function renderRow(t: TileSnapshot): HTMLElement {
   // read by a screen reader instead of an eye.
   el.setAttribute("aria-label", rowLabel(s, note?.text));
 
+  // One intent, one session id (PR review: identity): activate_session
+  // resolves this id itself, at the moment the daemon actually looks,
+  // rather than trusting the row index captured here to still name the
+  // same session by the time either half of the old two-call sequence
+  // ran. The closure below captures sessionId, not t.index, so the
+  // result -- success or a delayed miss -- always lands on this
+  // session's own note, never on whatever row it happens to occupy by
+  // the time the reply arrives.
+  const sessionId = s.id;
   el.addEventListener("click", () => {
     void api.core
-      .invoke("select_tile", { index: t.index })
-      .then(() => api.core.invoke<string>("reveal_session", { index: t.index }))
+      .invoke<string>("activate_session", { sessionId })
       .then((text) => {
-        if (!isRevealSuccess(text)) showRowNote(t.index, revealNote(text));
+        if (!isRevealSuccess(text)) showRowNote(sessionId, revealNote(text));
+      })
+      .catch(() => {
+        // Defensive only: activate_session is designed to always
+        // resolve (see main.rs), never reject. If it somehow does
+        // anyway, the failure must still be visible on this row rather
+        // than vanish as an unhandled promise rejection (PR review:
+        // blocking, "an invoke rejection must not vanish silently").
+        showRowNote(sessionId, "Reveal failed");
       });
   });
   return el;
 }
 
-function showRowNote(index: number, text: string): void {
-  const existing = rowNotes.get(index);
+function showRowNote(sessionId: string, text: string): void {
+  const existing = rowNotes.get(sessionId);
   if (existing) clearTimeout(existing.timer);
   const timer = setTimeout(() => {
-    rowNotes.delete(index);
+    rowNotes.delete(sessionId);
     render();
   }, NOTE_MS);
-  rowNotes.set(index, { text, timer });
+  rowNotes.set(sessionId, { text, timer });
   render();
+}
+
+// Drop every note whose session is no longer present, so a delayed
+// result for a session that has since ended does not linger forever
+// (it never renders once its session is gone, but the Map entry and
+// its timer would otherwise outlive it for no reason).
+function pruneRowNotes(): void {
+  const present = presentSessionIds(snapshot.tiles);
+  for (const id of staleNoteIds(rowNotes.keys(), present)) {
+    const note = rowNotes.get(id);
+    if (note) clearTimeout(note.timer);
+    rowNotes.delete(id);
+  }
 }
 
 // ---- Header counts ----------------------------------------------------
@@ -136,6 +168,7 @@ function renderGrey(): void {
 }
 
 function render(): void {
+  pruneRowNotes();
   renderSummary();
   renderGrey();
   if (snapshot.tiles.length === 0) {

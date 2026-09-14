@@ -8,5 +8,6 @@ pub mod http;
 pub mod persist;
 pub mod registry;
 pub mod reveal;
+pub mod reveal_queue;
 pub mod state;
 pub mod window;

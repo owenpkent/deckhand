@@ -24,6 +24,28 @@ version number is invented and no past release is backfilled.
   legitimately revives an ended session) is now ignored outright once a
   session is `ENDED`. `docs/ARCHITECTURE.md` records the rule alongside the
   other events that read like state changes and are not.
+- **A row click resolves by session id, not row index, and Reveal no
+  longer blocks the surface.** Clicking a row used to fire two IPC calls,
+  `select_tile(index)` then `reveal_session(index)`, each resolving the
+  same numeric row index at a different moment; a row above the clicked
+  one ending between the two calls could select or reveal the wrong
+  session. One `activate_session({ sessionId })` command replaces both:
+  `Registry::begin_activation` (`registry.rs`) resolves the id itself
+  under a short lock scope, returning an explicit miss with no
+  substitution and no selection when the id is no longer bound, or an
+  owned `RevealRequest` otherwise. Reveal itself (which can take a few
+  seconds) used to run synchronously inside the command on the
+  webview's own IPC/event thread, freezing every click, drag, and Quit
+  for as long as it took; it now runs on one dedicated worker thread
+  (`reveal_queue.rs`), which also guarantees an older, slower reveal
+  can never raise a window after a newer one has already completed.
+  `activate_session` is now `async` and awaits the worker's reply via
+  `spawn_blocking` without blocking the event thread; a worker panic or
+  dropped reply channel resolves as an ordinary visible miss ("Reveal
+  did not finish.") rather than a silently vanishing rejected invoke.
+  The surface's row notes (`rowNotes`, `main.ts`) are keyed by session
+  id for the same reason, so a delayed miss always lands on the row it
+  was raised for.
 
 ### Security
 

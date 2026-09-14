@@ -9,7 +9,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use deckhand::{enumerate, http, persist, registry, reveal, state, window};
+use deckhand::{enumerate, http, persist, registry, reveal, reveal_queue, window};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -23,6 +23,25 @@ use tauri::{Emitter, Manager, State};
 const RESCAN_INTERVAL: Duration = Duration::from_secs(15);
 
 struct Shared(Arc<Mutex<registry::Registry>>);
+
+/// The dedicated reveal worker thread (`reveal_queue.rs`), shared so
+/// `activate_session` can hand it a request without ever blocking the
+/// webview/event thread on the reveal itself (PR review: blocking).
+struct RevealWorker(Arc<reveal_queue::RevealQueue>);
+
+/// Returned when a click's session id is no longer bound by the time it
+/// reaches the daemon (PR review: identity): a row above it may have
+/// ended in the meantime, and there is no substitute row to fall back
+/// to, so nothing is selected either.
+const NOT_BOUND_SENTENCE: &str = "No session is bound to this row.";
+
+/// Returned when the reveal worker itself never answers: it panicked
+/// processing this request, its reply channel was dropped, or the
+/// worker thread was already gone (PR review: blocking). Reveal never
+/// fails silently (docs/CONTROL_MAPPING.md), so this is a visible miss
+/// tied to the session that was clicked, exactly like any other Reveal
+/// miss, rather than a rejected invoke the surface has to guess about.
+const WORKER_MISS_SENTENCE: &str = "Reveal did not finish.";
 
 fn now_ms() -> i64 {
     SystemTime::now()
@@ -200,14 +219,6 @@ fn snapshot(shared: State<Shared>) -> registry::Snapshot {
 }
 
 #[tauri::command]
-fn select_tile(index: usize, shared: State<Shared>, app: tauri::AppHandle) {
-    let mut reg = shared.0.lock().unwrap();
-    if reg.select(index, now_ms()) {
-        emit_snapshot(&app, &reg);
-    }
-}
-
-#[tauri::command]
 fn quit(app: tauri::AppHandle) {
     app.exit(0);
 }
@@ -225,34 +236,78 @@ fn toggle_hide_unknown(shared: State<Shared>, app: tauri::AppHandle) {
     after_change(&app, change);
 }
 
-/// Raise the host window of the session bound to a row. Returns a
-/// sentence the surface shows as a brief inline row note either way;
-/// Reveal never fails silently (docs/CONTROL_MAPPING.md).
+/// One intent, one session id (PR review: identity). Selects the row
+/// bound to `session_id` if it still exists (acknowledging its unread
+/// complete) and raises its host window, replacing the old two-call
+/// select_tile-then-reveal_session sequence that resolved the same
+/// numeric row index twice, at two different moments, and could act on
+/// the wrong session if a row above it disappeared in between.
+///
+/// `async` so the (potentially slow, up to a few seconds) reveal work
+/// never runs on the webview/event thread (PR review: blocking): the
+/// registry lock is held only long enough to resolve the id and clone
+/// what the worker needs, then the actual reveal happens on the
+/// dedicated worker thread in `reveal_queue.rs` while this command
+/// merely awaits the reply. Always resolves with a sentence the surface
+/// shows as a brief inline row note; Reveal never fails silently
+/// (docs/CONTROL_MAPPING.md), so a miss here reads the same as any
+/// other Reveal miss rather than as a rejected invoke.
 #[tauri::command]
-fn reveal_session(index: usize, shared: State<Shared>) -> String {
-    let (label, cwd, dir, pid, session_id) = {
-        let reg = shared.0.lock().unwrap();
-        let Some(session) = reg.bindings.get(index).and_then(|id| reg.sessions.get(id)) else {
-            return "No session is bound to this row.".to_string();
-        };
-        (
-            session.label.clone(),
-            session.cwd.clone(),
-            session.cwd.as_deref().map(state::dir_name),
-            session.pid,
-            session.id.clone(),
-        )
+async fn activate_session(
+    session_id: String,
+    shared: State<'_, Shared>,
+    worker: State<'_, RevealWorker>,
+    app: tauri::AppHandle,
+) -> Result<String, ()> {
+    // Result<_, ()> rather than a bare String only because Tauri's
+    // async-command macro requires a Result return type whenever the
+    // command takes a State parameter; the Err(()) arm is never
+    // actually produced (see the match below), so this can never
+    // reject the invoke -- exactly per PR review: an invoke rejection
+    // must not vanish silently in the UI, so there had better not be
+    // one to vanish.
+    let activation = {
+        let mut reg = shared.0.lock().unwrap();
+        let activation = reg.begin_activation(&session_id, now_ms());
+        if matches!(activation, registry::Activation::Go(_)) {
+            emit_snapshot(&app, &reg);
+        }
+        activation
+        // The lock drops here, before any reveal work: `reg` goes out
+        // of scope at the end of this block, well before the
+        // spawn_blocking await below.
     };
-    reveal::reveal(&label, dir.as_deref(), cwd.as_deref(), pid, &session_id)
+    let registry::Activation::Go(request) = activation else {
+        return Ok(NOT_BOUND_SENTENCE.to_string());
+    };
+
+    // spawn_blocking moves the blocking wait for the worker's reply off
+    // this async task and onto a thread dedicated to blocking work, so
+    // the webview/event thread and every other in-flight async command
+    // stay free while this one waits. Only owned data (the Arc handle
+    // and the RevealRequest) crosses into the closure; no registry
+    // guard, no borrowed Session.
+    let worker = worker.0.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        worker.submit(request).and_then(|rx| rx.recv().map_err(|_| reveal_queue::WorkerGone))
+    })
+    .await;
+    Ok(match outcome {
+        Ok(Ok(text)) => text,
+        // A dropped channel, a worker panic, or spawn_blocking itself
+        // panicking: every one of these is an ordinary, expected miss
+        // from the surface's point of view, not an IPC error, so it
+        // resolves the same way a "no window matched" miss would.
+        _ => WORKER_MISS_SENTENCE.to_string(),
+    })
 }
 
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             snapshot,
-            select_tile,
+            activate_session,
             quit,
-            reveal_session,
             toggle_hide_unknown
         ])
         .setup(|app| {
@@ -295,6 +350,16 @@ fn main() {
                 reg.hide_unknown = persist::load_hide_unknown();
             }
             app.manage(Shared(shared.clone()));
+
+            // The reveal worker: one dedicated thread that runs every
+            // Reveal off the webview/event thread (PR review:
+            // blocking). reveal::reveal itself, CONSOLE_LOCK and all,
+            // is untouched; only where it runs has moved.
+            let reveal_worker = reveal_queue::RevealQueue::spawn(|req: &registry::RevealRequest| {
+                reveal::reveal(&req.label, req.dir.as_deref(), req.cwd.as_deref(), req.pid, &req.session_id)
+            });
+            app.manage(RevealWorker(Arc::new(reveal_worker)));
+
             let initial_rows = visible_rows(&shared.lock().unwrap());
             LAST_ROW_COUNT.store(initial_rows, Ordering::SeqCst);
             resize_for_rows(&window, initial_rows);

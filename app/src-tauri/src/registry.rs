@@ -28,8 +28,10 @@ pub const ENUM_GRACE_MS: i64 = 60_000;
 pub struct Registry {
     pub sessions: HashMap<String, Session>,
     /// The ordered, unbounded list of bound session ids. Index into this
-    /// is the row index the surface renders and the index select_tile
-    /// and reveal_session take.
+    /// is the row index the surface renders, but it is presentation
+    /// only: a row's click carries the session id, never this index, so
+    /// a row disappearing between two IPC calls can never make one land
+    /// on the wrong session (`begin_activation`, PR review: identity).
     pub bindings: Vec<String>,
     pub selected: Option<usize>,
     /// The header's grey toggle. Owned here so `snapshot` can report it
@@ -44,6 +46,32 @@ pub struct TileSnapshot {
     pub index: usize,
     pub selected: bool,
     pub session: Option<Session>,
+}
+
+/// Everything a reveal needs, cloned out of a `Session` while the
+/// registry lock is held so no borrow of it ever has to cross into the
+/// (potentially slow) reveal worker or an `await` (PR review: no
+/// registry guard or borrowed `Session` crosses into that work).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RevealRequest {
+    pub session_id: String,
+    pub label: String,
+    pub cwd: Option<String>,
+    pub dir: Option<String>,
+    pub pid: Option<u32>,
+}
+
+/// What a click's `activate_session` IPC call resolves to. A stale
+/// click, one whose session id is no longer bound by the time it
+/// reaches the daemon, is an explicit `Miss`: no substitution to
+/// whatever now occupies that row, no selection. Otherwise the id is
+/// selected right here (acknowledging its unread complete) and `Go`
+/// carries the owned request the caller hands to the reveal worker
+/// after releasing the lock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Activation {
+    Miss,
+    Go(RevealRequest),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -225,7 +253,7 @@ impl Registry {
         changed
     }
 
-    pub fn select(&mut self, index: usize, now_ms: i64) -> bool {
+    fn select(&mut self, index: usize, now_ms: i64) -> bool {
         if index >= self.bindings.len() {
             return false;
         }
@@ -236,6 +264,29 @@ impl Registry {
             changed |= s.on_selected(now_ms);
         }
         changed
+    }
+
+    /// Resolve a row click's session id: `Miss` when it is no longer
+    /// bound (a row above it may have ended between the click and this
+    /// call; there is no row left to fall back to, so nothing is
+    /// selected), otherwise select it by its *current* index -- never a
+    /// stale one the caller might be holding -- and clone what the
+    /// reveal worker needs into an owned `RevealRequest`. Pure registry
+    /// state in, `Activation` out: no lock, no Tauri type, so this is
+    /// tested without a webview (PR review: identity + blocking).
+    pub fn begin_activation(&mut self, id: &str, now_ms: i64) -> Activation {
+        let Some(pos) = self.bindings.iter().position(|b| b == id) else {
+            return Activation::Miss;
+        };
+        self.select(pos, now_ms);
+        let session = self.sessions.get(id).expect("just resolved from bindings");
+        Activation::Go(RevealRequest {
+            session_id: session.id.clone(),
+            label: session.label.clone(),
+            cwd: session.cwd.clone(),
+            dir: session.cwd.as_deref().map(crate::state::dir_name),
+            pid: session.pid,
+        })
     }
 
     pub fn tick(&mut self, now_ms: i64) -> bool {
@@ -337,6 +388,73 @@ mod tests {
         r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s2"}), 3);
         assert_eq!(r.selected, None);
         assert!(!r.select(1, 4), "the old index is out of range and must not select anything");
+    }
+
+    // ---- begin_activation: identity survives a row moving underneath --
+    //
+    // PR review (identity): the two old IPC calls (select_tile,
+    // reveal_session) each resolved the same numeric index at a
+    // different moment; a row vanishing between them could select or
+    // reveal the wrong session. begin_activation takes the id instead,
+    // so these pin that a row's disappearance around the click can only
+    // ever affect that row's own id, never a neighbour's.
+
+    #[test]
+    fn activating_a_session_by_id_survives_a_removal_above_it() {
+        let mut r = Registry::default();
+        for id in ["a", "b", "c"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id}), 1);
+        }
+        // Give b an unread complete so activating it has something to
+        // acknowledge.
+        r.apply_hook(&json!({"hook_event_name": "Stop", "session_id": "b"}), 2);
+        assert_eq!(r.sessions["b"].state, SessionState::Complete);
+
+        // The row above b disappears before the click resolves.
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "a"}), 3);
+        assert_eq!(r.bindings, vec!["b".to_string(), "c".to_string()], "b is now row 0, not row 1");
+
+        let activation = r.begin_activation("b", 4);
+        let Activation::Go(request) = activation else {
+            panic!("b is still bound; this must not be a miss");
+        };
+        assert_eq!(request.session_id, "b");
+        assert_eq!(r.selected, Some(0), "b's current index is selected, not a stale one the caller might hold");
+        assert_eq!(r.sessions["b"].state, SessionState::Idle, "activating b acknowledges its own unread complete");
+        assert_eq!(r.sessions["c"].unread_since_ms, None, "c was never touched");
+    }
+
+    #[test]
+    fn a_request_built_by_begin_activation_is_unaffected_by_a_later_removal() {
+        let mut r = Registry::default();
+        for id in ["a", "b"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id, "cwd": format!("C:/dev/{id}")}), 1);
+        }
+        let Activation::Go(request) = r.begin_activation("b", 2) else {
+            panic!("b is bound")
+        };
+        // a disappears after the request is built; the worker that
+        // eventually receives `request` never touches the registry, so
+        // this must not be able to change it (PR review: no borrowed
+        // Session crosses into that work; this is the owned-clone half
+        // of that guarantee).
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "a"}), 3);
+        assert_eq!(request.session_id, "b");
+        assert_eq!(request.dir.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn activating_a_session_removed_before_the_click_arrives_is_a_miss() {
+        let mut r = Registry::default();
+        for id in ["a", "b", "c"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id}), 1);
+        }
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "b"}), 2);
+        assert_eq!(r.bindings, vec!["a".to_string(), "c".to_string()]);
+
+        let activation = r.begin_activation("b", 3);
+        assert_eq!(activation, Activation::Miss);
+        assert_eq!(r.selected, None, "a miss must not select anything, including whatever now sits in b's old row");
     }
 
     #[test]

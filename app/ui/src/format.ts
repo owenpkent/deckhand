@@ -94,6 +94,11 @@ export function revealNote(text: string): string {
   if (text.startsWith("No session is bound")) return "No session";
   if (text.includes("more than one Terminal window")) return "Multiple terminals";
   if (text.includes("more than one matching window")) return "Multiple VS Code windows";
+  // The reveal worker (reveal_queue.rs) never answered: it panicked, its
+  // reply channel was dropped, or it was already gone. Same short label
+  // as the invoke-rejection fallback in main.ts's own catch handler,
+  // since both mean the same thing to whoever is looking at the row.
+  if (text.startsWith("Reveal did not finish")) return "Reveal failed";
   return text;
 }
 

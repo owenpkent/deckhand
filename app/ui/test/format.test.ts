@@ -274,5 +274,6 @@ test("revealNote shortens each daemon miss sentence to one short line", () => {
     revealNote('Found "deckhand" in VS Code, but more than one matching window is open.'),
     "Multiple VS Code windows"
   );
+  assert.equal(revealNote("Reveal did not finish."), "Reveal failed");
   assert.equal(revealNote("Something new"), "Something new");
 });
