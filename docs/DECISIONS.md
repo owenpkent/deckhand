@@ -1471,3 +1471,162 @@ in the same change, along with `TODO.md` and `CHANGELOG.md`.
 [ADR-028](#adr-028)'s exclusion of Deckhand's own window from every
 candidate list, stand unchanged; this entry only narrows how a `pty`
 host's window is found and what counts as finding it.
+
+---
+
+<a id="adr-033"></a>
+## ADR-033: A settings panel replaces the header's grey toggle
+
+Date: 2026-09-14
+
+**Context.** The header has held exactly two controls since
+[ADR-031](#adr-031): a grey toggle and Quit. Reviewing what the surface
+should hold before Phase 1 closes, the owner asked for a small, fixed
+set of settings reachable from the board itself rather than a config
+file: whether the window stays always on top, whether Deckhand starts
+with Windows, a way to put the window back where it started, the grey
+toggle itself, and whether the Claude Code hook wiring this machine
+depends on is actually installed and current. Three lettered options
+were put to the owner for where this should live; option A, an in-bar
+panel that replaces the session list rather than opening a second
+window, was approved.
+
+**Decision.** The header's grey toggle is replaced by a gear button, 44
+by 44 px minimum, reading "Settings" closed and "Close settings" open
+(`gearLabel` in `app/ui/src/format.ts`), so its pressed state reads as a
+different word, not only a different background colour
+([ACCESSIBILITY.md](ACCESSIBILITY.md)). A click calls a new
+`toggle_settings_panel` command, which flips a daemon-side flag
+(`PANEL_OPEN` in `main.rs`; not persisted, the panel always starts
+closed) and resizes the window through the same path every row-count
+change already used, `resize_for_rows` via `queue_resize`, sized to the
+panel's own row count instead of the session list's. Counts and Quit
+stay exactly where they were; only the area under the header swaps
+content, in the same window, in place.
+
+The panel holds six rows, each a full-width, 64 px row like a session
+row's (`.panel-row` in `styles.css` reuses `.row`'s height with a
+different two-column layout: a text label and a text state, no glyph
+column, since nothing here may rely on colour alone):
+
+1. **Always on top**, On or Off, default On. `toggle_always_on_top`
+   flips and persists it (`persist.rs`'s `Settings.always_on_top`,
+   defaulting to On so a `settings.json` from before this field
+   existed, or none at all, loads exactly like `tauri.conf.json`'s own
+   `alwaysOnTop: true`) and applies it to the real window: Tauri's
+   `set_always_on_top`, then a reapplication of the `WS_EX_NOACTIVATE`
+   style ([ADR-025](#adr-025)) in case toggling topmost reset it. Off
+   also calls `set_skip_taskbar(false)`, since a window neither on top
+   nor in the taskbar could be lost behind everything else with no way
+   back; On restores whatever `tauri.conf.json` says for this window
+   (`false`, unchanged). The persisted value is applied at startup too,
+   before anything is visible, the same way a saved position and
+   `hide_unknown` already are.
+2. **Start with Windows**, On, Off, or "On (other copy)." The single
+   source of truth is the registry value named `Deckhand` under
+   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+   (`app/src-tauri/src/runkey.rs`), read fresh on every panel open and
+   every toggle and never mirrored into `settings.json`.
+   `toggle_start_with_windows` takes no argument: it reads the value
+   itself and either writes this exe's own quoted path over it (off, or
+   pointing at a different exe) or deletes it (already pointing at this
+   exe), so the daemon always decides what a click produces, never a
+   client-cached guess. "On (other copy)" names the one case a plain
+   toggle cannot silently resolve: some other Deckhand exe already owns
+   the value, and a click repoints it at this one rather than turning it
+   off. Comparison is pure and unit tested (`compare_run_value`); the
+   registry calls themselves are `#[cfg(windows)]`, using the
+   `windows-sys` crate already in `Cargo.toml` (`Win32_System_Registry`
+   is the only added feature; no new crate, no Tauri plugin).
+3. **Reset window position**, a button rather than a toggle: moves the
+   window to the same default placement `setup` already falls back to
+   for a first run or a stale saved position (`window::default_rect`,
+   near the top-left margin of the current monitor), and persists the
+   result.
+4. **Hide unknown**, On or Off, moved here from the header
+   ([ADR-030](#adr-030), [ADR-031](#adr-031)). Still the daemon's own
+   `Registry.hide_unknown`, still `toggle_hide_unknown`, unchanged;
+   only where the surface shows it moves. Its state text now carries
+   the hidden count directly, "On, 3 hidden" or "Off"
+   (`hideUnknownText`), since the header's old wording ("Hide unknown" /
+   "Show N unknown") existed to double as a self-describing button
+   label and no longer needs to; `greyLabel` is removed as dead code
+   along with it.
+5. **Hooks**, a read-only status row: "Installed," "Outdated,"
+   "Missing," or "Unreadable," from a pure parse of
+   `~/.claude/settings.json` against the twelve events
+   `scripts/install-hooks.ps1` installs (`parse_hook_status` in
+   `app/src-tauri/src/hook_status.rs`, unit tested for all four states
+   plus a raw unquoted path, a leftover timeout, a partially installed
+   event set, and a different tool's hook on the same event, which must
+   never read as Deckhand's own). "Installed" requires every event to
+   carry exactly the group the script writes today: one hook, the
+   current shim path, single-quoted, no timeout. Anything short of that
+   with at least one Deckhand group present is "Outdated"; nothing
+   present is "Missing"; a parse failure is "Unreadable."
+6. **Repair**, a button beside it: reruns `scripts\install-hooks.ps1`
+   from this install's own checkout, found by walking up from the
+   running exe looking for that one file (`find_repo_root` in
+   `app/src-tauri/src/installer.rs`, capped at eight ancestors), via
+   `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <script>`,
+   hidden (`CREATE_NO_WINDOW`), off the webview/event thread
+   (`repair_hooks` is `async`, awaiting `spawn_blocking` exactly like
+   `activate_session`'s own reveal wait), bounded at 20 seconds
+   (`installer::REPAIR_TIMEOUT`) and killed if it runs longer. The hook
+   status is re-read afterward and shown as the result rather than
+   assumed. This is a Phase 1 dev assumption, not an installer story: it
+   only works when the running exe sits inside a git checkout that
+   still has `scripts/` beside it, true on the owner's machine and false
+   for any distributed build. When no repo root is found, the row is not
+   a native disabled button (see below); it stays styled inactive and
+   its permanent state text already reads "Installer not found."
+
+No control on this panel is a native HTML `disabled` element.
+[ACCESSIBILITY.md](ACCESSIBILITY.md) forbids a control whose click does
+nothing and explains nothing; the Repair row's reason not to run is
+already its permanent, always-visible state text, never gated behind a
+click, so a click while inactive is an honest, already-explained no-op
+rather than a silent dead one. This reads slightly differently from
+"disabled" as it was first put to the owner, and is recorded here as
+the deliberate reading, not an oversight.
+
+Every new command takes nothing from the webview but the click itself:
+`toggle_settings_panel`, `get_settings_snapshot`,
+`toggle_always_on_top`, `toggle_start_with_windows`,
+`reset_window_position`, and `repair_hooks` take no argument, matching
+`toggle_hide_unknown`'s existing shape, so the daemon always decides a
+toggle's next state rather than trusting one the surface supplies.
+None of them are `core:*` permissions, so `capabilities/default.json`
+is unchanged, the same as every other custom command already registered
+there is not listed.
+
+**Consequences.** The panel adds two places Deckhand writes outside its
+own data directory on an explicit click: `~/.claude/settings.json` (via
+Repair, running the same installer script a person could run by hand)
+and the HKCU Run key (via Start with Windows). Neither is a new kind of
+trust boundary; [SECURITY_MODEL.md](SECURITY_MODEL.md)'s existing
+"touch other tools' config like a guest" rule already covered
+`settings.json`, and is extended in the same change to name the Run
+key: Deckhand only ever reads or writes its own named value there,
+never anything else under Run, only ever on a click, and only ever the
+one value the panel shows. Repair is unverified against a real login
+end to end (read through, not run against a live `settings.json`), and
+Start with Windows is unverified against an actual Windows startup;
+both are added to `TODO.md` as manual verification items rather than
+claimed proven here.
+
+This supersedes only the header-placement parts of
+[ADR-030](#adr-030) and [ADR-031](#adr-031): the grey toggle as a
+header control, its header wording and geometry, and Quit's neighbour
+in the header being that toggle. `Registry.hide_unknown`,
+`toggle_hide_unknown`, and the daemon owning and persisting the setting
+all stand unchanged; only where the surface shows it, and how its label
+reads, moves. Everything else either entry decided (auto-binding,
+click-to-select-and-raise, drag-only repositioning, the state-count
+summary, Quit itself) is unaffected.
+
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md), [UI_SPEC.md](UI_SPEC.md),
+[ACCESSIBILITY.md](ACCESSIBILITY.md),
+[ARCHITECTURE.md](ARCHITECTURE.md),
+[SECURITY_MODEL.md](SECURITY_MODEL.md), `README.md`, `CLAUDE.md`,
+`CHANGELOG.md`, and `TODO.md` are updated to match in the same change.

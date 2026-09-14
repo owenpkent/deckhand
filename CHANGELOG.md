@@ -11,6 +11,34 @@ version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Added
+
+- **A settings panel, opened by a new gear button that replaces the
+  header's grey toggle** ([ADR-033](docs/DECISIONS.md#adr-033)). The
+  panel replaces the session list in place (not a second window),
+  resizing the same window through the existing resize path, and holds
+  six rows: Always on top (on by default, persisted, reapplies
+  `WS_EX_NOACTIVATE` after any topmost toggle and restores the taskbar
+  icon when off), Start with Windows (an `HKCU\...\Run` registry value
+  named `Deckhand`, read fresh on every toggle, tri-state so a copy
+  already pointed at a different exe reads "On (other copy)" instead of
+  silently turning off), Reset window position (moves the window to its
+  default placement and persists it), Hide unknown (the header's former
+  grey toggle, unchanged behaviour, now naming its hidden count in its
+  own state text instead of a header button's label), and a Hooks
+  status row ("Installed," "Outdated," "Missing," or "Unreadable," from
+  a pure parse of `~/.claude/settings.json`) with a Repair action that
+  reruns `scripts/install-hooks.ps1` off the UI thread, bounded at 20
+  seconds. New Tauri commands (`toggle_settings_panel`,
+  `get_settings_snapshot`, `toggle_always_on_top`,
+  `toggle_start_with_windows`, `reset_window_position`, `repair_hooks`)
+  take no argument from the webview, matching `toggle_hide_unknown`'s
+  existing shape. The Repair row is styled inactive rather than
+  natively disabled when no installer checkout is found nearby, since
+  its reason is already permanent, visible state text
+  (docs/ACCESSIBILITY.md forbids a disabled control that clicking
+  explains nothing).
+
 ### Fixed
 
 - **`ENDED` now absorbs every straggler, not just a clear or a resume.**

@@ -15,7 +15,9 @@ rows out of the list. [ADR-031](DECISIONS.md#adr-031), also the same day,
 removed Move (the window is now repositioned by dragging only), made the
 whole header its own drag region, shrank it to 52 px, relabelled and
 restyled the grey toggle, and dropped the dashed outline unknown and
-ended rows used to share.
+ended rows used to share. [ADR-033](DECISIONS.md#adr-033) (2026-09-14)
+then replaced the grey toggle with a gear button that opens a settings
+panel in place of the session list, described in its own section below.
 
 Mockups in [`assets/`](../assets/), embedded in the README, predate both
 and still draw the wider control set at the old sizes. They are drawings,
@@ -29,7 +31,7 @@ as a single vertical list:
 
 ```
  ┌───────────────────────────────┐
- │  ◆1 ✕1 ◐1   Hide unknown  ✕   │  header, 52 px, 44 px+ targets
+ │  ◆1 ✕1 ◐1        Settings  ✕  │  header, 52 px, 44 px+ targets
  ├───────────────────────────────┤
  │ ○  undertow                   │  row, 64 px, two lines
  │    IDLE                       │
@@ -69,31 +71,70 @@ before it). The whole bar is the drag region, `data-tauri-drag-region`
 on `#header` itself; there is no separate grip, and the count pills sit
 on top of it with pointer events passed through, so a drag started on a
 pill still drags the window. In order: a read-only summary of session
-counts, the grey toggle (present only when there is something to hide),
-and Quit, pinned to the header's right edge:
+counts, the gear, and Quit, pinned to the header's right edge:
 
 | Control | Width | Does |
 | --- | --- | --- |
-| Grey toggle | Variable, 44 px minimum | Toggles whether rows in the `unknown` state are shown. Reads "Hide unknown" when off. When on, shows pressed (background and text colour change; no inset outline) and reads "Show N unknown," N being the count of currently hidden `unknown` rows ("Show unknown" when N is 0). Hidden entirely when there is nothing unknown and hiding is already off. |
+| Gear | Variable, 44 px minimum | Opens or closes the settings panel in place of the session list. Reads "Settings" closed and "Close settings" open ([ADR-033](DECISIONS.md#adr-033)), so its pressed state is a different word, not only a different colour. Always present, unlike the grey toggle it replaced, which used to hide itself when there was nothing to hide. |
 | Quit | 44 px | Closes the daemon and the surface together. Icon only: a cross glyph, `aria-label="Quit Deckhand"`, no visible text. |
 
 The summary is a row of pills, one per state that currently has at least
 one session in it, in a fixed order: waiting on you, error, thinking,
 complete (idle, unknown, and ended are left to the rows). Each pill
 pairs that state's glyph and colour with a count. It is read-only: it
-reports, it does not select or filter, and it is computed before the
-grey toggle's filter, so it never changes when that control is toggled.
+reports, it does not select or filter, and it stays visible and
+unchanged whether the session list or the settings panel is showing
+underneath it.
 
-When the grey toggle is on and every bound session is hidden, the list
-shows one placeholder row in place of the normal rows, "N unknown
-hidden," styled like the empty-list state rather than like a session
-row. A hidden row reappears on its own, and every target below it
-shifts, the moment that session's state moves off `unknown`; see
-[CONTROL_MAPPING.md](CONTROL_MAPPING.md#header-the-grey-toggle-and-quit)
-for the toggle's full behaviour and the trade-off it accepts. Move, the
-click-to-place alternative to dragging the window that used to sit here,
-is removed ([ADR-031](DECISIONS.md#adr-031)); see
-[ACCESSIBILITY.md](ACCESSIBILITY.md) for the open gap that leaves.
+## Settings panel
+
+Opened and closed by the header's gear, in place of the session list
+([ADR-033](DECISIONS.md#adr-033)). Not a second window: the same
+window resizes to fit the panel's own row count through the daemon's
+existing resize path, and closing restores the list's size. No control
+here takes focus either; the window's no-activate behaviour is
+unaffected by anything the panel does.
+
+```
+ ┌───────────────────────────────┐
+ │  ◆1 ✕1 ◐1    Close settings ✕ │  header, unchanged
+ ├───────────────────────────────┤
+ │ Always on top             On  │  panel row, 64 px, two columns
+ │ Start with Windows        Off │
+ │ Reset window position         │
+ │ Hide unknown        On, 3 hid.│
+ │ Hooks               Installed │
+ │ Repair                 Repair │
+ └───────────────────────────────┘
+```
+
+Six rows, each the same 64 px height as a session row, but a different
+layout: a text label on the left, a text state on the right, no glyph
+column, since nothing on this panel may rely on colour alone. See
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#settings-panel) for what each
+row does. The Hooks row is the one row with no click of its own; it
+renders as a plain row rather than a button, the same way the header's
+own summary does, so it never implies an action it does not have. The
+Repair row is styled inactive rather than natively disabled when this
+install has no checkout nearby to run the installer from: its state
+text already reads "Installer not found," so a click while inactive is
+an already-explained no-op, not a silent dead one
+([ACCESSIBILITY.md](ACCESSIBILITY.md)).
+
+Hide unknown is the header's former grey toggle, unchanged except for
+where it lives: still the daemon's own `Registry.hide_unknown`, still
+persisted, and a hidden session still reappears on its own, shifting
+every target below it, the moment its state moves off `unknown`. Its
+state text now names the hidden count directly, "On, 3 hidden" or
+"Off," rather than folding it into a header button's own label. See
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#settings-panel) for the
+trade-off that carries over unchanged from [ADR-030](DECISIONS.md#adr-030).
+
+Move, the click-to-place alternative to dragging the window that used
+to sit in the header, is removed ([ADR-031](DECISIONS.md#adr-031)); the
+panel's own Reset window position row moves the window to a fixed
+default rather than restoring a click-based way to place it anywhere;
+see [ACCESSIBILITY.md](ACCESSIBILITY.md) for the open gap that leaves.
 
 ## Row anatomy
 

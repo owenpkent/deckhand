@@ -8,9 +8,14 @@ corner badges that earlier versions of this file described.
 control, Hide grey, back on top of that narrower surface.
 [ADR-031](DECISIONS.md#adr-031), also 2026-09-13, then removed Move,
 leaving the header with a grey toggle and Quit, and relabelled the
-toggle. What follows describes the current design. The retabling and the
-usage measurements that shaped the removed controls are preserved in the
-ADRs that ADR-028 names as superseded, not restated here.
+toggle. [ADR-033](DECISIONS.md#adr-033) (2026-09-14) then replaced the
+grey toggle with a gear button that opens a settings panel in place of
+the session list, holding always on top, start with Windows, reset
+position, hide unknown (moved off the header into this panel), and a
+hooks status with a Repair action. What follows describes the current
+design. The retabling and the usage measurements that shaped the
+removed controls are preserved in the ADRs that ADR-028 names as
+superseded, not restated here.
 
 Deckhand is a software reimplementation of the [Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro),
 a limited-run macropad by Work Louder and OpenAI that acts as a command centre
@@ -130,52 +135,73 @@ timing lives in [ARCHITECTURE.md](ARCHITECTURE.md#observation-channels),
 since it is a daemon behaviour, not a control. There is no bind picker and no
 unbind action: nothing here is managed by hand.
 
-### Header: the grey toggle and Quit
+### Header: the gear and Quit
 
-The header carries two controls: a grey toggle and Quit, pinned to the
-header's right edge ([ADR-031](DECISIONS.md#adr-031); before it, three,
-Hide grey, Move, and Quit, added by [ADR-030](DECISIONS.md#adr-030) on
-top of [ADR-028](DECISIONS.md#adr-028)'s original two). The whole header
-is now the drag region: there is no separate grip, and dragging from any
+The header carries two controls: a gear and Quit, pinned to the
+header's right edge ([ADR-033](DECISIONS.md#adr-033); before it, a grey
+toggle and Quit under [ADR-031](DECISIONS.md#adr-031), and before that
+three, Hide grey, Move, and Quit, added by
+[ADR-030](DECISIONS.md#adr-030) on top of
+[ADR-028](DECISIONS.md#adr-028)'s original two). The whole header is
+still the drag region: there is no separate grip, and dragging from any
 empty part of the bar, including the count pills, moves the window.
 
-The grey toggle filters rows out of the list, not sessions out of the
-daemon. A single click flips the setting. Off, the control reads "Hide
-unknown." On, it shows pressed (its background and text colour change;
-there is no inset outline) and reads "Show N unknown," where N is the
-number of rows currently in the `unknown` state, "not heard yet" and past
-`T_unknown` alike, so a hidden session is always counted and never simply
-disappears ("Show unknown" when N is 0). If every bound session is
-hidden, the list shows one placeholder row, "N unknown hidden," instead
-of the normal list. The toggle disappears from the header entirely when
-there is nothing unknown and hiding is already off, rather than sitting
-there with no job; Quit's position at the right edge does not move when
-it does. The header's own state-count summary is computed before this
-filter and never changes when the toggle does.
-
-The setting is the daemon's, not the surface's: it persists across
-restarts, and a session that leaves the `unknown` state while hidden
-reappears on its own, which moves every target below it without the
-owner having clicked anything. Because `heard`
-([ADR-029](DECISIONS.md#adr-029)) resets on every daemon restart, a
-session that genuinely needed the owner before the restart also renders
-`unknown` until a hook fires for it again, so hiding grey can hide a row
-that needs a human; "Show N unknown" is the accepted mitigation for
-that, not a fix for it. See [ADR-030](DECISIONS.md#adr-030) for the full
-trade-off and the alternative, folding every grey row into one
-expandable row, that was considered and not chosen.
+The gear opens the settings panel in place of the session list. A
+single click toggles it; the gear's own text reads "Settings" closed
+and "Close settings" open, so its pressed state is a different word,
+not only a different colour. The header's state-count summary and Quit
+stay visible and unchanged while the panel is open; only the list area
+swaps content, in the same window. See
+[Settings panel](#settings-panel) below for what each row does.
 
 Move, the click-to-place alternative to dragging the window that
 [ADR-028](DECISIONS.md#adr-028) kept, is removed
 ([ADR-031](DECISIONS.md#adr-031)). The window is now repositioned by
-dragging only; a saved position is still restored and clamped into the
-current monitors' work area at startup, but there is no click-based way
-to move it afterward. This is an owner-approved exception to
-[ACCESSIBILITY.md](ACCESSIBILITY.md)'s no-required-drag rule, not a
-reading that satisfies it; see ACCESSIBILITY.md for the open gap it
-leaves. Quit closes the daemon and the surface together; it is icon-only
-now, a cross glyph with `aria-label="Quit Deckhand"` and no visible
-text.
+dragging only, except for the panel's own Reset window position row
+(see below), which moves it to a fixed default rather than letting the
+owner choose where; a saved position is still restored and clamped into
+the current monitors' work area at startup, but there is no click-based
+way to place it at an arbitrary point afterward. This is an
+owner-approved exception to [ACCESSIBILITY.md](ACCESSIBILITY.md)'s
+no-required-drag rule, not a reading that satisfies it; see
+ACCESSIBILITY.md for the open gap it leaves. Quit closes the daemon and
+the surface together; it is icon-only, a cross glyph with
+`aria-label="Quit Deckhand"` and no visible text.
+
+### Settings panel
+
+Six rows, opened by the gear and closed by clicking it again
+([ADR-033](DECISIONS.md#adr-033)). Every row is a text label plus a
+text state, never colour alone:
+
+| Row | Does |
+| --- | --- |
+| Always on top | Toggles whether the window stays above every other window. Default on. Persists across restarts. |
+| Start with Windows | Toggles a registry entry that launches Deckhand at login. Reads "On (other copy)" when some other Deckhand exe already owns the entry; clicking repoints it at this one rather than turning it off. |
+| Reset window position | A button, not a toggle: moves the window to its default spot near the top-left of the current monitor and remembers that as the new saved position. |
+| Hide unknown | The same setting the header's grey toggle used to hold ([ADR-030](DECISIONS.md#adr-030), [ADR-031](DECISIONS.md#adr-031)): filters `unknown` rows out of the session list, not out of the daemon. Its state text names the hidden count, "On, 3 hidden" or "Off," so a hidden session is always counted and never simply disappears. |
+| Hooks | Read-only: whether the Claude Code hook wiring `scripts/install-hooks.ps1` installs is "Installed," "Outdated," "Missing," or "Unreadable" in `~/.claude/settings.json`. |
+| Repair | Reruns the installer against this install's own checkout. Styled inactive rather than natively disabled when no checkout is found nearby; its state text already reads "Installer not found" without requiring a click. |
+
+Hide unknown is unchanged in every way except where the surface shows
+it: the daemon still owns `Registry.hide_unknown`, still persists it,
+and a session leaving the `unknown` state while hidden still reappears
+on its own, moving every target below it without the owner having
+clicked anything. Because `heard` ([ADR-029](DECISIONS.md#adr-029))
+resets on every daemon restart, a session that genuinely needed the
+owner before the restart also renders `unknown` until a hook fires for
+it again, so hiding it can hide a row that needs a human; the hidden
+count is the accepted mitigation for that, not a fix for it. See
+[ADR-030](DECISIONS.md#adr-030) for the full trade-off.
+
+Every command the panel calls takes no argument from the webview but
+the click itself; the daemon always decides a toggle's next state,
+never trusts one the surface supplies. See
+[ADR-033](DECISIONS.md#adr-033) for the full record, including why
+Repair and Start with Windows are the two places this surface now
+writes outside its own data directory, and
+[SECURITY_MODEL.md](SECURITY_MODEL.md) for the trust implications of
+that.
 
 ### What has no software equivalent
 
@@ -187,7 +213,7 @@ text.
 | Rear power button, sleep | Dropped. Window visibility replaces it. |
 | Underglow, lighting timeout (default 3 min) | Kept as an idle-dim behaviour on the surface. |
 | macOS Input Monitoring permission | Not required to read status. Required only for global hotkeys, which are optional. |
-| Soft reset via PCB screws | Replaced by a settings reset. |
+| Soft reset via PCB screws | Replaced by the settings panel's Reset window position row ([ADR-033](DECISIONS.md#adr-033)); it resets placement only, not every setting. |
 | Karabiner and Logitech Options conflicts | Not applicable. |
 
 ### Removed from the surface
@@ -220,9 +246,13 @@ decision with a reason, recorded here so it is not silently re-litigated.
 ## Naming
 
 The device calls them Agent Keys, Command Keys, the Dial, the Stick, the Mic
-Key, and the Codex Key. Deckhand uses **rows** for the session list and
-**the grey toggle** (labelled "Hide unknown" or "Show N unknown") and
-**Quit** for the two header controls. Move had no device equivalent; it
-existed only in Deckhand and was removed by
+Key, and the Codex Key. Deckhand uses **rows** for the session list,
+**the gear** (labelled "Settings" or "Close settings") for the settings
+panel's own control, and **Quit** for the two header controls. The
+panel's own rows are named for what they do: Always on top, Start with
+Windows, Reset window position, Hide unknown (the header's former grey
+toggle, labelled "Hide unknown" or "Show N unknown" before
+[ADR-033](DECISIONS.md#adr-033) moved it here), Hooks, and Repair. Move
+had no device equivalent; it existed only in Deckhand and was removed by
 [ADR-031](DECISIONS.md#adr-031). None of the device's other names apply
 to anything on the current surface.

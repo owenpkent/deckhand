@@ -43,10 +43,14 @@ itself. [ADR-031](docs/DECISIONS.md#adr-031), also the same day, then
 removed Move (the window is now repositioned by dragging only, an
 owner-approved exception recorded in
 [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md)) and left the header
-holding a grey toggle and Quit. The code implements all three, and on
-its first run bound ten live sessions across four repos. One Phase 0
-item also stays open alongside
-it: hook payload validation against a live install has
+holding a grey toggle and Quit. [ADR-033](docs/DECISIONS.md#adr-033)
+(2026-09-14) then replaced the grey toggle with a gear button that
+opens an in-bar settings panel in place of the session list: always on
+top, start with Windows, reset window position, hide unknown (moved
+off the header into this panel), and a hooks-installed status with a
+Repair action. The code implements all of these, and on its first run
+bound ten live sessions across four repos. One Phase 0 item also stays
+open alongside it: hook payload validation against a live install has
 ten of the twelve documented events observed, with `Notification` and
 `StopFailure` still unseen.
 
@@ -61,6 +65,7 @@ ten of the twelve documented events observed, with `Notification` and
 | Hook payload validation spike | ⏳ Ten of twelve events observed live; two remain |
 | Daemon, shim, state machine | ✅ Phase 1 skeleton; live sessions paint real status |
 | Session-list surface, auto-binding | ✅ Built (ADR-028); binds every enumerated session, prunes ended ones |
+| Settings panel (always on top, start with Windows, reset position, hide unknown, hooks status, Repair) | ✅ Built (ADR-033); Start with Windows and Repair unverified against a real login and a real settings.json |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet, and not currently planned on the surface |
 
 Build and run it with `python run.py`, which checks the toolchain,
@@ -130,12 +135,14 @@ These are **design mockups**, not screenshots, and they predate
 [ADR-028](docs/DECISIONS.md#adr-028) (2026-09-13), which narrowed the
 target to a vertical session list with Move and Quit in the header,
 [ADR-030](docs/DECISIONS.md#adr-030), the same day, which added a third
-header control, Hide grey, and [ADR-031](docs/DECISIONS.md#adr-031),
-also the same day, which removed Move and left the header holding a
-grey toggle and Quit. The mockups below still show the wider control set
-from before all three changes: six tiles in a horizontal strip, command
-keys, a stick, a dial, talk and send. None of that is the current
-design. Where a mockup and
+header control, Hide grey, [ADR-031](docs/DECISIONS.md#adr-031), also
+the same day, which removed Move and left the header holding a grey
+toggle and Quit, and [ADR-033](docs/DECISIONS.md#adr-033) (2026-09-14),
+which replaced the grey toggle with a gear button that opens a settings
+panel. The mockups below still show the wider control set from before
+all four changes: six tiles in a horizontal strip, command keys, a
+stick, a dial, talk and send. None of that is the current design. Where
+a mockup and
 [docs/UI_SPEC.md](docs/UI_SPEC.md) disagree, the spec wins; treat the
 images as historical until they are redrawn.
 
