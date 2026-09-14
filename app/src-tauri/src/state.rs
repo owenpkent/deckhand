@@ -403,6 +403,11 @@ impl Session {
                 self.child_ids.clear();
                 self.open_ops.clear();
                 self.pending_complete = false;
+                // Lifecycle invalidation: the OS is free to reuse this
+                // pid for an unrelated process the moment this one
+                // exits, so it must not survive to name Reveal's target
+                // for whatever comes next under the same session id.
+                self.pid = None;
                 self.set_state(SessionState::Ended, now_ms);
                 true
             }
@@ -821,6 +826,14 @@ mod tests {
         );
         assert_eq!(x.state, SessionState::Ended, "a straggler failure must not revive an ended session either");
         assert!(x.error.is_none(), "an ignored straggler must not even record its error detail");
+    }
+
+    #[test]
+    fn session_end_clears_the_pid() {
+        let mut x = s();
+        x.pid = Some(4242);
+        ev(&mut x, 1, json!({"hook_event_name": "SessionEnd", "reason": "exit"}));
+        assert_eq!(x.pid, None, "the OS may reuse an ended session's pid for something else entirely");
     }
 
     #[test]

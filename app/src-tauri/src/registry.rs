@@ -94,11 +94,29 @@ impl Registry {
     ) -> bool {
         let mut changed = false;
         if let Some(existing) = self.sessions.get_mut(id) {
-            // State is never taken from the enumeration, but a pid is:
-            // hooks cannot carry one and Reveal wants it.
-            if existing.pid.is_none() && pid.is_some() {
-                existing.pid = pid;
-                changed = true;
+            // A session the hooks already saw end stays off the list and
+            // untouched by enumeration entirely, checked before anything
+            // below runs: not rebound, not given a fresh pid (the OS is
+            // free to reuse an ended session's pid for an unrelated
+            // process, so a scan naming it is not naming this session's
+            // process any more), not state, not cwd or label. Only a
+            // session-start event (state.rs) revives it.
+            if existing.state == SessionState::Ended {
+                return false;
+            }
+            // State is never taken from the enumeration. A pid is:
+            // hooks cannot carry one and Reveal wants it. Unlike a blank
+            // field, a pid already present is replaced rather than left
+            // alone when the scan reports a different one: a resumed
+            // session runs under a new OS process, and holding onto the
+            // stale pid would point Reveal at whatever that pid now
+            // names. A scan that saw no pid this time (`pid: None`)
+            // leaves whatever is recorded alone rather than clearing it.
+            if let Some(new_pid) = pid {
+                if existing.pid != Some(new_pid) {
+                    existing.pid = Some(new_pid);
+                    changed = true;
+                }
             }
             // Unlike pid, cwd is corrected rather than only filled in:
             // enumeration reports the session's own cwd, so it is the
@@ -116,11 +134,6 @@ impl Registry {
                     existing.label = crate::state::dir_name(cwd);
                     changed = true;
                 }
-            }
-            // A session the hooks already saw end stays off the list
-            // even if the enumeration lags behind and still reports it.
-            if existing.state == SessionState::Ended {
-                return changed;
             }
         } else {
             let mut s = Session::new(id.to_string(), now_ms);
@@ -327,13 +340,17 @@ mod tests {
     }
 
     #[test]
-    fn a_lagging_enumeration_does_not_rebind_an_ended_session() {
+    fn a_lagging_enumeration_does_not_rebind_an_ended_session_or_its_pid() {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
         r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 2);
-        // Recording the pid is a real change; the row must still not return.
-        r.register_enumerated("s1", None, None, Some(7), 3);
+        assert_eq!(r.sessions["s1"].pid, None, "SessionEnd already cleared it");
+        // A pid the scan reports here could already belong to an
+        // unrelated process; an ended session must be left untouched,
+        // not merely unbound.
+        assert!(!r.register_enumerated("s1", None, None, Some(7), 3));
         assert!(!r.is_bound("s1"), "hooks saw it end; the enumeration is stale");
+        assert_eq!(r.sessions["s1"].pid, None, "a stale scan must not repopulate the pid either");
     }
 
     #[test]
@@ -493,12 +510,77 @@ mod tests {
         assert_eq!(r.sessions["s2"].label, "custom name", "an existing label is never overwritten");
     }
 
+    // ---- register_enumerated: pid replacement policy --------------------
+    //
+    // A non-null enumerated pid different from the stored one replaces it
+    // and reports changed; a non-null pid equal to the stored one is a
+    // no-op; a missing pid (the scan saw none this time) preserves
+    // whatever is already recorded.
+
     #[test]
-    fn register_enumerated_never_overwrites_a_pid_already_present() {
+    fn register_enumerated_replaces_a_changed_pid_and_preserves_label_and_state() {
         let mut r = Registry::default();
-        assert!(r.register_enumerated("s1", None, None, Some(111), 1));
-        assert!(!r.register_enumerated("s1", None, None, Some(222), 2), "a second pid on a known id changes nothing");
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "cwd": "C:/dev/a"}), 1);
+        r.sessions.get_mut("s1").unwrap().pid = Some(111);
+        assert!(r.register_enumerated("s1", None, None, Some(222), 2));
+        assert_eq!(r.sessions["s1"].pid, Some(222), "a different enumerated pid replaces the stored one");
+        assert_eq!(r.sessions["s1"].label, "a", "replacing the pid must not disturb the label");
+        assert_eq!(
+            r.sessions["s1"].state,
+            crate::state::SessionState::Thinking,
+            "replacing the pid must not disturb state"
+        );
+    }
+
+    #[test]
+    fn register_enumerated_is_a_no_op_when_the_enumerated_pid_matches() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        r.sessions.get_mut("s1").unwrap().pid = Some(111);
+        assert!(!r.register_enumerated("s1", None, None, Some(111), 2), "the same pid must report no change");
         assert_eq!(r.sessions["s1"].pid, Some(111));
+    }
+
+    #[test]
+    fn register_enumerated_with_no_pid_preserves_the_stored_one() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        r.sessions.get_mut("s1").unwrap().pid = Some(111);
+        assert!(!r.register_enumerated("s1", None, None, None, 2), "a scan that saw no pid must not clear it");
+        assert_eq!(r.sessions["s1"].pid, Some(111));
+    }
+
+    #[test]
+    fn a_resumed_session_gets_the_new_enumerated_pid_after_end_and_resume() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.register_enumerated("s1", None, None, Some(111), 2);
+        assert_eq!(r.sessions["s1"].pid, Some(111));
+
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 3);
+        assert_eq!(r.sessions["s1"].pid, None, "SessionEnd clears the pid: the OS may reuse it for anything");
+
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "resume", "session_id": "s1"}), 4);
+        assert!(r.is_bound("s1"), "the revived session rejoins the list");
+
+        assert!(r.register_enumerated("s1", None, None, Some(222), 5));
+        assert_eq!(r.sessions["s1"].pid, Some(222), "the new OS process's pid replaces the stale one");
+    }
+
+    #[test]
+    fn an_ended_session_listed_by_a_later_scan_stays_unbound_with_no_pid() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.register_enumerated("s1", None, None, Some(111), 2);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 3);
+        assert_eq!(r.sessions["s1"].pid, None);
+
+        // The OS could have reused pid 111 for an unrelated process by
+        // the time the next scan runs; enumeration must not hand a pid
+        // back to a session that has already ended.
+        assert!(!r.register_enumerated("s1", None, None, Some(999), 4));
+        assert!(!r.is_bound("s1"));
+        assert_eq!(r.sessions["s1"].pid, None, "an ended session's pid must not be repopulated by a later scan");
     }
 
     // ---- prune_missing: enumeration lag and the failed-run rule --------
