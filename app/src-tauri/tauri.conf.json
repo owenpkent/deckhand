@@ -12,8 +12,8 @@
       {
         "label": "main",
         "title": "Deckhand",
-        "width": 720,
-        "height": 132,
+        "width": 360,
+        "height": 116,
         "resizable": false,
         "alwaysOnTop": true,
         "focus": false,
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {

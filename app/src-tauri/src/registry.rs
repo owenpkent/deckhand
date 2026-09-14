@@ -1,21 +1,43 @@
-// The session registry: every session the daemon knows about, six tile
-// bindings, and the snapshot the surface renders. Bindings are by session
-// id, which survives restarts (docs/ARCHITECTURE.md#persistence).
+// The session registry: every session the daemon knows about, the
+// ordered list of sessions the surface shows, and the snapshot the
+// surface renders. Bindings are by session id, which survives restarts
+// (docs/ARCHITECTURE.md#persistence).
+//
+// The list auto-binds: any session heard from, by a hook event or by
+// enumeration, appends to it the first time it is seen, in the order it
+// was seen. There is no picker and no fixed slot count. A session drops
+// out of the list once it reaches `ended`, and enumeration prunes a
+// bound session that has gone missing from a successful run, so long as
+// it has not heard from a hook recently (enumeration can lag a live
+// event by a beat or two).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::state::{Session, SessionState};
 
-pub const TILE_COUNT: usize = 6;
+/// A session that vanished from a successful enumeration less than this
+/// long ago is kept rather than pruned: enumeration and the hook stream
+/// are two independent channels, and a live hook is the more trustworthy
+/// of the two when they briefly disagree.
+pub const ENUM_GRACE_MS: i64 = 60_000;
 
 #[derive(Debug, Default)]
 pub struct Registry {
     pub sessions: HashMap<String, Session>,
-    pub bindings: [Option<String>; TILE_COUNT],
+    /// The ordered, unbounded list of bound session ids. Index into this
+    /// is the row index the surface renders, but it is presentation
+    /// only: a row's click carries the session id, never this index, so
+    /// a row disappearing between two IPC calls can never make one land
+    /// on the wrong session (`begin_activation`, PR review: identity).
+    pub bindings: Vec<String>,
     pub selected: Option<usize>,
+    /// The header's grey toggle. Owned here so `snapshot` can report it
+    /// and so a resize can be sized off the visible row count; persisted
+    /// by persist.rs, not here.
+    pub hide_unknown: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -26,14 +48,30 @@ pub struct TileSnapshot {
     pub session: Option<Session>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BindableSession {
-    pub id: String,
+/// Everything a reveal needs, cloned out of a `Session` while the
+/// registry lock is held so no borrow of it ever has to cross into the
+/// (potentially slow) reveal worker or an `await` (PR review: no
+/// registry guard or borrowed `Session` crosses into that work).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RevealRequest {
+    pub session_id: String,
     pub label: String,
     pub cwd: Option<String>,
-    pub state: SessionState,
-    pub bound_to: Option<usize>,
+    pub dir: Option<String>,
+    pub pid: Option<u32>,
+}
+
+/// What a click's `activate_session` IPC call resolves to. A stale
+/// click, one whose session id is no longer bound by the time it
+/// reaches the daemon, is an explicit `Miss`: no substitution to
+/// whatever now occupies that row, no selection. Otherwise the id is
+/// selected right here (acknowledging its unread complete) and `Go`
+/// carries the owned request the caller hands to the reveal worker
+/// after releasing the lock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Activation {
+    Miss,
+    Go(RevealRequest),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -41,6 +79,9 @@ pub struct BindableSession {
 pub struct Snapshot {
     pub tiles: Vec<TileSnapshot>,
     pub now_ms: i64,
+    /// Mirrors `Registry::hide_unknown`. Tiles are never filtered out of
+    /// this list on account of it; the surface decides what to draw.
+    pub hide_unknown: bool,
 }
 
 impl Registry {
@@ -57,46 +98,93 @@ impl Registry {
             .entry(id.to_string())
             .or_insert_with(|| Session::new(id.to_string(), now_ms));
         let changed = session.apply_hook(payload, now_ms);
-        // A session heard from for the first time takes the first free
-        // tile, so a fresh board populates itself without a picker trip.
-        // Explicit bindings always win; this only fills gaps.
-        if changed && !self.is_bound(id) {
-            if let Some(free) = self.bindings.iter().position(Option::is_none) {
-                self.bindings[free] = Some(id.to_string());
-            }
-        }
-        changed
+        let ended = session.state == SessionState::Ended;
+        // A session heard from for the first time joins the list, even
+        // on an event that left its own state unchanged: liveness alone
+        // is enough to prove it exists. An ended session leaves the list
+        // outright rather than lingering as a dead row.
+        let list_changed = if ended { self.unbind_id(id) } else { self.auto_bind(id) };
+        changed || list_changed
     }
 
     /// Register a session found by enumeration (`claude agents --json`).
     /// State is unknown by rule: the enumeration carries no status on
-    /// 2.1.220 and idle is never guessed (ADR-024, adapter rule 1).
+    /// 2.1.220 and idle is never guessed (ADR-024, adapter rule 1). Also
+    /// auto-binds: enumeration is the only channel that ever sees a
+    /// session in another repo, one with no hook wired up at all.
     pub fn register_enumerated(
         &mut self,
         id: &str,
         name: Option<&str>,
         cwd: Option<&str>,
+        pid: Option<u32>,
         now_ms: i64,
     ) -> bool {
-        if self.sessions.contains_key(id) {
-            return false;
-        }
-        let mut s = Session::new(id.to_string(), now_ms);
-        if let Some(cwd) = cwd {
-            s.cwd = Some(cwd.to_string());
-            s.label = crate::state::dir_name(cwd);
-        }
-        if let Some(n) = name {
-            if !n.is_empty() {
-                s.label = n.to_string();
+        let mut changed = false;
+        if let Some(existing) = self.sessions.get_mut(id) {
+            // A session the hooks already saw end stays off the list and
+            // untouched by enumeration entirely, checked before anything
+            // below runs: not rebound, not given a fresh pid (the OS is
+            // free to reuse an ended session's pid for an unrelated
+            // process, so a scan naming it is not naming this session's
+            // process any more), not state, not cwd or label. Only a
+            // session-start event (state.rs) revives it.
+            if existing.state == SessionState::Ended {
+                return false;
             }
+            // State is never taken from the enumeration. A pid is:
+            // hooks cannot carry one and Reveal wants it. Unlike a blank
+            // field, a pid already present is replaced rather than left
+            // alone when the scan reports a different one: a resumed
+            // session runs under a new OS process, and holding onto the
+            // stale pid would point Reveal at whatever that pid now
+            // names. A scan that saw no pid this time (`pid: None`)
+            // leaves whatever is recorded alone rather than clearing it.
+            if let Some(new_pid) = pid {
+                if existing.pid != Some(new_pid) {
+                    existing.pid = Some(new_pid);
+                    changed = true;
+                }
+            }
+            // Unlike pid, cwd is corrected rather than only filled in:
+            // enumeration reports the session's own cwd, so it is the
+            // one channel that can repair a value a subagent payload
+            // latched onto the session before this fix (state.rs
+            // apply_hook). Label follows the same existing-name
+            // precedence as everywhere else: only filled in when blank,
+            // never overwritten.
+            if let Some(cwd) = cwd {
+                if existing.cwd.as_deref() != Some(cwd) {
+                    existing.cwd = Some(cwd.to_string());
+                    changed = true;
+                }
+                if existing.label.is_empty() {
+                    existing.label = crate::state::dir_name(cwd);
+                    changed = true;
+                }
+            }
+        } else {
+            let mut s = Session::new(id.to_string(), now_ms);
+            s.pid = pid;
+            if let Some(cwd) = cwd {
+                s.cwd = Some(cwd.to_string());
+                s.label = crate::state::dir_name(cwd);
+            }
+            if let Some(n) = name {
+                if !n.is_empty() {
+                    s.label = n.to_string();
+                }
+            }
+            self.sessions.insert(id.to_string(), s);
+            changed = true;
         }
-        self.sessions.insert(id.to_string(), s);
-        true
+        changed |= self.auto_bind(id);
+        changed
     }
 
     /// Insert a placeholder for a session known only by id and label,
-    /// in unknown state, without touching one that already exists.
+    /// in unknown state, without touching one that already exists. Used
+    /// to restore a cold-start binding from disk.
     pub fn ensure_session(&mut self, id: &str, label: &str, now_ms: i64) {
         self.sessions.entry(id.to_string()).or_insert_with(|| {
             let mut s = Session::new(id.to_string(), now_ms);
@@ -106,44 +194,99 @@ impl Registry {
     }
 
     pub fn is_bound(&self, id: &str) -> bool {
-        self.bindings.iter().any(|b| b.as_deref() == Some(id))
+        self.bindings.iter().any(|b| b == id)
     }
 
-    pub fn select(&mut self, index: usize, now_ms: i64) -> bool {
-        if index >= TILE_COUNT {
+    /// Append `id` to the list if it is not already there. Returns true
+    /// when the list changed.
+    fn auto_bind(&mut self, id: &str) -> bool {
+        if self.is_bound(id) {
             return false;
         }
-        let mut changed = self.selected != Some(index);
-        self.selected = Some(index);
-        if let Some(id) = self.bindings[index].clone() {
-            if let Some(s) = self.sessions.get_mut(&id) {
-                changed |= s.on_selected(now_ms);
-            }
+        self.bindings.push(id.to_string());
+        true
+    }
+
+    /// Drop `id` from the list without touching `self.sessions`: the
+    /// session's own record (and history) is kept, only its row goes
+    /// away. Returns true when the list changed.
+    fn unbind_id(&mut self, id: &str) -> bool {
+        let Some(pos) = self.bindings.iter().position(|b| b == id) else {
+            return false;
+        };
+        self.bindings.remove(pos);
+        // Selection is by index, so keep it on the same session when a
+        // row above it goes, and clear it when the selected row itself
+        // is the one leaving.
+        self.selected = match self.selected {
+            Some(sel) if sel == pos => None,
+            Some(sel) if sel > pos => Some(sel - 1),
+            other => other,
+        };
+        true
+    }
+
+    /// Drop bound sessions absent from a successful enumeration, unless
+    /// they received a hook event within `ENUM_GRACE_MS`. Must only be
+    /// called after an enumeration run that actually succeeded: a failed
+    /// run (claude missing, unparseable output) carries no information
+    /// about who is still alive and must prune nothing.
+    pub fn prune_missing(&mut self, present: &HashSet<String>, now_ms: i64) -> bool {
+        let stale: Vec<String> = self
+            .bindings
+            .iter()
+            .filter(|id| !present.contains(id.as_str()))
+            .filter(|id| {
+                let recent_hook = self
+                    .sessions
+                    .get(id.as_str())
+                    .map(|s| now_ms.saturating_sub(s.last_event_at_ms) < ENUM_GRACE_MS)
+                    .unwrap_or(false);
+                !recent_hook
+            })
+            .cloned()
+            .collect();
+        let mut changed = false;
+        for id in stale {
+            changed |= self.unbind_id(&id);
         }
         changed
     }
 
-    pub fn bind(&mut self, index: usize, id: &str, now_ms: i64) -> bool {
-        if index >= TILE_COUNT || !self.sessions.contains_key(id) {
+    fn select(&mut self, index: usize, now_ms: i64) -> bool {
+        if index >= self.bindings.len() {
             return false;
         }
-        // A session lives on one tile at a time; binding moves it.
-        for b in self.bindings.iter_mut() {
-            if b.as_deref() == Some(id) {
-                *b = None;
-            }
+        let mut changed = self.selected != Some(index);
+        self.selected = Some(index);
+        let id = self.bindings[index].clone();
+        if let Some(s) = self.sessions.get_mut(&id) {
+            changed |= s.on_selected(now_ms);
         }
-        self.bindings[index] = Some(id.to_string());
-        let _ = now_ms;
-        true
+        changed
     }
 
-    pub fn unbind(&mut self, index: usize) -> bool {
-        if index >= TILE_COUNT || self.bindings[index].is_none() {
-            return false;
-        }
-        self.bindings[index] = None;
-        true
+    /// Resolve a row click's session id: `Miss` when it is no longer
+    /// bound (a row above it may have ended between the click and this
+    /// call; there is no row left to fall back to, so nothing is
+    /// selected), otherwise select it by its *current* index -- never a
+    /// stale one the caller might be holding -- and clone what the
+    /// reveal worker needs into an owned `RevealRequest`. Pure registry
+    /// state in, `Activation` out: no lock, no Tauri type, so this is
+    /// tested without a webview (PR review: identity + blocking).
+    pub fn begin_activation(&mut self, id: &str, now_ms: i64) -> Activation {
+        let Some(pos) = self.bindings.iter().position(|b| b == id) else {
+            return Activation::Miss;
+        };
+        self.select(pos, now_ms);
+        let session = self.sessions.get(id).expect("just resolved from bindings");
+        Activation::Go(RevealRequest {
+            session_id: session.id.clone(),
+            label: session.label.clone(),
+            cwd: session.cwd.clone(),
+            dir: session.cwd.as_deref().map(crate::state::dir_name),
+            pid: session.pid,
+        })
     }
 
     pub fn tick(&mut self, now_ms: i64) -> bool {
@@ -156,38 +299,19 @@ impl Registry {
 
     pub fn snapshot(&self, now_ms: i64) -> Snapshot {
         Snapshot {
-            tiles: (0..TILE_COUNT)
-                .map(|i| TileSnapshot {
+            tiles: self
+                .bindings
+                .iter()
+                .enumerate()
+                .map(|(i, id)| TileSnapshot {
                     index: i,
                     selected: self.selected == Some(i),
-                    session: self.bindings[i]
-                        .as_ref()
-                        .and_then(|id| self.sessions.get(id))
-                        .cloned(),
+                    session: self.sessions.get(id).cloned(),
                 })
                 .collect(),
             now_ms,
+            hide_unknown: self.hide_unknown,
         }
-    }
-
-    pub fn bindable(&self) -> Vec<BindableSession> {
-        let mut list: Vec<BindableSession> = self
-            .sessions
-            .values()
-            .filter(|s| s.state != SessionState::Ended)
-            .map(|s| BindableSession {
-                id: s.id.clone(),
-                label: s.label.clone(),
-                cwd: s.cwd.clone(),
-                state: s.state,
-                bound_to: self
-                    .bindings
-                    .iter()
-                    .position(|b| b.as_deref() == Some(s.id.as_str())),
-            })
-            .collect();
-        list.sort_by(|a, b| a.label.cmp(&b.label));
-        list
     }
 }
 
@@ -197,25 +321,192 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn first_event_auto_fills_a_free_tile() {
+    fn first_event_appends_to_an_empty_list() {
         let mut r = Registry::default();
         r.apply_hook(
             &json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1", "cwd": "C:/dev/a"}),
             1,
         );
-        assert_eq!(r.bindings[0].as_deref(), Some("s1"));
+        assert_eq!(r.bindings, vec!["s1".to_string()]);
     }
 
     #[test]
-    fn binding_moves_a_session_rather_than_duplicating_it() {
+    fn sessions_bind_in_the_order_they_are_first_heard() {
         let mut r = Registry::default();
-        r.apply_hook(
-            &json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}),
+        for i in 0..8 {
+            r.apply_hook(
+                &json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": format!("s{i}")}),
+                1,
+            );
+        }
+        let expected: Vec<String> = (0..8).map(|i| format!("s{i}")).collect();
+        assert_eq!(r.bindings, expected, "there is no fixed slot count: an eighth session still gets a row");
+    }
+
+    #[test]
+    fn an_event_that_does_not_change_state_still_binds_a_new_session() {
+        // SessionEnd with reason "resume" is a no-op for the state
+        // machine (see state.rs), but the session must still appear.
+        let mut r = Registry::default();
+        let changed = r.apply_hook(
+            &json!({"hook_event_name": "SessionEnd", "reason": "resume", "session_id": "s1"}),
             1,
         );
-        assert!(r.bind(3, "s1", 2));
-        assert_eq!(r.bindings[0], None);
-        assert_eq!(r.bindings[3].as_deref(), Some("s1"));
+        assert!(changed, "binding a brand new session is itself a repaint-worthy change");
+        assert!(r.is_bound("s1"));
+    }
+
+    #[test]
+    fn a_session_that_ends_leaves_the_list_but_keeps_its_record() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        assert!(r.is_bound("s1"));
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 2);
+        assert!(!r.is_bound("s1"), "an ended session must leave the list");
+        assert!(r.sessions.contains_key("s1"), "the session record itself must survive");
+    }
+
+    #[test]
+    fn removing_a_row_above_the_selection_keeps_the_same_session_selected() {
+        let mut r = Registry::default();
+        for id in ["s1", "s2", "s3"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id}), 1);
+        }
+        assert!(r.select(2, 2));
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 3);
+        assert_eq!(r.bindings, vec!["s2".to_string(), "s3".to_string()]);
+        assert_eq!(r.selected, Some(1), "selection follows s3 to its new index");
+    }
+
+    #[test]
+    fn removing_the_selected_row_clears_the_selection() {
+        let mut r = Registry::default();
+        for id in ["s1", "s2"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id}), 1);
+        }
+        assert!(r.select(1, 2));
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s2"}), 3);
+        assert_eq!(r.selected, None);
+        assert!(!r.select(1, 4), "the old index is out of range and must not select anything");
+    }
+
+    // ---- begin_activation: identity survives a row moving underneath --
+    //
+    // PR review (identity): the two old IPC calls (select_tile,
+    // reveal_session) each resolved the same numeric index at a
+    // different moment; a row vanishing between them could select or
+    // reveal the wrong session. begin_activation takes the id instead,
+    // so these pin that a row's disappearance around the click can only
+    // ever affect that row's own id, never a neighbour's.
+
+    #[test]
+    fn activating_a_session_by_id_survives_a_removal_above_it() {
+        let mut r = Registry::default();
+        for id in ["a", "b", "c"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id}), 1);
+        }
+        // Give b an unread complete so activating it has something to
+        // acknowledge.
+        r.apply_hook(&json!({"hook_event_name": "Stop", "session_id": "b"}), 2);
+        assert_eq!(r.sessions["b"].state, SessionState::Complete);
+
+        // The row above b disappears before the click resolves.
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "a"}), 3);
+        assert_eq!(r.bindings, vec!["b".to_string(), "c".to_string()], "b is now row 0, not row 1");
+
+        let activation = r.begin_activation("b", 4);
+        let Activation::Go(request) = activation else {
+            panic!("b is still bound; this must not be a miss");
+        };
+        assert_eq!(request.session_id, "b");
+        assert_eq!(r.selected, Some(0), "b's current index is selected, not a stale one the caller might hold");
+        assert_eq!(r.sessions["b"].state, SessionState::Idle, "activating b acknowledges its own unread complete");
+        assert_eq!(r.sessions["c"].unread_since_ms, None, "c was never touched");
+    }
+
+    #[test]
+    fn a_request_built_by_begin_activation_is_unaffected_by_a_later_removal() {
+        let mut r = Registry::default();
+        for id in ["a", "b"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id, "cwd": format!("C:/dev/{id}")}), 1);
+        }
+        let Activation::Go(request) = r.begin_activation("b", 2) else {
+            panic!("b is bound")
+        };
+        // a disappears after the request is built; the worker that
+        // eventually receives `request` never touches the registry, so
+        // this must not be able to change it (PR review: no borrowed
+        // Session crosses into that work; this is the owned-clone half
+        // of that guarantee).
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "a"}), 3);
+        assert_eq!(request.session_id, "b");
+        assert_eq!(request.dir.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn activating_a_session_removed_before_the_click_arrives_is_a_miss() {
+        let mut r = Registry::default();
+        for id in ["a", "b", "c"] {
+            r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id}), 1);
+        }
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "b"}), 2);
+        assert_eq!(r.bindings, vec!["a".to_string(), "c".to_string()]);
+
+        let activation = r.begin_activation("b", 3);
+        assert_eq!(activation, Activation::Miss);
+        assert_eq!(r.selected, None, "a miss must not select anything, including whatever now sits in b's old row");
+    }
+
+    #[test]
+    fn a_lagging_enumeration_does_not_rebind_an_ended_session_or_its_pid() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 2);
+        assert_eq!(r.sessions["s1"].pid, None, "SessionEnd already cleared it");
+        // A pid the scan reports here could already belong to an
+        // unrelated process; an ended session must be left untouched,
+        // not merely unbound.
+        assert!(!r.register_enumerated("s1", None, None, Some(7), 3));
+        assert!(!r.is_bound("s1"), "hooks saw it end; the enumeration is stale");
+        assert_eq!(r.sessions["s1"].pid, None, "a stale scan must not repopulate the pid either");
+    }
+
+    #[test]
+    fn a_straggler_event_after_session_end_stays_ended_and_off_the_list() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 2);
+        assert!(!r.is_bound("s1"));
+
+        // A Stop delivered late (out of order, or racing SessionEnd
+        // itself) used to flip the session back to Complete, and
+        // Registry::apply_hook reads state after applying the event, so
+        // it re-listed a session that had already ended.
+        let changed = r.apply_hook(&json!({"hook_event_name": "Stop", "session_id": "s1"}), 3);
+        assert!(!changed, "a straggler must not be an observable change");
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Ended);
+        assert!(!r.is_bound("s1"), "a straggler Stop must not re-list an ended session");
+
+        let changed2 = r.apply_hook(
+            &json!({"hook_event_name": "PostToolUseFailure", "session_id": "s1", "error": "boom", "is_interrupt": false}),
+            4,
+        );
+        assert!(!changed2);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Ended);
+        assert!(!r.is_bound("s1"), "a straggler failure must not re-list an ended session either");
+    }
+
+    #[test]
+    fn a_session_start_after_session_end_revives_and_rejoins_the_list() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 2);
+        assert!(!r.is_bound("s1"));
+
+        let changed = r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "resume", "session_id": "s1"}), 3);
+        assert!(changed);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Idle);
+        assert!(r.is_bound("s1"), "a resume after SessionEnd rejoins the list");
     }
 
     #[test]
@@ -225,7 +516,7 @@ mod tests {
             &json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}),
             1,
         );
-        assert!(!r.register_enumerated("s1", Some("name"), None, 2));
+        assert!(!r.register_enumerated("s1", Some("name"), None, None, 2));
         assert_eq!(
             r.sessions["s1"].state,
             crate::state::SessionState::Thinking,
@@ -234,9 +525,226 @@ mod tests {
     }
 
     #[test]
+    fn enumeration_binds_a_session_a_hook_never_reported() {
+        // Enumeration is the only channel that ever sees a session in a
+        // repo with no hook wired up.
+        let mut r = Registry::default();
+        assert!(r.register_enumerated("other-repo", Some("undertow"), Some("C:/dev/undertow"), Some(1), 1));
+        assert!(r.is_bound("other-repo"));
+        assert_eq!(r.sessions["other-repo"].state, crate::state::SessionState::Unknown);
+    }
+
+    #[test]
     fn events_without_a_session_id_are_dropped() {
         let mut r = Registry::default();
         assert!(!r.apply_hook(&json!({"hook_event_name": "Stop"}), 1));
         assert!(r.sessions.is_empty());
+    }
+
+    #[test]
+    fn select_on_a_bound_row_returns_true_and_runs_on_selected() {
+        let mut r = Registry::default();
+        // A fresh session's own first Stop goes straight to Complete
+        // (an empty child ledger), so selecting it exercises on_selected.
+        r.apply_hook(&json!({"hook_event_name": "Stop", "session_id": "s1"}), 1);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Complete);
+        assert!(r.select(0, 2));
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Idle, "on_selected clears complete to idle");
+        assert!(r.sessions["s1"].unread_since_ms.is_none(), "on_selected clears the unread mark");
+    }
+
+    #[test]
+    fn select_out_of_range_returns_false() {
+        let mut r = Registry::default();
+        assert!(!r.select(0, 1), "an empty list has no row 0 to select");
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        assert!(!r.select(5, 2), "there is no row past the end of the list");
+    }
+
+    #[test]
+    fn tick_flips_a_quiet_session_to_unknown_once() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        assert!(r.tick(1 + crate::state::T_UNKNOWN_MS + 1));
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Unknown);
+        assert!(!r.tick(1 + crate::state::T_UNKNOWN_MS + 2), "an immediate second tick has nothing left to flip");
+    }
+
+    #[test]
+    fn snapshot_has_one_tile_per_bound_session_with_correct_indices_and_selected_flag() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s2"}), 1);
+        r.select(0, 2);
+        let snap = r.snapshot(3);
+        assert_eq!(snap.tiles.len(), 2);
+        for (i, t) in snap.tiles.iter().enumerate() {
+            assert_eq!(t.index, i);
+            assert_eq!(t.selected, i == 0);
+            assert!(t.session.is_some());
+        }
+    }
+
+    #[test]
+    fn snapshot_on_an_empty_registry_has_no_tiles() {
+        let r = Registry::default();
+        assert!(r.snapshot(1).tiles.is_empty());
+    }
+
+    #[test]
+    fn snapshot_carries_hide_unknown_and_still_lists_every_tile() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.hide_unknown = true;
+        let snap = r.snapshot(2);
+        assert!(snap.hide_unknown);
+        assert_eq!(snap.tiles.len(), 1, "hide_unknown must not remove a tile from the snapshot itself");
+    }
+
+    #[test]
+    fn register_enumerated_corrects_a_cwd_poisoned_by_a_subagent_payload() {
+        // state.rs now refuses to latch a subagent's cwd onto a session,
+        // but this pins the repair path for a value that got in before
+        // that fix, or by any other means: enumeration's cwd is the
+        // session's own and always wins.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        r.sessions.get_mut("s1").unwrap().cwd = Some("C:/dev/wrong-subagent-dir".to_string());
+        assert!(r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, 2));
+        assert_eq!(r.sessions["s1"].cwd.as_deref(), Some("C:/dev/undertow"));
+    }
+
+    #[test]
+    fn register_enumerated_fills_a_blank_label_from_cwd_but_never_overwrites_one() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        assert_eq!(r.sessions["s1"].label, "");
+        r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, 2);
+        assert_eq!(r.sessions["s1"].label, "undertow", "a blank label is filled in from the corrected cwd");
+
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s2"}), 1);
+        r.sessions.get_mut("s2").unwrap().label = "custom name".to_string();
+        r.register_enumerated("s2", None, Some("C:/dev/undertow"), None, 2);
+        assert_eq!(r.sessions["s2"].label, "custom name", "an existing label is never overwritten");
+    }
+
+    // ---- register_enumerated: pid replacement policy --------------------
+    //
+    // A non-null enumerated pid different from the stored one replaces it
+    // and reports changed; a non-null pid equal to the stored one is a
+    // no-op; a missing pid (the scan saw none this time) preserves
+    // whatever is already recorded.
+
+    #[test]
+    fn register_enumerated_replaces_a_changed_pid_and_preserves_label_and_state() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "cwd": "C:/dev/a"}), 1);
+        r.sessions.get_mut("s1").unwrap().pid = Some(111);
+        assert!(r.register_enumerated("s1", None, None, Some(222), 2));
+        assert_eq!(r.sessions["s1"].pid, Some(222), "a different enumerated pid replaces the stored one");
+        assert_eq!(r.sessions["s1"].label, "a", "replacing the pid must not disturb the label");
+        assert_eq!(
+            r.sessions["s1"].state,
+            crate::state::SessionState::Thinking,
+            "replacing the pid must not disturb state"
+        );
+    }
+
+    #[test]
+    fn register_enumerated_is_a_no_op_when_the_enumerated_pid_matches() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        r.sessions.get_mut("s1").unwrap().pid = Some(111);
+        assert!(!r.register_enumerated("s1", None, None, Some(111), 2), "the same pid must report no change");
+        assert_eq!(r.sessions["s1"].pid, Some(111));
+    }
+
+    #[test]
+    fn register_enumerated_with_no_pid_preserves_the_stored_one() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        r.sessions.get_mut("s1").unwrap().pid = Some(111);
+        assert!(!r.register_enumerated("s1", None, None, None, 2), "a scan that saw no pid must not clear it");
+        assert_eq!(r.sessions["s1"].pid, Some(111));
+    }
+
+    #[test]
+    fn a_resumed_session_gets_the_new_enumerated_pid_after_end_and_resume() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.register_enumerated("s1", None, None, Some(111), 2);
+        assert_eq!(r.sessions["s1"].pid, Some(111));
+
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 3);
+        assert_eq!(r.sessions["s1"].pid, None, "SessionEnd clears the pid: the OS may reuse it for anything");
+
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "resume", "session_id": "s1"}), 4);
+        assert!(r.is_bound("s1"), "the revived session rejoins the list");
+
+        assert!(r.register_enumerated("s1", None, None, Some(222), 5));
+        assert_eq!(r.sessions["s1"].pid, Some(222), "the new OS process's pid replaces the stale one");
+    }
+
+    #[test]
+    fn an_ended_session_listed_by_a_later_scan_stays_unbound_with_no_pid() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.register_enumerated("s1", None, None, Some(111), 2);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 3);
+        assert_eq!(r.sessions["s1"].pid, None);
+
+        // The OS could have reused pid 111 for an unrelated process by
+        // the time the next scan runs; enumeration must not hand a pid
+        // back to a session that has already ended.
+        assert!(!r.register_enumerated("s1", None, None, Some(999), 4));
+        assert!(!r.is_bound("s1"));
+        assert_eq!(r.sessions["s1"].pid, None, "an ended session's pid must not be repopulated by a later scan");
+    }
+
+    // ---- prune_missing: enumeration lag and the failed-run rule --------
+
+    #[test]
+    fn prune_drops_a_bound_session_absent_from_a_successful_enumeration() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        let present = HashSet::new();
+        assert!(r.prune_missing(&present, 1 + ENUM_GRACE_MS + 1));
+        assert!(!r.is_bound("s1"));
+        assert!(r.sessions.contains_key("s1"), "pruning drops the binding, not the session record");
+    }
+
+    #[test]
+    fn prune_keeps_a_session_present_in_the_enumeration() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        let present: HashSet<String> = ["s1".to_string()].into_iter().collect();
+        assert!(!r.prune_missing(&present, 1 + ENUM_GRACE_MS + 1));
+        assert!(r.is_bound("s1"));
+    }
+
+    #[test]
+    fn prune_keeps_a_session_missing_from_enumeration_but_heard_from_recently() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 100);
+        let present = HashSet::new();
+        // Well within the grace window since the last hook at t=100.
+        assert!(!r.prune_missing(&present, 100 + ENUM_GRACE_MS - 1));
+        assert!(r.is_bound("s1"), "a session heard from moments ago must survive a lagging enumeration");
+    }
+
+    #[test]
+    fn a_failed_enumeration_must_call_prune_missing_never() {
+        // This is a documentation test: the caller (enumerate::register)
+        // must skip prune_missing entirely on a failed run. prune_missing
+        // itself has no way to know whether the run behind `present`
+        // succeeded, so the contract lives in the caller; this test pins
+        // that an empty `present` set, taken at face value, would prune
+        // everything, which is exactly why a failed run must never reach
+        // here at all.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        let empty_present = HashSet::new();
+        assert!(r.prune_missing(&empty_present, 1 + ENUM_GRACE_MS + 1));
+        assert!(!r.is_bound("s1"), "an empty present-set does prune, which is why callers must gate on success");
     }
 }

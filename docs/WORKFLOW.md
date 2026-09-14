@@ -68,6 +68,12 @@ Columns: **CM** `docs/CONTROL_MAPPING.md`, **UI** `docs/UI_SPEC.md`,
 | Change the hook event set | | | Yes | Yes | Yes | Yes | | | Yes |
 | Change a control label or wording | Yes | Yes | | | | | Yes | | Yes |
 | Upgrade or correct a verification stamp | | | | Yes | | | | Yes | Yes |
+| Add an implementation proposal without changing behavior | | | Yes | | Yes | | | | Yes |
+
+For a proposal, the marked contract files link to the plan and clarify
+its status; they do not adopt future behavior implicitly. If the plan
+touches security boundaries, link its scope from the security model too.
+An accepted contract change additionally matches its corresponding row.
 
 `docs/ARCHITECTURE.md` is authoritative for the session state machine, so any
 change that adds, removes, or re-times a state belongs in the ARCH column and
@@ -95,9 +101,16 @@ build the project are committed, but build trees, package caches, and
 anything reproducible purely from a clean checkout plus a documented
 command are not. What is generated today, all of it reproducible by
 `scripts/build-app.ps1` and none of it committed: `target/` (cargo),
-`app/ui/dist/` (tsc), `app/ui/node_modules/` (npm), and
-`app/src-tauri/gen/` (tauri-build). `Cargo.lock` is committed on
-purpose: it is not a build product, it is the pinned dependency set.
+`app/ui/dist/` and `app/ui/dist-test/` (tsc), `app/ui/node_modules/`
+(npm), and `app/src-tauri/gen/` (tauri-build). `Cargo.lock` is committed
+on purpose: it is not a build product, it is the pinned dependency set.
+
+The tests live next to the code they cover and run with two commands:
+`cargo test --workspace` (daemon unit tests, the headless six-session
+pipeline test in `app/src-tauri/tests/`, and the shim's black-box tests
+in `shim/tests/`) and `npm test` in `app/ui` (the surface's pure helpers
+under `node:test`). `scripts/build-app.ps1` runs both, and
+`.github/workflows/tests.yml` runs them on every push and pull request.
 
 ---
 

@@ -71,21 +71,21 @@ decided.
 | `COMPLETE` | Green | A turn finished, the child ledger is empty, and you have not selected the tile since | You select the tile, or a new turn begins |
 | `ERROR` | Red | The turn failed, or the process died without a clean exit | You select the tile (a crashed session then shows `ENDED`), or the session recovers |
 | `ENDED` | Off | The session exited for good, or you acknowledged a crashed `ERROR` tile | Rebound |
-| `UNKNOWN` | Grey, hatched | The daemon cannot currently tell | Any authoritative event arrives |
+| `UNKNOWN` | Grey | The daemon cannot currently tell | Any authoritative event arrives |
 
 Amber carries a kind, `permission` or `question`, on the update that raises it.
 This is a discriminator on the state's detail, not a new state and not a new
-colour: amber is still amber. Approve and Deny are enabled only when the kind
-is `permission`. A question renders its options as targets instead, because a
-button that cannot answer what is on screen is the silently wrong button.
-See [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types),
-[UI_SPEC.md](UI_SPEC.md#command-keys), and
+colour: amber is still amber. No control on the current surface reads it, so
+it does not change how a row looks; a permission control and a question
+control would each key off it if either returns, per
+[ADR-028](DECISIONS.md#adr-028).
+See [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types) and
 [DECISIONS.md](DECISIONS.md#adr-013).
 
 Green means finished and unread. It clears when you select the tile, and it is
 also left when a new turn begins, because the session is no longer finished.
-The daemon records `unreadSince`, the moment the tile went green, and the
-detail panel shows it. Unread stays a colour and never becomes a badge, per
+The daemon records `unreadSince`, the moment the tile went green. Unread
+stays a colour and never becomes a badge, per
 [ACCESSIBILITY.md](ACCESSIBILITY.md#the-economics) and
 [DECISIONS.md](DECISIONS.md#adr-008).
 
@@ -112,6 +112,15 @@ generalises past one runtime: an adapter reports a lifecycle change only when
 the lifecycle actually changed, and the daemon takes no state change from an
 event whose reason it does not recognise.
 
+`ENDED` absorbs stragglers on the same principle. Once a session reaches
+`ENDED`, only a session-start event (a resume) is taken as a state change;
+every other event is ignored outright, not merely processed to no visible
+effect. A `Stop` or a tool-failure event delivered late, or racing the
+session-end event itself, must not flip a session that has already ended
+back to `COMPLETE`, `THINKING`, or `ERROR`, and must not re-list it: list
+membership follows the state left after an event is applied, so a straggler
+that got through this rule would put a dead session back on the board.
+
 ### The child ledger
 
 A turn can finish while work it started is still running. On the owner's
@@ -125,8 +134,9 @@ Each session holds a ledger of its open children. Entries are `kind:
 
 - `COMPLETE` is unreachable while the ledger is non-empty. A turn that ends
   with children live stays `THINKING`.
-- The count renders as a corner badge, never a hit target. See
-  [UI_SPEC.md](UI_SPEC.md#tile-anatomy).
+- The count is internal bookkeeping for that gate. It is not currently shown
+  anywhere in the UI: corner badges are removed
+  ([ADR-028](DECISIONS.md#adr-028)).
 - Background Bash tasks emit no hook, so the ledger cannot see them and the
   count does not include them. That is stated plainly because a count which
   silently undercounts is worse than no count at all.
@@ -212,21 +222,44 @@ row carried one on the re-run, so nothing may depend on it
 says nothing about a pending permission, so it supplements hooks and does not
 replace them.
 
-Cold start therefore runs like this:
+Enumeration is no longer only a cold-start step. [ADR-028](DECISIONS.md#adr-028)
+(2026-09-13) has the daemon rerun it on its own 15-second timer for as long
+as it runs, outside the registry lock, so a slow or hanging enumeration call
+cannot stall hook ingestion. Each run does the same three things, whether it
+is the first one or the thousandth:
 
-1. Enumerate the live sessions and rebind tiles by session id.
+1. Enumerate the live sessions. A session not already bound is bound now, at
+   the end of the list, by any enumeration hit or hook event, whichever
+   happens first; an already-bound session is only relabelled, never
+   restated.
 2. Map a `busy` status to `THINKING`, where a status is reported at all.
 3. Map everything else, including a status the daemon does not recognise and a
    status that is absent, to `UNKNOWN`.
 
-On 2.1.220 no row carries a status, so step 2 never fires and every enumerated
-session lands in step 3. The rule is kept rather than deleted because it costs
-nothing if the key comes back, not because state recovery works today. What
-this channel actually buys at cold start is rebinding and labelling: the board
-is still grey after a restart, but the tiles are the right tiles, bound to the
-right sessions, under the right names. That is a smaller claim than the one
-[ADR-017](DECISIONS.md#adr-017) made, and it is the one the observation
+On 2.1.220 no row carries a status, so step 2 never fires and every freshly
+bound session lands in step 3. The rule is kept rather than deleted because
+it costs nothing if the key comes back, not because state recovery works
+today. What this channel actually buys is binding and labelling, not state:
+a session enumeration alone finds is bound and named correctly, but stays
+grey until a hook for it actually arrives. That is a smaller claim than the
+one [ADR-017](DECISIONS.md#adr-017) made, and it is the one the observation
 supports.
+
+The daemon tracks that wait as `heard` on the session: false at binding,
+whether by enumeration or by restoring from disk, and set true on the
+first hook event received in this run. The state value stays `UNKNOWN`
+either way, so this is bookkeeping for the surface's word, not a new state;
+the row itself reads "not heard yet" instead of "unknown" for exactly the
+session this paragraph describes, per
+[ADR-029](DECISIONS.md#adr-029) and [UI_SPEC.md](UI_SPEC.md#row-anatomy).
+
+A bound session leaves the list when it ends, or when a *successful*
+enumeration run no longer lists it and it has had no hook event for 60
+seconds. A failed enumeration call (a non-zero exit that is not the known
+255-on-success case, or output that does not parse) prunes nothing: missing
+information is never grounds for removing a row. This replaces the earlier
+six fixed, manually filled slots with an unbounded list that a session can
+join or leave entirely on its own ([ADR-028](DECISIONS.md#adr-028)).
 
 Step 3 is not a formality. `IDLE` is the one guess that looks like knowledge:
 a white tile says "nothing here needs you", which is exactly the claim the
@@ -290,19 +323,28 @@ editor.
 Deckhand starts and owns the session through the Claude Agent SDK.
 
 - Everything works, including sending prompts.
-- The cost is that the session has no terminal UI of its own. The detail panel
-  becomes the only place to read the transcript, which is a significant amount
-  of surface Deckhand would have to build well.
+- The cost is that the session has no terminal UI of its own. Something on
+  the surface would have to become the only place to read the transcript,
+  and the list-plus-raise design [ADR-028](DECISIONS.md#adr-028) settled on
+  does not have that place yet; it is a significant amount of surface
+  Deckhand would have to design and build well, and needs its own ADR when
+  Phase 4 gets there.
 
 Attached mode is built first because it is the one that improves a workflow that
 already exists. Hosted mode is Phase 4.
 
 ## The adapter boundary
 
-The daemon knows nothing about Claude Code. It talks to adapters, which
+The target boundary keeps runtime details out of the daemon. Adapters
 implement the contract in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md). The
 Claude Code adapter is the reference implementation and is documented in
 [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md).
+
+The current Phase 1 code still parses Claude hook payloads inside the
+registry and state machine. The proposed
+[OpenAI integration plan](OPENAI_INTEGRATION_PLAN.md) stages that
+extraction before adding a second runtime. Its requirements are a plan,
+not evidence that the Rust adapter interface exists today.
 
 This boundary is not speculative generality. It exists because the Claude Code
 integration deliberately mixes documented interfaces with fragile ones, and the
@@ -378,16 +420,66 @@ inference. It receives state and sends intents.
 Two window properties are hard requirements rather than preferences:
 
 1. **Always on top.**
-2. **Never takes focus.** Clicking a tile must not defocus the terminal you are
-   controlling. On Windows the Tauri and Qt-level flags are not sufficient on
+2. **Never takes focus.** Deckhand's own window is never activated: a click on
+   it must not hand focus to the board. Since ADR-027 a tile click raises the
+   clicked session's host window, which is the one focus change the surface
+   makes, and it goes to the session, never to Deckhand. On Windows the Tauri
+   and Qt-level flags are not sufficient on
    their own: the sibling project `alpha-osk` had to apply
    `WS_EX_NOACTIVATE | WS_EX_TOPMOST` through a raw `SetWindowLongW` call, and
    reapply it whenever the window becomes visible. Deckhand has to reproduce
    that in Tauri.
 
-Prototyping this in Tauri before anything else is built is a Phase 0 task,
-because if it cannot be made to work the stack choice is wrong and it is much
-cheaper to learn that now. See [DECISIONS.md](DECISIONS.md#adr-002).
+This was prototyped before anything else was built, exactly because a
+failure would have made the stack choice wrong while it was still cheap to
+change. The spike passed on Windows 11 and the mechanism it proved, one
+extended-style pass at setup, is what the Phase 1 window ships. See
+[DECISIONS.md](DECISIONS.md#adr-025) and
+[DECISIONS.md](DECISIONS.md#adr-002).
+
+The window itself is a vertical list, about 360 logical pixels wide, with
+its height following the row count at 64 px per row plus a 52 px header
+([ADR-031](DECISIONS.md#adr-031); the header was 64 px under
+[ADR-029](DECISIONS.md#adr-029), and 48 px and 56 px before that),
+clamped into the monitor's work area so it can never render partly
+off-screen. Since [ADR-030](DECISIONS.md#adr-030) the row count that
+sizing uses is `visible_row_count`, the visible rows once the grey toggle
+filter is applied, not the bound count; the `T_unknown` watchdog (see
+[Liveness, by open operation](#liveness-by-open-operation)) that can move
+a session into `unknown` while the filter is on routes through the same
+resize path, so a session going quiet under a hidden filter shrinks the
+window exactly as toggling the control would. A saved
+position is checked against the monitors actually connected at startup
+before it is trusted: a position saved on a monitor that is no longer
+attached is discarded in favour of a position inside the current work
+area, rather than placing the window off every visible screen. The window
+match the raise uses, see
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#agent-keys-to-session-rows),
+excludes Deckhand's own window from its candidates, so a title match can
+never find the board itself. Both fix findings from the same window and
+raise review; recorded together in [ADR-028](DECISIONS.md#adr-028).
+
+Reveal, the raise this window match performs, does not apply one scored
+match to every host. It classifies the session's pid first, by walking
+its parent chain (a Toolhelp32 snapshot, at most eight hops) for the
+first ancestor that is a host Reveal knows: `Code.exe` for VS Code,
+`WindowsTerminal.exe` for Windows Terminal, anything else falling back to
+a plain console. That split exists because a console session's process
+owns its window one to one, while a Windows Terminal or VS Code session
+shares one owning process across every window on the machine, so the
+same pid-and-title score that finds a console exactly can tie or
+misidentify a window on either of the other two. A console is matched by
+briefly attaching to it (`AttachConsole`); a Windows Terminal session is
+raised only when exactly one Terminal window is open; a VS Code session
+is matched against the workspace folders named in
+`~/.claude/ide/*.lock`, and, on a match, VS Code's own CLI is run against
+that folder ahead of the window raise. Across every host, a tie at the
+top score is now a miss rather than a guess. See
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#agent-keys-to-session-rows) for
+what this means as a control and [DECISIONS.md](DECISIONS.md#adr-032)
+for the full record, including the unverified console path and the two
+tab-targeting gaps, inside Windows Terminal and inside a VS Code window,
+that stay out of reach from outside either editor.
 
 ## Stack
 
@@ -398,8 +490,8 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 
 | Data | Where | Notes |
 | --- | --- | --- |
-| Settings, layers, bindings | Local config directory, JSON | Portable, hand-editable |
-| Tile-to-session bindings | Same | Bindings are by session id, which survives restarts |
+| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown`, the grey toggle's state ([ADR-030](DECISIONS.md#adr-030), relabelled by [ADR-031](DECISIONS.md#adr-031)); a missing field or a corrupt file loads as `false` |
+| Session bindings | Same | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
 | Session transcripts | Not stored | Deckhand reads them where they already are and copies nothing |
 
@@ -410,8 +502,9 @@ egress other than loopback.
 
 These are real and unresolved. They are tracked in [TODO.md](../TODO.md).
 
-1. **Hook overhead at six concurrent sessions.** A subprocess per tool call
-   across six busy sessions could be noticeable. Needs measuring before the
+1. **Hook overhead at several concurrent sessions.** A subprocess per tool
+   call across many busy sessions could be noticeable, more so now that the
+   list is unbounded rather than capped at six. Needs measuring before the
    design is trusted. If it is too slow, the fallback is to hook only the events
    needed for status and gate permissions on a narrower matcher.
 2. **Whether `ERROR` is detectable at all.** Amber and blue and green are

@@ -74,9 +74,12 @@ Checking a box here means the item is done, not that it is perfect. See
       documented events have now fired here with their fields captured,
       correcting `PostToolUseFailure`'s shape (`error` string plus
       `is_interrupt`, no `error_type`) and adding `permission_mode:
-      "default"` as a live payload value. This item stays unchecked until
-      `Notification`, `StopFailure`, and `PermissionDenied` are seen
-      firing.
+      "default"` as a live payload value. A fifth advance later that day:
+      `PermissionDenied` fired live (the auto-mode classifier blocking a
+      call) carrying the common fields plus `tool_name`, `tool_input`,
+      `tool_use_id`, and `reason: "Blocked by classifier"`, exactly as
+      predicted. This item stays unchecked until `Notification` and
+      `StopFailure` are seen firing.
 - [x] Enumerate the remaining `PreToolUse` payload fields now that the
       event is known to fire. Done 2026-08-02: a capture tap (first inside
       the style gate, now the dedicated `.claude/hooks/payload-capture.js`)
@@ -120,8 +123,6 @@ Checking a box here means the item is done, not that it is perfect. See
 - [x] Write down the minimum hit target size as an actual number, with a
       rationale: 44 px, in `docs/ACCESSIBILITY.md`, echoed in
       `docs/UI_SPEC.md`.
-- [ ] Specify the bind picker (what it lists, how a session is chosen, what
-      it shows when the adapter's session list is `internal`-confidence).
 - [ ] Design the UI flow for presenting the hook block for confirmation.
       The policy is already set in `docs/CLAUDE_CODE_ADAPTER.md`: Deckhand
       writes only on explicit confirmation, composes, never clobbers.
@@ -153,10 +154,12 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       reads stdin, POSTs to the daemon's loopback port with the token
       from `%LOCALAPPDATA%\deckhand\daemon.json`, exits 0 silently in
       every failure mode so it can never block a session.
-- [ ] Implement `settings.json` hook registration (install and
-      uninstall). The dogfood wiring on this machine is hand-written in
-      gitignored `.claude/settings.local.json`; the installable,
-      user-level version with an uninstall path is still owed.
+- [x] Implement `settings.json` hook registration (install and
+      uninstall). Done 2026-09-13: `scripts/install-hooks.ps1` merges
+      the twelve-event, non-gating wiring into the user-level file, is
+      idempotent, and `-Uninstall` reverses exactly what it added. The
+      hand-written, gitignored `.claude/settings.local.json` dogfood
+      wiring is unaffected and still works alongside it.
 - [x] Implement daemon ingestion for the hooked event types. Done
       2026-08-02 for all twelve documented events (the count in this
       item used to say seven; the twelve-event set and the reasons are
@@ -182,9 +185,8 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       window, only against the spike's; do that before trusting it.
 - [x] Implement manual tile binding, including the unbound (off) state.
       Done 2026-08-02: unbound tiles render dashed with a plus and open
-      the bind picker; first-heard sessions auto-fill free tiles. The
-      unbind control ships with the detail panel (Phase 3); the daemon
-      command exists.
+      the bind picker; first-heard sessions auto-fill free tiles. Unbind
+      landed the same day in the detail panel.
 - [ ] Implement the transcript JSONL fallback path for a missed hook
       event.
 - [x] Handle daemon restart without losing which tile is bound to which
@@ -194,8 +196,83 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 - [ ] Write a manual test script that induces every status colour across
       six concurrent sessions, and decide what gets logged and at what
       verbosity. `scripts/phase1-smoke.ps1` induces five states across
-      three tiles and screenshots them; the six-session version and the
-      logging decision are still owed.
+      three tiles and screenshots them. The six-session version exists
+      headless since 2026-09-13 as `app/src-tauri/tests/pipeline.rs`,
+      six sessions through the real endpoint into six colours; the
+      screenshot walk and the logging decision are still owed.
+- [x] Capture the session pid and host at the hook instead of guessing
+      later: the shim wraps the payload with `CLAUDE_PID`,
+      `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`, and
+      `VSCODE_PID` from its own environment (all observed on 2.1.270
+      under the VS Code extension; the terminal case is not yet
+      observed), and the daemon finds the window by walking that pid's
+      ancestors to the first process owning a visible top-level window,
+      with the title match limited to that process's windows.
+      Superseded by [ADR-032](docs/DECISIONS.md#adr-032) (2026-09-13),
+      which reaches the same goal a different way: the shim and its
+      payload are unchanged, and Reveal instead takes the `pid`
+      `claude agents --json` already reports and classifies the host at
+      click time from a Toolhelp32 snapshot of the running process tree
+      (`Code.exe`, `WindowsTerminal.exe`, or a plain console), then
+      raises through the strategy chosen for that host. It does not
+      populate an ADR-023 `host` field; that axis is unaffected.
+- [ ] Take liveness from the pid: hold a process handle per session and
+      flip to `ended` the moment it exits, and stop greying a live idle
+      session at the fifteen-minute mark. Not resolved by ADR-032, which
+      only changed how Reveal finds a window for a pid it already has;
+      this still needs its own ADR.
+- [x] Bring `app/` in line with ADR-028: replace the six-slot tile surface
+      and its manual bind picker, command keys, stick, dial, talk and
+      send placeholders, detail panel, layer strip, and corner badges
+      with the session-list surface (one row per session: colour, glyph,
+      name, state word) and a header holding a grey toggle and Quit
+      (ADR-030 added Hide grey on top of ADR-028's Move and Quit;
+      ADR-031 then removed Move and made the header the drag region).
+- [x] Replace the six-slot manual binding with ADR-028's auto-binding:
+      bind a session on its first hook event or enumeration hit, into an
+      ordered, unbounded list; drop the null slots when loading a legacy
+      six-slot `bindings.json`.
+- [x] Rerun `claude agents` enumeration every 15 s on its own timer,
+      outside the registry lock, and remove a session when it ends or
+      when a successful enumeration no longer lists it and it has had no
+      hook event for 60 s; a failed enumeration must prune nothing
+      (ADR-028).
+- [x] Size and place the window per ADR-028: about 360 px wide, height
+      following the row count at 64 px per row plus a 52 px header
+      (ADR-029 set it at 64 px; ADR-031 shrank it to 52), clamped to the
+      monitor work area, with a saved position validated against the
+      monitors actually connected at startup.
+- [x] Exclude Deckhand's own window from the raise match (ADR-028).
+- [ ] Verify the console Reveal path (`AttachConsole` plus
+      `GetConsoleWindow`, [ADR-032](docs/DECISIONS.md#adr-032)) against a
+      real console-hosted session; so far it has only been exercised
+      against a fake process table in unit tests.
+- [ ] Fire the VS Code session-tab link
+      (`vscode://anthropic.claude-code/open?session=<id>`) once a safe
+      cross-window test exists. Blocked on Deckhand's own evidence, per
+      [ADR-032](docs/DECISIONS.md#adr-032): a session in VS Code's
+      integrated terminal is never tracked by the extension host, and
+      which window a multi-window instance routes the URI to has not
+      been observed, so firing it today risks a duplicate live session
+      rather than revealing the existing one.
+- [ ] Windows Terminal tab targeting (raising a specific tab, not only
+      the one open Terminal window) is blocked upstream, not by
+      Deckhand: `microsoft/terminal#19783` asked for exactly this and
+      was closed not planned in January 2026. Revisit if that changes.
+- [x] Register the shim in user-level Claude Code settings so sessions in
+      every repo report state, not only this one (done on the owner's
+      machine with scripts/install-hooks.ps1 on 2026-09-13; the repo-local
+      wiring was removed at the same time).
+- [ ] Rotate or disable `.claude/hooks/payload-capture.js`'s output.
+      `_scratch/hook-capture.jsonl` grows unbounded and holds raw
+      prompts and tool inputs; it is gitignored, but a local file that
+      never rotates is still a liability sitting on disk.
+- [ ] Close same-user event spoofing on the ingest endpoint
+      (`docs/SECURITY_MODEL.md#phase-1-ingest-hardening`) before Phase
+      2: any process running as the same OS user can read the daemon's
+      token today and POST fabricated hook events, which only paints a
+      false session in Phase 1 but would face an actual permission
+      decision once Phase 2 wires one up.
 
 ---
 
@@ -203,8 +280,11 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 
 - [ ] Implement `PreToolUse` hook response with an actual permission
       decision, and the daemon-side hold while that decision is pending.
-- [ ] Wire the approve command key to the held decision.
-- [ ] Wire the deny command key to the held decision.
+- [ ] Decide, in its own ADR, what approve and deny look like on the
+      session-list surface now that ADR-028 removed the command keys they
+      were going to be.
+- [ ] Wire the approve control to the held decision, once designed.
+- [ ] Wire the deny control to the held decision, once designed.
 - [ ] Implement a timeout policy for an unanswered permission decision.
 - [ ] Implement the audit trail of approvals and denials.
 - [ ] Test the failure mode where the daemon dies while a decision is
@@ -216,26 +296,18 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 
 ---
 
-## Phase 3: The rest of the surface
+## Phase 3: Retired (ADR-028)
 
-- [ ] Implement the dial: step through options.
-- [ ] Implement the dial: minus and plus targets.
-- [ ] Implement the dial: commit target.
-- [ ] Implement the four-way stick: scroll the detail panel up and down,
-      expand or collapse it, and return to the previously selected tile. No
-      tile stepping.
-- [ ] Implement the detail panel the stick opens.
-- [ ] Implement continue and interrupt command keys.
-- [ ] Implement the Answer command key and the per-option answer targets,
-      full option labels, disabled until `answer_question` is proven.
-- [ ] Implement the Reveal command key and its pid-based host match.
-- [ ] Implement plan mode and compact in the detail panel, not as command
-      keys.
-- [ ] Implement the layer strip and profile switching.
-- [ ] Implement the settings surface.
-- [ ] Implement theming.
-- [ ] Confirm every control in this phase against the accessibility minimum
-      hit target.
+Every item this phase used to list, dial stepping and its minus, plus, and
+commit targets, the four-way stick, the detail panel, continue and
+interrupt keys, the Answer key and its answer targets, the Reveal key,
+plan mode and compact in a panel, a layer strip, a settings surface, and
+theming, is removed from the plan by
+[ADR-028](docs/DECISIONS.md#adr-028) on 2026-09-13. Some of it had
+partial code in `app/` from the change just before ADR-028; removing that
+code to match the session-list surface is tracked once, in Phase 1 above,
+rather than repeated per control here. A control returning to the surface
+needs its own ADR and its own line here.
 
 ---
 
@@ -251,19 +323,27 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 
 ---
 
-## Phase 5: Talk
+## Phase 5: Retired (ADR-028)
 
-- [ ] Define the MacroVox integration contract.
-- [ ] Implement the talk button (click to start, click to stop).
-- [ ] Implement the double-press hands-free toggle.
-- [ ] Implement graceful degradation when MacroVox is not running.
-- [ ] Route transcribed text into the composed message.
+The talk control and its MacroVox integration, listed here, are removed
+from the plan by [ADR-028](docs/DECISIONS.md#adr-028) on 2026-09-13. A
+talk control returning to the surface needs its own ADR and its own line
+here.
 
 ---
 
 ## Phase 6: Beyond Claude Code
 
 - [ ] Choose the second adapter target.
+- [ ] Validate Codex as the proposed target using W0 in the
+      [OpenAI integration plan](docs/OPENAI_INTEGRATION_PLAN.md): collect
+      redacted fixtures and a per-host, per-version evidence matrix.
+- [ ] Reconcile the normalized event contract and composite session
+      identity with protocol version 0 before implementing W1 and W2.
+- [ ] Prove mixed Claude/Codex observation, migration recovery, and
+      per-session capability behavior before enabling the second adapter.
+- [ ] Validate App Server connection ownership and safe native handback
+      before scheduling any OpenAI control capability.
 - [ ] Implement it against the existing `docs/ADAPTER_PROTOCOL.md`.
 - [ ] Record every point where the contract had to bend, and fix the
       contract rather than the adapter where possible.

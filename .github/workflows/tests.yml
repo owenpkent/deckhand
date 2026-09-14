@@ -1,0 +1,72 @@
+# Code CI: the daemon, the shim, and the surface. Windows only on purpose:
+# the daemon's window styling and Reveal are Win32, and the shim tests
+# spawn the built binary, so the platform that ships is the platform that
+# is tested. The specification is guarded separately by docs.yml.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A push to a PR branch triggers both events. Keep the newest run only.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  surface:
+    name: Surface (tsc and node:test)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app/ui
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Install the compiler
+        run: npm ci --no-audit --no-fund
+
+      - name: Surface tests
+        run: npm test
+
+      - name: Surface builds
+        run: npx tsc
+
+  rust:
+    name: Daemon and shim (cargo test)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      # Tauri embeds app/ui, dist included, at compile time, so the
+      # surface is compiled before the workspace. scripts/build-app.ps1
+      # does the same locally.
+      - name: Compile the surface
+        working-directory: app/ui
+        run: |
+          npm ci --no-audit --no-fund
+          npx tsc
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      - name: Build the workspace
+        run: cargo build --workspace
+
+      - name: Daemon and shim tests
+        run: cargo test --workspace

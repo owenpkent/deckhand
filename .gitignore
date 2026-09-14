@@ -10,7 +10,6 @@ dist/
 dist-ssr/
 .vite/
 *.tsbuildinfo
-package-lock.json
 
 # Bundled installers and signing material
 release/
@@ -37,6 +36,7 @@ spike-log.jsonl
 
 # Compiled surface (rebuilt by scripts/build-app.ps1)
 app/ui/dist/
+app/ui/dist-test/
 
 # AI/LLM scratch space
 _scratch/

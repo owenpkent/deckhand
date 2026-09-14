@@ -12,6 +12,12 @@ which can mean running a shell command, editing a file, or touching the
 network. That single capability is what this document is about. Everything else
 is ordinary local-app hygiene.
 
+The [OpenAI integration plan](OPENAI_INTEGRATION_PLAN.md) is a proposed
+extension, initially limited to observation. Its later control packages
+must prove request identity, safe native handback, credential handling,
+and reconnect behavior before any capability is enabled. This plan does
+not extend today's permission authority or weaken the fail-to-ask rule.
+
 ## Assets
 
 | Asset | Why it matters |
@@ -237,6 +243,59 @@ This allowlist scopes to the *gating* hook only. Deckhand's observation hooks
 answer no permission decision, and may carry whatever their own event supports,
 `additionalContext` among it.
 
+## Phase 1 ingest hardening
+
+Added alongside a security-hardening pass on the loopback ingest path
+that rule 2 above already scopes:
+
+- **Content Security Policy.** `tauri.conf.json` sets `default-src
+  'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src
+  'self'; connect-src ipc: http://ipc.localhost` on the surface's
+  webview. The surface loads only its own bundled script, stylesheet,
+  and font, and talks to the daemon over Tauri's own IPC, so nothing in
+  this policy had to relax for anything real.
+- **A body cap on the ingest endpoint.** `http.rs` reads at most 8 MiB
+  of a POST body (`MAX_BODY_BYTES`), one byte over the cap included
+  only to tell "exactly at the cap" apart from "over it". A body over
+  the cap gets `413` and is dropped whole: never parsed, never
+  partially applied. Hook payloads are prompts and tool inputs, nowhere
+  near this size in practice; the cap exists only to stop a malformed
+  or hostile POST from growing the daemon's memory without bound. A
+  declared `Content-Length` over the cap also gets `413`, before any of
+  the body is read. A request with any `Transfer-Encoding` gets `411`,
+  unread: `tiny_http`'s chunked decoder buffers chunk-size lines
+  without a bound, beneath the cap, and the shim always sends
+  `Content-Length`.
+- **Constant-time token comparison.** The per-start ingest token (rule
+  2) used to be compared with `==`, which returns as soon as it finds a
+  mismatched byte. `http.rs` now walks every byte regardless of an
+  earlier mismatch, so the time a request takes no longer depends on
+  how many leading bytes of a guessed token were right.
+- **Reveal validates the folder before launching `code.cmd`.**
+  `reveal.rs`'s VS Code path reads a workspace folder out of
+  `~/.claude/ide/*.lock` (residual risk 3 below) and used to hand it
+  straight to `Command::new(code_cmd).arg(folder)`. It now refuses to
+  launch unless that string is an absolute path to a directory that
+  actually exists, and every `Cargo.toml` in `app/` and `shim/` now
+  pins `rust-version = "1.77.2"`, the release that closed
+  [CVE-2024-24576](https://github.com/rust-lang/rust/security/advisories/GHSA-q455-9v88-3vw2),
+  a Windows batch-file argument-quoting bug in `std::process::Command`
+  that this exact launch shape could otherwise have hit.
+
+None of this changes what the loopback endpoint can prove. **Any
+process running as the same OS user can still read the token file
+(`%LOCALAPPDATA%\deckhand\daemon.json`) and POST fabricated hook events
+to the ingest endpoint**, painting a false session state onto the
+board. Rule 2 already says loopback auth stops other users and
+unprivileged sandboxed processes, not a process running as you; this is
+that same limit, named again here because Phase 1 code gives it a new
+consequence, a believable but fake session, where before the code
+existed there was nothing to spoof. It is accepted for Phase 1, where
+the daemon only observes and a spoofed event cannot make anything
+happen, and it must be closed before Phase 2 gives `PreToolUse` an
+actual permission decision to answer, where a spoofed event could put
+an entirely fabricated request in front of the approve button.
+
 ## Residual risks, stated plainly
 
 1. **A process running as you can press Approve** by driving the surface's IPC
@@ -246,12 +305,26 @@ answer no permission decision, and may carry whatever their own event supports,
    focus and never covers its own approval card, but it could sit over another
    app's dialog. Mitigation is placement control and a collapse gesture, not a
    claim that overlay problems are solved.
-3. **Synthetic input fallbacks** (attached-mode send, focus raising) type into
-   whatever window matches a heuristic. That is why they are off by default,
-   marked `synthetic`, and never combined with approval authority. The
-   heuristic is weaker on a `vscode-extension` host, where a pid identifies no
-   single window and the title is all there is, so send has no synthetic route
-   there at all and Reveal raises a window without selecting a tab. The
+3. **Synthetic input fallbacks** (attached-mode send) type into whatever
+   window matches a heuristic. That is why they are off by default, marked
+   `synthetic`, and never combined with approval authority. Raising a window
+   uses the same heuristic and is on by default since ADR-027, because its
+   worst case is the wrong window in front rather than keystrokes into it; it
+   types nothing. The heuristic is weaker on a `vscode-extension` host, where
+   a pid identifies no single window and the title is all there is, so send
+   has no synthetic route there at all. As of [ADR-032](DECISIONS.md#adr-032)
+   a raise on that host first tries to read the workspace folder VS Code's
+   own `~/.claude/ide/*.lock` file names for the session and, on a match,
+   run VS Code's own CLI against it, before falling back to the title-only
+   raise. That read and that spawn are both local and add no new authority:
+   the lock file's `pid` and `workspaceFolders` fields are the only ones
+   used, its `authToken` is parsed and discarded, never logged or written
+   anywhere, Deckhand never opens the WebSocket server the lock file
+   advertises, and the CLI binary run is resolved from the path of the VS
+   Code process already hosting the session, never from `PATH` or from
+   anything the session itself could redirect. No network channel is
+   opened by any of this; it is a local file read and a local process
+   spawn, the same trust level as everything else in this section. The
    approval path is unaffected by any of this: it runs over hooks and is
    host-independent, which was observed rather than assumed
    ([DECISIONS.md](DECISIONS.md#adr-023)).

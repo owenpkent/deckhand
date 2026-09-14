@@ -1,193 +1,205 @@
-// The Deckhand surface. It draws tiles and takes pointer input, and
-// nothing else: no authority, no inference, no keyboard handlers at all
-// (docs/ARCHITECTURE.md#the-surface, docs/ACCESSIBILITY.md).
+// The Deckhand surface. It draws a list of sessions and takes pointer
+// input, and nothing else: no authority, no inference, no keyboard
+// handlers at all (docs/ARCHITECTURE.md#the-surface,
+// docs/ACCESSIBILITY.md).
+//
+// One row per session, auto-bound by the daemon: there is no bind
+// picker and no fixed row count. A click selects the row and raises its
+// window in one motion (ADR-027); a raise that fails explains itself as
+// a brief inline note on that row instead of opening anything.
 
-import { applyTheme, dark } from "./theme.js";
 import {
-  BindableSession,
-  SessionSnap,
-  SessionState,
-  Snapshot,
-  tauri,
-  TileSnapshot,
-} from "./types.js";
+  displayName,
+  escapeHtml,
+  GLYPHS,
+  greyLabel,
+  isRevealSuccess,
+  revealNote,
+  rowLabel,
+  STATE_WORDS,
+  stateGlyph,
+  stateWord,
+  summaryCounts,
+  unknownCount,
+} from "./format.js";
+import { presentSessionIds, staleNoteIds } from "./notes.js";
+import { applyTheme, dark } from "./theme.js";
+import { Snapshot, TileSnapshot, tauri } from "./types.js";
 
 const api = tauri();
 
-let snapshot: Snapshot = { tiles: [], nowMs: Date.now() };
-let pickerForTile: number | null = null;
+let snapshot: Snapshot = { tiles: [], nowMs: Date.now(), hideUnknown: false };
 let lastActivityAt = Date.now();
 
 const IDLE_DIM_MS = 3 * 60 * 1000;
+const NOTE_MS = 4000;
 
-const strip = document.getElementById("strip")!;
+// A row's inline note (a Reveal miss, shown for a few seconds), keyed by
+// session id (PR review: identity). Indices shift as sessions bind and
+// unbind; keying by id instead is what keeps a delayed miss pinned to
+// the session it was raised for, even if rows above it come or go
+// before the note is dropped. Pruned back to the present session set on
+// every render (see pruneRowNotes) so a note never outlives its session.
+const rowNotes = new Map<string, { text: string; timer: ReturnType<typeof setTimeout> }>();
+
 const surface = document.getElementById("surface")!;
-const picker = document.getElementById("picker")!;
+const list = document.getElementById("list")!;
+const summary = document.getElementById("summary")!;
+const grey = document.getElementById("grey")!;
 
-// ---- Glyphs: drawn, never emoji (docs/UI_SPEC.md#state-rendering) ----
+// ---- Rows -------------------------------------------------------------
 
-const GLYPHS: Record<string, string> = {
-  idle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/></svg>`,
-  thinking: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 4 a8 8 0 0 1 8 8"/></svg>`,
-  needs_input: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11V6a1.5 1.5 0 0 1 3 0v4V5a1.5 1.5 0 0 1 3 0v5V6.5a1.5 1.5 0 0 1 3 0V12v-2a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4.6 14a1.6 1.6 0 0 1 2.6-1.8L8.5 14"/></svg>`,
-  complete: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4 10-10"/></svg>`,
-  error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
-  unknown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 9a3 3 0 1 1 4.2 2.8c-.9.4-1.2 1-1.2 2.2"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></svg>`,
-  ended: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 12h10"/></svg>`,
-  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 6v12M6 12h12"/></svg>`,
-};
-
-const STATE_WORDS: Record<SessionState, string> = {
-  idle: "idle",
-  thinking: "thinking",
-  needs_input: "waiting on you",
-  complete: "complete",
-  error: "error",
-  ended: "ended",
-  unknown: "unknown",
-};
-
-// ---- Rendering ------------------------------------------------------
-
-function fmtElapsed(fromMs: number, nowMs: number): string {
-  const s = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
-  const m = Math.floor(s / 60);
-  if (m >= 60) {
-    return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
-  }
-  return `${m}:${String(s % 60).padStart(2, "0")}`;
-}
-
-function slot2Text(s: SessionSnap): string {
-  if (s.state === "needs_input") {
-    if (s.detailKind === "question") return "question";
-    if (s.detailKind === "permission") return "permission";
-    return "input needed";
-  }
-  if (s.state === "error" && s.error) return s.error.kind;
-  if (s.openOps.length > 0) {
-    const newest = s.openOps[s.openOps.length - 1];
-    if (newest) return newest.tool;
-  }
-  if (s.detailTool) return s.detailTool;
-  return STATE_WORDS[s.state];
-}
-
-function renderTile(t: TileSnapshot): HTMLElement {
+function renderRow(t: TileSnapshot): HTMLElement {
   const el = document.createElement("button");
-  el.className = "tile";
-  el.setAttribute("aria-label", `Tile ${t.index + 1}`);
+  el.className = "row";
   if (t.selected) el.classList.add("selected");
 
   const s = t.session;
   if (!s) {
-    el.classList.add("unbound");
-    el.innerHTML = `
-      <div class="glyph">${GLYPHS["plus"]}</div>
-      <div class="slot2">bind</div>`;
-    el.addEventListener("click", () => openPicker(t.index));
+    // Defensive only: every bound row should resolve to a session.
+    el.classList.add("row-empty");
+    el.textContent = "…";
+    el.setAttribute("aria-label", "Unbound session slot");
     return el;
   }
 
   el.dataset["state"] = s.state;
   const spinning = s.state === "thinking" ? " spinning" : "";
-  const glyph = s.state === "ended" ? GLYPHS["ended"] : GLYPHS[s.state];
-
-  // Slot 3: elapsed-in-operation while an operation is open, else
-  // elapsed-in-state (docs/UI_SPEC.md#tile-anatomy).
-  const oldestOp = s.openOps[0];
-  const elapsedFrom = oldestOp ? oldestOp.openedAtMs : s.stateSinceMs;
+  const glyph = stateGlyph(s.state);
 
   el.innerHTML = `
-    <span class="badge-mode">${escapeHtml(s.permissionMode ?? "unknown")}</span>
-    ${s.children > 0 ? `<span class="badge-children">&#215;${s.children}</span>` : ""}
     <div class="glyph${spinning}">${glyph}</div>
-    <div class="slot1">${escapeHtml(s.label || s.id.slice(0, 8))}</div>
-    <div class="slot2">${escapeHtml(slot2Text(s))}</div>
-    <div class="slot3" data-from="${elapsedFrom}">${fmtElapsed(elapsedFrom, Date.now())}</div>`;
+    <div class="row-name">${escapeHtml(displayName(s))}</div>
+    <div class="row-state">${escapeHtml(stateWord(s))}</div>`;
 
+  const note = rowNotes.get(s.id);
+  if (note) {
+    const noteEl = document.createElement("div");
+    noteEl.className = "row-note";
+    noteEl.textContent = note.text;
+    el.append(noteEl);
+  }
+  // setAttribute takes a literal string, not an HTML fragment, so this
+  // does not need escapeHtml the way the innerHTML above does; it is
+  // built from the same displayName/stateWord facts either way, just
+  // read by a screen reader instead of an eye.
+  el.setAttribute("aria-label", rowLabel(s, note?.text));
+
+  // One intent, one session id (PR review: identity): activate_session
+  // resolves this id itself, at the moment the daemon actually looks,
+  // rather than trusting the row index captured here to still name the
+  // same session by the time either half of the old two-call sequence
+  // ran. The closure below captures sessionId, not t.index, so the
+  // result -- success or a delayed miss -- always lands on this
+  // session's own note, never on whatever row it happens to occupy by
+  // the time the reply arrives.
+  const sessionId = s.id;
   el.addEventListener("click", () => {
-    void api.core.invoke("select_tile", { index: t.index });
+    void api.core
+      .invoke<string>("activate_session", { sessionId })
+      .then((text) => {
+        if (!isRevealSuccess(text)) showRowNote(sessionId, revealNote(text));
+      })
+      .catch(() => {
+        // Defensive only: activate_session is designed to always
+        // resolve (see main.rs), never reject. If it somehow does
+        // anyway, the failure must still be visible on this row rather
+        // than vanish as an unhandled promise rejection (PR review:
+        // blocking, "an invoke rejection must not vanish silently").
+        showRowNote(sessionId, "Reveal failed");
+      });
   });
   return el;
 }
 
+function showRowNote(sessionId: string, text: string): void {
+  const existing = rowNotes.get(sessionId);
+  if (existing) clearTimeout(existing.timer);
+  const timer = setTimeout(() => {
+    rowNotes.delete(sessionId);
+    render();
+  }, NOTE_MS);
+  rowNotes.set(sessionId, { text, timer });
+  render();
+}
+
+// Drop every note whose session is no longer present, so a delayed
+// result for a session that has since ended does not linger forever
+// (it never renders once its session is gone, but the Map entry and
+// its timer would otherwise outlive it for no reason).
+function pruneRowNotes(): void {
+  const present = presentSessionIds(snapshot.tiles);
+  for (const id of staleNoteIds(rowNotes.keys(), present)) {
+    const note = rowNotes.get(id);
+    if (note) clearTimeout(note.timer);
+    rowNotes.delete(id);
+  }
+}
+
+// ---- Header counts ----------------------------------------------------
+
+function renderSummary(): void {
+  const states = snapshot.tiles.flatMap((t) => (t.session ? [t.session.state] : []));
+  summary.replaceChildren(
+    ...summaryCounts(states).map(([state, n]) => {
+      const el = document.createElement("span");
+      el.className = "count";
+      el.dataset["state"] = state;
+      el.setAttribute("aria-label", `${n} ${STATE_WORDS[state]}`);
+      el.innerHTML = `<span class="glyph">${GLYPHS[state]}</span>${n}`;
+      return el;
+    }),
+  );
+}
+
+// ---- Header grey toggle -----------------------------------------------
+
+// Hides rows in the unknown state, either road in: not heard yet, or
+// heard from and then silent past T_unknown (docs/ACCESSIBILITY.md: a
+// single click, no hold, no keyboard). The label names what it hides.
+// With nothing unknown and nothing hidden it has no job, so it steps out
+// of the header; Quit, pinned to the right edge, never moves because of
+// it.
+function renderGrey(): void {
+  const n = unknownCount(snapshot.tiles);
+  grey.hidden = n === 0 && !snapshot.hideUnknown;
+  grey.setAttribute("aria-pressed", String(snapshot.hideUnknown));
+  grey.textContent = greyLabel(n, snapshot.hideUnknown);
+}
+
 function render(): void {
-  strip.replaceChildren(...snapshot.tiles.map(renderTile));
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-// ---- Bind picker ----------------------------------------------------
-
-async function openPicker(tileIndex: number): Promise<void> {
-  pickerForTile = tileIndex;
-  const sessions = await api.core.invoke<BindableSession[]>("bindable_sessions");
-  picker.replaceChildren();
-
-  const head = document.createElement("div");
-  head.className = "picker-head";
-  const label = document.createElement("span");
-  label.textContent = `Bind tile ${tileIndex + 1}`;
-  const cancel = document.createElement("button");
-  cancel.className = "picker-btn";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", closePicker);
-  head.append(label, cancel);
-
-  const rows = document.createElement("div");
-  rows.className = "picker-rows";
-  if (sessions.length === 0) {
+  pruneRowNotes();
+  renderSummary();
+  renderGrey();
+  if (snapshot.tiles.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "picker-head";
-    empty.textContent =
-      "No sessions found. Scan again after a Claude Code session emits an event.";
-    rows.append(empty);
+    empty.className = "row row-empty";
+    empty.textContent = "Watching for sessions";
+    list.replaceChildren(empty);
+    return;
   }
-  for (const s of sessions) {
-    const row = document.createElement("button");
-    row.className = "picker-row";
-    const name = document.createElement("span");
-    name.textContent = s.label || s.id.slice(0, 8);
-    const cwd = document.createElement("span");
-    cwd.className = "row-cwd";
-    cwd.textContent = s.cwd ?? "";
-    const state = document.createElement("span");
-    state.className = "row-state";
-    state.textContent =
-      s.boundTo !== null ? `${STATE_WORDS[s.state]} · tile ${s.boundTo + 1}` : STATE_WORDS[s.state];
-    row.append(name, cwd, state);
-    row.addEventListener("click", () => {
-      void api.core
-        .invoke("bind_tile", { index: tileIndex, sessionId: s.id })
-        .then(closePicker);
-    });
-    rows.append(row);
+  const visibleTiles = snapshot.hideUnknown
+    ? snapshot.tiles.filter((t) => t.session?.state !== "unknown")
+    : snapshot.tiles;
+  if (snapshot.hideUnknown && visibleTiles.length === 0) {
+    const hidden = document.createElement("div");
+    hidden.className = "row row-empty";
+    hidden.textContent = `${unknownCount(snapshot.tiles)} unknown hidden`;
+    list.replaceChildren(hidden);
+    return;
   }
-
-  picker.append(head, rows);
-  picker.hidden = false;
+  list.replaceChildren(...visibleTiles.map(renderRow));
 }
 
-function closePicker(): void {
-  pickerForTile = null;
-  picker.hidden = true;
-}
-
-// ---- Wiring ---------------------------------------------------------
+// ---- Wiring -------------------------------------------------------------
 
 function wake(): void {
   lastActivityAt = Date.now();
   surface.classList.remove("dimmed");
 }
 
-document.getElementById("refresh")!.addEventListener("click", () => {
-  void api.core.invoke("refresh_sessions");
+grey.addEventListener("click", () => {
+  void api.core.invoke("toggle_hide_unknown");
 });
 
 document.getElementById("quit")!.addEventListener("click", () => {
@@ -197,15 +209,8 @@ document.getElementById("quit")!.addEventListener("click", () => {
 document.addEventListener("pointermove", wake);
 document.addEventListener("pointerdown", wake);
 
-// Elapsed readouts tick locally; a full re-render on every second would
-// fight the pointer.
 setInterval(() => {
-  const now = Date.now();
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>(".slot3"))) {
-    const from = Number(el.dataset["from"] ?? "0");
-    if (from > 0) el.textContent = fmtElapsed(from, now);
-  }
-  if (now - lastActivityAt > IDLE_DIM_MS) {
+  if (Date.now() - lastActivityAt > IDLE_DIM_MS) {
     surface.classList.add("dimmed");
   }
 }, 1000);
@@ -214,12 +219,8 @@ async function init(): Promise<void> {
   applyTheme(dark);
   await api.event.listen<Snapshot>("deckhand://snapshot", (e) => {
     snapshot = e.payload;
-    wake(); // any state change wakes the idle dim
+    wake();
     render();
-    if (pickerForTile !== null) {
-      // Keep the picker fresh rather than stale under it.
-      void openPicker(pickerForTile);
-    }
   });
   snapshot = await api.core.invoke<Snapshot>("snapshot");
   render();

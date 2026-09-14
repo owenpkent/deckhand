@@ -7,9 +7,18 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
 
 - **Name:** Deckhand (`owenpkent/deckhand`)
 - **What:** A software reimplementation of the Codex Micro macropad as an
-  always-on-top, mouse-only control surface for Claude Code sessions. Six
-  status tiles, approve and deny via the `PreToolUse` hook, dial, stick,
-  talk, layers.
+  always-on-top, mouse-only control surface for Claude Code sessions. An
+  ordered list of session rows (colour, glyph, name, state word), click
+  to select and raise, plus a grey toggle and Quit in the header, the
+  whole bar itself the drag region (ADR-030, ADR-031). Move, a
+  click-to-place alternative to dragging, was removed by ADR-031: the
+  window is now repositioned by dragging only, an owner-approved
+  exception to the no-required-drag rule in
+  [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md), not a compliant
+  default. Approve and deny via the `PreToolUse` hook are Phase 2 and
+  not currently planned on the surface (ADR-028); the dial, stick,
+  talk, and layers this overview used to list here are removed by the
+  same decision.
 - **Status:** Phase 1, observation only, started 2026-08-02. The code
   lives in `app/` (daemon plus surface, one Tauri application) and
   `shim/`; `spikes/` is frozen Phase 0 evidence. Nothing has write
@@ -59,16 +68,16 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 431 | Daemon, shim, surface, state machine |
-| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 347 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 617 | Reference adapter; partial stamp |
-| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 295 | Visual and interaction contract |
-| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 182 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 858 | ADRs; append only |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 138 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 294 | Phases and open work |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 228 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 515 | Daemon, shim, surface, state machine |
+| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 352 | Daemon to runtime contract |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 679 | Reference adapter; partial stamp |
+| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 299 | Approval path; fails to `ask` |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 207 | Visual and interaction contract |
+| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 219 | The rules that win every conflict |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 1473 | ADRs; append only |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 151 | Map and change-propagation table |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 364 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -100,7 +109,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 027.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 033.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -145,15 +154,26 @@ for dogfooding. The open Phase 1 work is in [TODO.md](TODO.md): daemon
 lifecycle, installable hook registration, the transcript fallback, and
 the six-session colour test. ADR-023 added the host axis, ADR-024
 corrected the enumeration to bindings-not-state, and ADR-025 recorded
-the window spike pass that Phase 1's window builds on.
+the window spike pass that Phase 1's window builds on. ADR-027 folded
+the raise into the tile click: selecting a session brings its window
+forward. ADR-028 then cut the surface down to that session list plus
+Move and Quit, replacing the six-slot binding with an auto-binding,
+unbounded list; ADR-030 added a third header control, Hide grey, that
+filters `unknown` rows out of the list and shows how many it hid on the
+button itself. ADR-031 then removed Move, made the whole header a drag
+region, relabelled and restyled the grey toggle, and dropped the dashed
+outline unknown and ended rows used to share. ADR-029 had already
+restyled the list (64 px two-line rows, header counts, a bundled
+typeface), and ADR-032 made Reveal host-aware (VS Code, Windows
+Terminal, console); `app/` implements all of these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on
 Windows, recorded as ADR-025. The payload spike advanced twice the same
 day: a `PreToolUse` deny was honoured from a live session, and the
 capture hook `.claude/hooks/payload-capture.js`, registered for all
-twelve documented event names, has now seen nine of them fire with full
-payloads (ADR-026). Only `Notification`, `StopFailure`, and
-`PermissionDenied` remain unobserved, and the live corrections that
-came out of validation are in the ADR. Phase 1 has started and the
-board has painted real sessions.
+twelve documented event names, has now seen ten of them fire with full
+payloads (ADR-026 and after). Only `Notification` and `StopFailure`
+remain unobserved, and the live corrections that came out of validation
+are in the ADR. Phase 1 has started and the board has painted real
+sessions.

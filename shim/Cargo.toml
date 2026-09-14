@@ -4,6 +4,11 @@ version = "0.1.0"
 description = "Forwards a Claude Code hook payload to the Deckhand daemon"
 edition = "2021"
 publish = false
+# CVE-2024-24576, fixed in rustc 1.77.2: see app/src-tauri/Cargo.toml.
+# The shim does not launch a .cmd itself, but the workspace builds with
+# one toolchain, so the floor is shared rather than reasoned about
+# per-crate.
+rust-version = "1.77.2"
 
 # No async runtime, no TLS, no DNS: the shim talks plain HTTP to
 # 127.0.0.1 and its entire value is starting fast and never blocking

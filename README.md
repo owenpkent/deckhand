@@ -4,15 +4,15 @@
 
 **A software Codex Micro for Claude Code**
 
-An always-on-top, mouse-only control surface for running several Claude Code
-sessions at once: six tiles with live status lights so you can see every
-session, answer the questions it asks you, and approve the calls that need a
-human, plus the rest of the macropad reimagined for a pointer.
+An always-on-top, mouse-only surface for running several Claude Code
+sessions at once: an ordered list of every session with a live status
+light, name, and state word, so you can see all of them and raise any one
+to the front in a single click.
 
   <p>
     <a href="https://github.com/owenpkent/deckhand/actions/workflows/docs.yml"><img src="https://github.com/owenpkent/deckhand/actions/workflows/docs.yml/badge.svg" alt="Docs CI"/></a>
     <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"/>
-    <img src="https://img.shields.io/badge/status-Phase%200%3A%20specification-orange" alt="Status: Phase 0 specification"/>
+    <img src="https://img.shields.io/badge/status-Phase%201%3A%20observation-blue" alt="Status: Phase 1 observation"/>
     <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome"/></a>
     <a href="https://github.com/owenpkent/deckhand/discussions"><img src="https://img.shields.io/badge/discussions-join-8A2BE2" alt="Join the discussions"/></a>
   </p>
@@ -31,11 +31,24 @@ human, plus the rest of the macropad reimagined for a pointer.
 ## Status
 
 **Phase 1: observation, started.** The specification is complete and the
-first code exists: a daemon and tile surface in one Tauri application
+first code exists: a daemon and list surface in one Tauri application
 plus the hook shim, building and passing their tests, with the
-observation pipeline proven end to end against synthetic events. One
-Phase 0 item stays open alongside it: hook payload validation against a
-live install is done for `PreToolUse` and open for the other events.
+observation pipeline proven end to end against live sessions.
+[ADR-028](docs/DECISIONS.md#adr-028) (2026-09-13) narrowed the surface
+to a session list plus Move and Quit, and replaced the six-slot binding
+with an auto-binding, unbounded list; [ADR-030](docs/DECISIONS.md#adr-030),
+the same day, added a third header control, Hide grey, that filters
+`unknown` rows out of the list and shows how many it hid on the button
+itself. [ADR-031](docs/DECISIONS.md#adr-031), also the same day, then
+removed Move (the window is now repositioned by dragging only, an
+owner-approved exception recorded in
+[docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md)) and left the header
+holding a grey toggle and Quit. The code implements all three, and on
+its first run bound ten live sessions across four repos. One Phase 0
+item also stays open alongside
+it: hook payload validation against a live install has
+ten of the twelve documented events observed, with `Notification` and
+`StopFailure` still unseen.
 
 | Piece | State |
 | --- | --- |
@@ -43,15 +56,20 @@ live install is done for `PreToolUse` and open for the other events.
 | Architecture and adapter contract | ✅ Written |
 | Claude Code adapter design | ✅ Written, ⏳ partially verified against 2.1.220 |
 | Security model for permission gating | ✅ Written |
-| UI and accessibility specification | ✅ Written |
+| UI and accessibility specification | ✅ Written, narrowed by ADR-028 |
 | Tauri no-focus-steal window spike | ✅ Passed on Windows 11 (ADR-025) |
-| Hook payload validation spike | ⏳ Nine of twelve events observed live; three remain |
-| Daemon, shim, state machine, six tiles | ✅ Phase 1 skeleton; live sessions paint real tiles |
-| Approve and deny | ❌ Phase 2, nothing has write authority yet |
+| Hook payload validation spike | ⏳ Ten of twelve events observed live; two remain |
+| Daemon, shim, state machine | ✅ Phase 1 skeleton; live sessions paint real status |
+| Session-list surface, auto-binding | ✅ Built (ADR-028); binds every enumerated session, prunes ended ones |
+| Approve and deny | ❌ Phase 2, nothing has write authority yet, and not currently planned on the surface |
 
-Build it with `powershell -NoProfile -File scripts/build-app.ps1`, which
-compiles the TypeScript surface and then the Rust workspace, and run
-`target\debug\deckhand.exe`.
+Build and run it with `python run.py`, which checks the toolchain,
+compiles the TypeScript surface, builds the Rust workspace, and restarts
+the app (`--test` to run the suites first, `--no-build` to just restart,
+`--check` to report the toolchain, `--stop` to stop it).
+`scripts/build-app.ps1` is the build-only equivalent, and it runs the
+tests: `cargo test --workspace` for the daemon and shim, `npm test` in
+`app/ui` for the surface.
 
 ---
 
@@ -63,19 +81,14 @@ window switch is expensive. The author is a wheelchair user with muscular
 dystrophy; moving a pointer is cheap, pressing keys is not, and checking six
 terminals by keyboard is exactly the tax this project removes.
 
-Deckhand is designed as a **status board first**: six tiles you can read at a
+Deckhand is designed as a **status board first**: a list you can read at a
 glance, using the Codex Micro's colour language. White idle, blue thinking,
-green done-and-unread, amber waiting on you, red problem. Amber is usually a
-question, not a permission prompt: on one machine running Claude Code with
-`permissions.defaultMode: "auto"`, the classifier answers most permission
-requests on its own, and the human is asked to pick an option far more often
-than asked to allow a tool, 322 `AskUserQuestion` calls across 155 of 240
-sessions, against 10 to 27 tool denials in the same corpus. That is one
-user's habits on one machine, not a claim about how everyone works, but it is
-why Deckhand leads with **see every session, answer its questions, and
-approve the calls that need a human**, rather than with approve and deny
-alone. Approve and Deny stay one click on the surface, without touching the
-terminal; they are simply not the whole story anymore.
+green done-and-unread, amber waiting on you, red problem. As of
+[ADR-028](docs/DECISIONS.md#adr-028), that list and a single click to raise
+a session's window are currently the whole surface. Acting on a session,
+approving a call, denying one, or answering a question, stays Phase 2 or
+later work, and is no longer planned to land on this surface as designed;
+a returning control needs its own ADR.
 
 Everything is operable with a pointer alone. Keyboard and voice are
 conveniences, never requirements. That rule is load-bearing and
@@ -100,24 +113,31 @@ Where Deckhand diverges from the device, it says so and says why:
 
 ## What it will do
 
+[ADR-028](docs/DECISIONS.md#adr-028) narrowed this to the two things below.
+Everything else the device does (command keys, a stick, a dial, push-to-talk,
+a touch sensor for layers and pairing) has no current Deckhand equivalent;
+see [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md#removed-from-the-surface)
+for what was planned and why it was cut.
+
 | Control | On the device | In Deckhand |
 | --- | --- | --- |
-| 6 agent keys | One chat each, LED status | One Claude Code session each, live status tile |
-| 6 command keys | Approve, decline, continue, send... | Approve, Deny, Answer, Interrupt, Continue, Reveal |
-| Stick | Plan mode, history, sidebar | Scroll the detail panel, expand it, return to the last tile |
-| Dial | Composer options, reasoning default | Session options: model, effort, permission mode |
-| Mic key | Push-to-talk | Click-to-toggle talk, delegating speech to MacroVox |
-| Codex key | Send | Send (hosted mode; honest about attached mode) |
-| Touch sensor | Layers, pairing | Layer strip, no pairing to do |
+| 6 agent keys | One chat each, LED status | One row per Claude Code session, in an unbounded list, live status |
+| Press a key | Switch chat, or double-press to raise it | Click a row: select the session and raise its window, in one click |
 
 ## What it will look like
 
-These are **design mockups drawn from [docs/UI_SPEC.md](docs/UI_SPEC.md)**,
-not screenshots. Nothing runs yet; this is the target the spec commits to.
-They also predate the current command key set: the drawings still show Plan
-and Compact where the spec now has Answer and Reveal, and a "Raise window"
-button where it now says Reveal. Where a mockup and `docs/UI_SPEC.md`
-disagree, the spec wins and the drawing is the thing that is out of date.
+These are **design mockups**, not screenshots, and they predate
+[ADR-028](docs/DECISIONS.md#adr-028) (2026-09-13), which narrowed the
+target to a vertical session list with Move and Quit in the header,
+[ADR-030](docs/DECISIONS.md#adr-030), the same day, which added a third
+header control, Hide grey, and [ADR-031](docs/DECISIONS.md#adr-031),
+also the same day, which removed Move and left the header holding a
+grey toggle and Quit. The mockups below still show the wider control set
+from before all three changes: six tiles in a horizontal strip, command
+keys, a stick, a dial, talk and send. None of that is the current
+design. Where a mockup and
+[docs/UI_SPEC.md](docs/UI_SPEC.md) disagree, the spec wins; treat the
+images as historical until they are redrawn.
 
 <img src="assets/surface-horizontal.svg" width="100%" alt="Mockup of the Deckhand surface: a dark horizontal panel. Left, six square tiles: undertow with a white idle ring, contour with a blue thinking ring and the subtitle Bash cmake, deckhand with a thick amber ring, a hand glyph, subtitle Bash approval, and a selection chevron, meshview with a green ring, a check and an unread dot, markcopy grey and hatched with a question mark and the words state unknown, and an empty dashed tile reading bind a session. Middle, six command keys: Approve and Deny enabled, Continue and Interrupt greyed out, Plan and Compact neutral. Right, a four-way arrow pad, a dial reading Opus, model, with minus and plus targets, and Talk and Send buttons. Bottom left, three layer dots labelled Layer 1: Claude Code."/>
 
@@ -138,13 +158,15 @@ returns safely to the terminal.*
 
 ## How it will work
 
-Claude Code fires hooks. A tiny shim will forward each hook's JSON to a local
-daemon, which will run one state machine per session and drive the tiles. When
-permission gating is on, the `PreToolUse` hook is held open while the tile
-burns amber; your click travels back as a documented
-`permissionDecision`. If Deckhand cannot answer in time, it answers `ask` and
-Claude Code prompts you normally: every failure path returns the decision to
-you, none of them auto-allow.
+Claude Code fires hooks. A tiny shim forwards each hook's JSON to a local
+daemon, which runs one state machine per session and drives the surface.
+When Phase 2 wires up permission gating, the `PreToolUse` hook will be held
+open while the row burns amber, and a click will travel back as a
+documented `permissionDecision`; exactly what that click looks like is
+undecided, since [ADR-028](docs/DECISIONS.md#adr-028) removed the command
+keys it was going to be. If Deckhand cannot answer in time, it answers
+`ask` and Claude Code prompts you normally: every failure path returns the
+decision to you, none of them auto-allow.
 
 Two modes per session:
 
@@ -170,25 +192,50 @@ deckhand/
 │   ├── ADAPTER_PROTOCOL.md    The contract any agent runtime plugs into
 │   ├── CLAUDE_CODE_ADAPTER.md The reference adapter, stability-annotated
 │   ├── SECURITY_MODEL.md      What the approve button must never do
-│   ├── UI_SPEC.md             Tiles, keys, dial, stick, themes
+│   ├── UI_SPEC.md             Session list, header, themes
 │   ├── ACCESSIBILITY.md       The rules everything else answers to
 │   ├── DECISIONS.md           ADRs: what was decided and why
 │   └── WORKFLOW.md            Source-of-truth map, change propagation
+├── app/                   The Phase 1 application: Rust daemon plus
+│                          TypeScript surface, one Tauri window
+├── shim/                  The tiny program Claude Code's hooks call
+├── spikes/                Frozen Phase 0 evidence (ADR-025)
+├── scripts/               Build, run, and docs-gate tooling
 ├── .github/               CI, issue and PR templates
-└── (no code yet: that is Phase 1)
+└── ...
 ```
 
 ## Getting started
 
-There is nothing to install yet. To read or contribute:
+To read, start with the executive summary, then the control mapping. To
+run the Phase 1 board (Windows, with Rust, Node, and Python installed):
 
 ```powershell
 git clone https://github.com/owenpkent/deckhand.git
 cd deckhand
+python run.py
 ```
 
-Start with the executive summary, then the control mapping. If you want to
-help before code exists, the most valuable work is challenging the spec:
+### Registering the shim
+
+A repo's sessions only report to the daemon once the shim is wired into
+a Claude Code hook. Wire it once, at the user level, and every repo's
+sessions are covered:
+
+```powershell
+powershell -NoProfile -File scripts\install-hooks.ps1
+```
+
+The script merges an entry for each of the twelve hook events into
+`%USERPROFILE%\.claude\settings.json`, backs the file up first, and is
+safe to run again: entries already installed are left alone. To remove
+everything it added:
+
+```powershell
+powershell -NoProfile -File scripts\install-hooks.ps1 -Uninstall
+```
+
+The most valuable contribution is still challenging the spec:
 [CONTRIBUTING.md](CONTRIBUTING.md) lists concrete starting points.
 
 ## Accessibility
@@ -217,14 +264,14 @@ through its documented extension points.
 
 ## Roadmap
 
-Phase 0 specification (now) → 1 observation-only tiles → 2 approve and deny →
-3 the full surface → 4 hosted mode → 5 talk → 6 a second adapter. Details and
-exit criteria: [ROADMAP.md](ROADMAP.md).
+Phase 0 specification → 1 observation-only session list (now) → 2 approve
+and deny → 3 and 5 retired by ADR-028 → 4 hosted mode → 6 a second
+adapter. Details and exit criteria: [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 
 Spec review, accessibility feedback, and attempts to break the security model
-are the Phase 0 contributions that matter most. See
+are the contributions that matter most right now. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [discussions](https://github.com/owenpkent/deckhand/discussions).
 
@@ -243,6 +290,6 @@ MIT. See [LICENSE](LICENSE).
 
 <div align="center">
 
-**Six agents, one glance, zero keys.**
+**Every session, one glance, zero keys.**
 
 </div>

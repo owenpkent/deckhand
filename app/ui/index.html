@@ -7,16 +7,12 @@
 </head>
 <body>
   <main id="surface" aria-label="Deckhand surface">
-    <div id="strip" role="group" aria-label="Agent tiles"></div>
-    <div id="side">
-      <button id="refresh" class="side-btn" aria-label="Refresh sessions">
-        <span class="side-glyph">&#8635;</span><span class="side-label">Scan</span>
-      </button>
-      <button id="quit" class="side-btn" aria-label="Quit Deckhand">
-        <span class="side-glyph">&#10005;</span><span class="side-label">Quit</span>
-      </button>
+    <div id="header" data-tauri-drag-region>
+      <div id="summary" aria-label="Session counts"></div>
+      <button id="grey" class="side-btn" aria-pressed="false"></button>
+      <button id="quit" class="side-btn" aria-label="Quit Deckhand">&#10005;</button>
     </div>
-    <div id="picker" hidden></div>
+    <div id="list" role="group" aria-label="Sessions"></div>
   </main>
   <script type="module" src="./dist/main.js"></script>
 </body>

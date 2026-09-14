@@ -1,4 +1,4 @@
-# Docs CI: the repo is specification-only, so CI guards the specification.
+# Docs CI: guards the specification. The code is covered by tests.yml.
 # Three gates: house style (scripts/check-docs.ps1, which is also what the
 # local docs-gate command runs), link integrity (every relative link and
 # anchor resolves), and the one unconditional propagation cell (a docs/
@@ -23,7 +23,7 @@ jobs:
     name: House style
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # The rules live in the script, not here. One copy, two callers:
       # this job and .claude/commands/docs-gate.md. pwsh is preinstalled
@@ -35,12 +35,12 @@ jobs:
     name: Relative links resolve
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # Offline mode: only file-to-file links and anchors are checked, so the
       # job is fast, deterministic, and never fails on someone else's outage.
       - name: lychee (offline)
-        uses: lycheeverse/lychee-action@v2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           args: --offline --include-fragments --no-progress "**/*.md"
           fail: true
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 

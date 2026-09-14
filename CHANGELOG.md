@@ -4,15 +4,276 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a
 Changelog](https://keepachangelog.com/en/1.1.0/), and dates are ISO 8601
-(`YYYY-MM-DD`). There are no releases yet: Deckhand is at Phase 0
-(specification), so everything so far lives under `[Unreleased]`. Once there
-is something to version, releases here will follow [Semantic
-Versioning](https://semver.org/); until then, no version number is invented
-and no past release is backfilled.
+(`YYYY-MM-DD`). There are no releases yet, so everything so far lives
+under `[Unreleased]`. Once there is something to version, releases here
+will follow [Semantic Versioning](https://semver.org/); until then, no
+version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ENDED` now absorbs every straggler, not just a clear or a resume.**
+  `Session::apply_hook` (`state.rs`) had no guard for a session already in
+  `ENDED`: a `Stop` or a `PostToolUseFailure` delivered late, or racing
+  `SessionEnd` itself, was read like any other event and flipped the
+  session back to `COMPLETE`, `THINKING`, or `ERROR`. `Registry::apply_hook`
+  (`registry.rs`) decides list membership from the state left after
+  applying an event, so a straggler that got through re-listed a session
+  that had already ended. Every event but a session-start (a resume, which
+  legitimately revives an ended session) is now ignored outright once a
+  session is `ENDED`. `docs/ARCHITECTURE.md` records the rule alongside the
+  other events that read like state changes and are not.
+- **A row click resolves by session id, not row index, and Reveal no
+  longer blocks the surface.** Clicking a row used to fire two IPC calls,
+  `select_tile(index)` then `reveal_session(index)`, each resolving the
+  same numeric row index at a different moment; a row above the clicked
+  one ending between the two calls could select or reveal the wrong
+  session. One `activate_session({ sessionId })` command replaces both:
+  `Registry::begin_activation` (`registry.rs`) resolves the id itself
+  under a short lock scope, returning an explicit miss with no
+  substitution and no selection when the id is no longer bound, or an
+  owned `RevealRequest` otherwise. Reveal itself (which can take a few
+  seconds) used to run synchronously inside the command on the
+  webview's own IPC/event thread, freezing every click, drag, and Quit
+  for as long as it took; it now runs on one dedicated worker thread
+  (`reveal_queue.rs`), which also guarantees an older, slower reveal
+  can never raise a window after a newer one has already completed.
+  `activate_session` is now `async` and awaits the worker's reply via
+  `spawn_blocking` without blocking the event thread; a worker panic or
+  dropped reply channel resolves as an ordinary visible miss ("Reveal
+  did not finish.") rather than a silently vanishing rejected invoke.
+  The surface's row notes (`rowNotes`, `main.ts`) are keyed by session
+  id for the same reason, so a delayed miss always lands on the row it
+  was raised for.
+
+### Security
+
+- **Ingest hardening: a CSP, a body cap, a constant-time token compare,
+  and a validated Reveal launch folder.** The surface's webview now
+  loads under a Content Security Policy in `tauri.conf.json`
+  (`default-src 'self'; script-src 'self'; style-src 'self'; font-src
+  'self'; img-src 'self'; connect-src ipc: http://ipc.localhost`);
+  nothing in the surface needed a looser policy. The daemon's loopback
+  ingest endpoint (`http.rs`) now caps a request body at 8 MiB,
+  answering `413` and dropping the event outright, never partially
+  applied, over that limit; refuses chunked bodies unread with `411`,
+  since the chunked decoder's framing buffer sits beneath that cap; and
+  compares the per-start ingest token in
+  constant time instead of with a short-circuiting `==`. Reveal's VS
+  Code path (`reveal.rs`) now refuses to launch `code.cmd` unless the
+  workspace folder it read from `~/.claude/ide/*.lock` is an absolute
+  path to a directory that actually exists, and every `Cargo.toml` in
+  `app/` and `shim/` now pins `rust-version = "1.77.2"`, closing
+  CVE-2024-24576. `docs/SECURITY_MODEL.md` records the change and the
+  residual risk it does not close: any process running as the same OS
+  user can still read the ingest token and spoof hook events, tracked
+  in `TODO.md` to close before Phase 2.
+
 ### Changed
+
+- **Reveal classifies the session's host and treats a tie as a miss,
+  recorded as ADR-032.** Fixes a real "No window matched" the owner hit:
+  a subagent hook payload's own `cwd` (it shares its parent session's
+  `session_id` but carries a different directory) was overwriting the
+  session's real working directory, poisoning every later Reveal for it.
+  `apply_hook` (`state.rs`) now skips `cwd` and the label derived from
+  it on any payload carrying `agent_id`, and `register_enumerated`
+  (`registry.rs`) corrects an existing `cwd` that disagrees with
+  `claude agents --json`'s own value rather than only filling in a
+  blank one, so an already-poisoned session repairs itself on the next
+  enumeration pass. Separately, Reveal no longer resolves a tie at the
+  top score by pick order: two or more windows tied for the best score
+  now report the same honest miss as no match at all. Reveal also stops
+  applying one scored match to every host: it classifies the session's
+  pid first, by walking its parent chain (a Toolhelp32 snapshot, at
+  most eight hops) into `Code.exe` (VS Code), `WindowsTerminal.exe`
+  (Windows Terminal), or a plain console, and picks a strategy per
+  host. A console is matched exactly with `AttachConsole` plus
+  `GetConsoleWindow`, falling back to the scored title match if the
+  attach fails (unverified against a live console session). Windows
+  Terminal raises its one open window, or reports an honest miss
+  naming the ambiguity when more than one is open, since no interface
+  can target a specific tab from outside the process
+  (`microsoft/terminal#19783` was closed not planned in January 2026).
+  VS Code reads `~/.claude/ide/*.lock` for the `pid` and
+  `workspaceFolders` fields only (never its `authToken`, never the
+  WebSocket MCP server the file also advertises), matches the
+  session's `cwd` against those folders (an ancestor tie is ambiguous,
+  same as any other tie), runs VS Code's own CLI against a matched
+  folder from the host's own resolved install directory (never `PATH`,
+  never anything the session controls), then restricts the title raise
+  to Code.exe-owned windows naming that folder, falling back to the
+  pre-existing pid-blind title match when nothing above resolves it.
+  The extension's own session-tab link is deliberately left unwired:
+  reading `extension.js` (2.1.270) shows it would risk opening a
+  second, duplicate session rather than revealing the first one in at
+  least two situations neither hooks nor `claude agents --json` can
+  currently rule out. `anthropics/claude-code#77827` (a terminal
+  refocus captured as a click on a permission prompt) is recorded as a
+  risk of Deckhand's click-to-raise, not mitigated. `docs/DECISIONS.md`,
+  `docs/CONTROL_MAPPING.md`, `docs/ARCHITECTURE.md`,
+  `docs/SECURITY_MODEL.md`, `docs/CLAUDE_CODE_ADAPTER.md`, `TODO.md`,
+  and `CLAUDE.md` are updated to match, and `app/` implements the
+  change.
+- **Move is removed and the header becomes a drag bar, recorded as
+  ADR-031.** The Move button and the `cycle_position` command it drove
+  are deleted; the window is now repositioned by dragging only, an
+  owner-approved exception to the no-required-drag rule in
+  `docs/ACCESSIBILITY.md`, recorded there as an open accessibility gap,
+  not as compliance. The whole header (`#header`) is now the drag
+  region, with the state-count pills passing pointer events through so
+  dragging on them drags too; the striped drag grip is gone. The header
+  shrinks to 52 px (was 64), 4 px padding, ordered state counts, grey
+  toggle, Quit; Quit is a 44 by 44 px icon-only button (a cross glyph,
+  `aria-label="Quit Deckhand"`). The window's initial height in
+  `tauri.conf.json` follows, 116 px. The grey toggle is relabelled to
+  name what it acts on: "Hide unknown" when rows show, "Show N unknown"
+  when hidden ("Show unknown" if N is 0, via a new `greyLabel()` helper
+  in `format.ts`, tested); its pressed style becomes a lighter
+  background and brighter text instead of an inset outline, and it
+  disappears entirely when there is nothing unknown and hiding is
+  already off, so Quit never moves. The all-hidden placeholder row now
+  reads "N unknown hidden." Header buttons are otherwise plain text
+  buttons: 44 px minimum height, 12 px side padding, 6 px radius, 14 px
+  bold. The dashed outline unknown and ended rows shared is removed;
+  they are set apart by glyph shape and dimming alone, which
+  `styles.test.ts` now pins directly. A Reveal miss note moves onto the
+  row's second line, one short line to the right of the state word
+  (`revealNote()` in `format.ts`, tested), instead of a multi-line side
+  column that used to squeeze the name, clip the state word, and grow
+  some rows past 64 px. `docs/DECISIONS.md`, `docs/CONTROL_MAPPING.md`,
+  `docs/UI_SPEC.md`, `docs/ACCESSIBILITY.md`, `docs/ARCHITECTURE.md`,
+  `README.md`, `CLAUDE.md`, and `TODO.md` are updated to match, and
+  `app/` implements the change.
+- **The header gains a Hide grey toggle, recorded as ADR-030.** Order is
+  now drag grip, read-only state counts, Hide grey, Move, Quit: three
+  header controls, not two. A single click flips the setting. Off, the
+  control reads "Hide"; on, it shows pressed (a 2 px inset outline) and
+  reads "Show N," N being the count of rows currently in the `unknown`
+  state (both "not heard yet" and past `T_unknown`), so a hidden session
+  is always counted, never silently gone. If every bound session is
+  hidden, the list shows one placeholder row, "N grey hidden." The
+  header's count pills are unaffected and are tightened to make room for
+  the new control. Glyph: the unknown state's grey question mark. The
+  daemon owns the setting (`Registry.hide_unknown`), persists it in a
+  new `settings.json` alongside `window.json` and `bindings.json`
+  (a missing field or a corrupt file loads as `false`), sends it to the
+  surface as `hideUnknown` in the snapshot, and exposes it as the
+  `toggle_hide_unknown` Tauri command. The window now sizes from the
+  visible row count (`visible_row_count` in `window.rs`), including when
+  the `T_unknown` watchdog moves a hidden session into `unknown`. Known
+  trade-off: because `heard` (ADR-029) resets on every restart, a session
+  that was genuinely waiting on the owner before the restart also renders
+  `unknown` until a hook fires for it again, so hiding grey can hide a
+  session that needs a human; "Show N" is the accepted mitigation, not a
+  fix. `docs/CONTROL_MAPPING.md`, `docs/UI_SPEC.md`,
+  `docs/ACCESSIBILITY.md`, and `docs/ARCHITECTURE.md` are updated to
+  match, and `app/` implements the change.
+- **The session list gets taller rows, header counts, and a bundled
+  typeface, recorded as ADR-029.** Rows grow to a fixed 64 px, two lines
+  (the session name over the state word), with a 30 px glyph and a
+  background tint keyed to the state's colour: idle 6%, thinking and
+  complete 14%, needs input and error 22%. Unknown and ended get a dashed
+  outline instead of a tint, and a selected row gets a 3 px inset outline
+  in the text colour. A Reveal miss note moves into its own column at the
+  right of the row. The header grows to 64 px and gains a read-only
+  summary of counts (waiting on you, error, thinking, complete) between
+  the drag grip and the still-only-two controls, Move and Quit. The
+  surface's type changes from the system Segoe UI to a bundled Atkinson
+  Hyperlegible Next (latin subset, SIL OFL 1.1), falling back to Segoe UI
+  outside that subset. The empty list now reads "Watching for sessions"
+  instead of "No sessions." Unknown rows now say which of two things
+  happened: the daemon's `Session` gains `heard: bool`, set once any hook
+  event has arrived for it in this run, and the row reads "not heard yet"
+  while `heard` is false (bound by enumeration or restored from disk, no
+  hook seen yet this run) or "unknown" once heard from and then quiet past
+  `T_unknown`, same colour and glyph either way (ADR-008 unchanged).
+  Unknown rows also dim: glyph and state word to 75% grey, name to regular
+  weight at 72% text colour, short of ended's dimming. The window's
+  initial height in `tauri.conf.json` follows, 128 px. `docs/UI_SPEC.md`,
+  `docs/ACCESSIBILITY.md`, `docs/ARCHITECTURE.md`,
+  `docs/CLAUDE_CODE_ADAPTER.md`, and `TODO.md` are updated to match, and
+  `app/` implements the change.
+- **The surface narrows to a session list, recorded as ADR-028.** An
+  ordered, unbounded list replaces the six fixed tiles: one row per
+  session (colour, glyph, name, state word), click to select and raise
+  (ADR-027 unchanged), and a header holding only Move and Quit. Removed
+  from the plan: the command keys (approve, deny, answer, interrupt,
+  continue, reveal), the stick, the dial, talk and send, the detail
+  panel, the bind picker, the layer strip, and the two corner badges.
+  Approve and deny stay Phase 2 work; landing them, or anything else, on
+  this surface now needs its own ADR. Binding becomes automatic: a
+  session is bound on its first hook event or `claude agents`
+  enumeration hit, the daemon reruns that enumeration every 15 seconds
+  outside the registry lock, and a session is dropped on ending or on
+  going 60 seconds with no hook after a successful enumeration stops
+  listing it; a failed enumeration prunes nothing, and a legacy
+  six-slot `bindings.json` loads by dropping its null slots. The window
+  becomes a vertical list about 360 px wide, sized to the row count at
+  48 px per row, clamped to the monitor work area, with a saved
+  position validated against the monitors actually connected at
+  startup, and the raise now excludes Deckhand's own window from its
+  candidates. `docs/CONTROL_MAPPING.md`, `docs/UI_SPEC.md`,
+  `docs/ARCHITECTURE.md`, `docs/ACCESSIBILITY.md`,
+  `docs/EXECUTIVE_SUMMARY.md`, `README.md`, `TODO.md`, and `ROADMAP.md`
+  are updated to match, and `app/` implements the list.
+
+### Added
+
+- A proposed
+  [OpenAI integration implementation plan](docs/OPENAI_INTEGRATION_PLAN.md)
+  with requirements, evidence limits, adapter and identity changes,
+  migration, security gates, work packages, and validation criteria.
+  Codex observation is the proposed first target; no OpenAI adapter or
+  additional control capability is implemented by this planning change.
+
+- A test suite across all three parts. The daemon crate gained a
+  `lib.rs` so tests can reach its modules; window matching, the
+  enumeration parser, and persistence were split at pure seams and
+  covered, the loopback ingest endpoint is exercised over a real socket,
+  and the state machine and registry tests grew. A headless pipeline
+  test drives six sessions through the real endpoint into six tiles of
+  six different colours, which is the six-session colour test from
+  TODO.md without the screenshots. The shim has black-box tests that
+  spawn the built binary against a fake daemon and pin its silence and
+  its fail-open exits. The surface's pure helpers moved to their own
+  module and run under `node:test` with no new dependencies, including
+  a check that every state has a glyph and a stylesheet rule.
+  `.github/workflows/tests.yml` runs all of it on Windows, and
+  `scripts/build-app.ps1` runs it locally.
+
+- `run.py` at the repo root: check the toolchain with install hints,
+  build, optionally test, and restart the board in one command
+  (`--check`, `--test`, `--no-build`, `--stop`), and a
+  documentation sweep that moved every stale "Phase 0, no code" claim
+  across the README, roadmap, changelog intro, executive summary,
+  architecture, and community files to the Phase 1 reality. Reveal
+  attempts now also log what they searched for and what won to
+  `%LOCALAPPDATA%\deckhand\reveal.log`, because the owner's first live
+  try did not visibly work and the next report should be diagnosable.
+
+- The rest of the control surface, so the strip matches the design
+  instead of stopping at six tiles: the six command keys (Approve, Deny,
+  Answer, Interrupt, Continue, Reveal), the stick (scroll, panel toggle,
+  previous tile; drawn as a 2 by 2 grid until the diamond geometry is
+  built), the dial as a disabled readout, Talk and Send placeholders,
+  and the detail panel (identity, state in words, current item, question
+  options, Reveal, Unbind, Scan). Disabled controls follow the spec
+  rule: visible, dimmed, and clicking one puts the honest reason in the
+  panel, never a silent no-op. Reveal actually acts: a pid-then-title
+  window match raises the selected session's host window. The window
+  gained a drag grip, a Move key that cycles screen-edge presets so
+  moving never requires a drag, and its position persists across
+  restarts.
+
+### Changed
+
+- A tile click now selects the session and raises its host window in
+  the same click, recorded as ADR-027. The separate Reveal target on
+  the tile and the double-click accelerator are gone; the Reveal key
+  and the panel action repeat the raise for the selected session.
+  Deckhand's own window still never takes focus.
 
 - Live validation against Claude Code 2.1.220, recorded as ADR-026, put
   real sessions through the Phase 1 pipeline and corrected the spec and

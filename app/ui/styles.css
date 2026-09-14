@@ -1,7 +1,20 @@
 /* Deckhand surface. Colours come from theme tokens set by theme.ts;
    nothing here names a hex for a state colour. Interaction rules:
-   single clicks only, 44 px minimum targets, no hover-only reveals,
-   no keyboard anything (docs/ACCESSIBILITY.md). */
+   single clicks only, 44 px minimum hit targets, no hover-only
+   reveals, no keyboard anything (docs/ACCESSIBILITY.md). Colour is
+   never the only channel for a session's state: every row also carries
+   a glyph and a state word. */
+
+/* Bundled, not a system face: Atkinson Hyperlegible Next is drawn for
+   low-vision reading. Latin subset, variable weight, SIL OFL (see
+   fonts/OFL.txt). Anything outside the subset falls back to Segoe UI. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("./fonts/AtkinsonHyperlegibleNext-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: block;
+}
 
 * {
   margin: 0;
@@ -15,120 +28,205 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
   overflow: hidden;
 }
 
 #surface {
-  position: relative;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
   height: 100%;
-  padding: 8px;
   transition: opacity 600ms ease;
 }
 
-/* Idle dim after 3 minutes without pointer or state change. Dim, not
-   hide: a status board that hides is not a status board. */
 #surface.dimmed {
   opacity: 0.55;
 }
 
-#strip {
-  display: flex;
-  gap: 8px;
+.glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-/* ---- Tiles ---------------------------------------------------------- */
+/* ---- Header: a title bar of counts, the grey toggle, and Quit -------- */
 
-.tile {
-  position: relative;
-  width: 96px;
-  height: 96px;
-  border-radius: 10px;
-  background: var(--tile);
-  border: 3px solid var(--tile-border);
+/* The whole bar is the drag region. Only the buttons take clicks; the
+   counts pass pointer events through so dragging on them drags too. */
+#header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 1px;
-  cursor: pointer;
+  gap: 4px;
+  /* 52px total, matching HEADER_H_LOGICAL in window.rs: 44px controls
+     plus 4px above and below. A taller header than the daemon sizes for
+     spills into the list and puts a scrollbar on a list that fits. */
+  height: 52px;
+  padding: 4px 4px 4px 10px;
+  flex: 0 0 auto;
+  cursor: grab;
+}
+
+/* Read-only counts of the states worth a glance (waiting, error,
+   thinking, complete). Not a control: clicking it does nothing, and each
+   count carries its state's glyph as well as its colour. */
+#summary {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   overflow: hidden;
-  /* Buttons do not inherit these; without both lines every tile
-     renders black UA-default text on the dark theme. */
-  color: var(--text);
-  font-family: inherit;
+  pointer-events: none;
 }
 
-.tile.selected {
-  border-width: 5px;
+.count {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 6px 0 5px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--ring) 18%, transparent);
+  color: color-mix(in srgb, var(--ring) 70%, var(--text));
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
 }
 
-.tile.selected::after {
-  /* The chevron notch that marks selection without relying on the
-     thicker ring alone. */
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-bottom: 7px solid var(--ring, var(--tile-border));
+.count .glyph {
+  width: 15px;
+  height: 15px;
 }
 
-.tile[data-state="idle"] {
-  --ring: var(--c-idle);
+.count[data-state="needs_input"] {
+  --ring: var(--c-needs-input);
 }
-.tile[data-state="thinking"] {
+.count[data-state="error"] {
+  --ring: var(--c-error);
+}
+.count[data-state="thinking"] {
   --ring: var(--c-thinking);
 }
-.tile[data-state="needs_input"] {
-  --ring: var(--c-needs-input);
-  background: color-mix(in srgb, var(--c-needs-input) 20%, var(--tile));
-}
-.tile[data-state="complete"] {
+.count[data-state="complete"] {
   --ring: var(--c-complete);
-  background: color-mix(in srgb, var(--c-complete) 10%, var(--tile));
 }
-.tile[data-state="error"] {
+
+.side-btn {
+  min-width: 44px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
+  color: var(--subtext);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* .side-btn's own `display: flex` outranks the UA [hidden] stylesheet
+   rule (both are type selectors with zero specificity added, so the
+   later same-specificity rule wins), so grey.hidden = true (main.ts)
+   would otherwise never actually hide the grey toggle. */
+.side-btn[hidden] {
+  display: none;
+}
+
+#quit {
+  width: 44px;
+  padding: 0;
+  font-size: 18px;
+}
+
+.side-btn:active {
+  background: var(--tile-border);
+}
+
+.side-btn[aria-pressed="true"] {
+  background: var(--tile-border);
+  color: var(--text);
+}
+
+/* ---- Session list ---------------------------------------------------- */
+
+#list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 64px including the 2px ground-coloured bottom border that separates
+   rows, matching ROW_H_LOGICAL in window.rs. */
+.row {
+  position: relative;
+  min-height: 64px;
+  flex: 0 0 auto;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-areas:
+    "glyph name"
+    "glyph state";
+  column-gap: 14px;
+  align-content: center;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid var(--bg);
+  background: color-mix(in srgb, var(--ring, var(--tile-border)) 14%, var(--tile));
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.row.selected {
+  box-shadow: inset 0 0 0 3px var(--text);
+}
+
+.row[data-state="idle"] {
+  --ring: var(--c-idle);
+  background: color-mix(in srgb, var(--c-idle) 6%, var(--tile));
+}
+.row[data-state="thinking"] {
+  --ring: var(--c-thinking);
+}
+.row[data-state="needs_input"] {
+  --ring: var(--c-needs-input);
+  background: color-mix(in srgb, var(--c-needs-input) 22%, var(--tile));
+}
+.row[data-state="complete"] {
+  --ring: var(--c-complete);
+}
+.row[data-state="error"] {
   --ring: var(--c-error);
-  background: color-mix(in srgb, var(--c-error) 20%, var(--tile));
+  background: color-mix(in srgb, var(--c-error) 22%, var(--tile));
 }
-.tile[data-state="unknown"] {
+.row[data-state="unknown"] {
   --ring: var(--c-unknown);
-  background: repeating-linear-gradient(
-    45deg,
-    var(--tile),
-    var(--tile) 6px,
-    color-mix(in srgb, var(--c-unknown) 18%, var(--tile)) 6px,
-    color-mix(in srgb, var(--c-unknown) 18%, var(--tile)) 12px
-  );
-}
-
-.tile[data-state] {
-  border-color: var(--ring, var(--tile-border));
-}
-
-/* Ended and unbound: no ring, dashed outline. */
-.tile[data-state="ended"],
-.tile.unbound {
-  --ring: transparent;
-  border: 3px dashed var(--tile-border);
   background: var(--tile);
 }
-
-.glyph {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  color: var(--ring, var(--subtext));
+.row[data-state="ended"] {
+  --ring: var(--tile-border);
+  background: var(--bg);
 }
 
-.tile.unbound .glyph {
-  color: var(--subtext);
+
+.row .glyph {
+  grid-area: glyph;
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  color: var(--ring, var(--subtext));
 }
 
 @keyframes spin {
@@ -147,154 +245,84 @@ body {
   }
 }
 
-.slot1 {
-  font-size: 14px;
-  font-weight: 600;
-  max-width: 88px;
+.row-name {
+  grid-area: name;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.slot2 {
-  font-size: 12px;
-  color: var(--subtext);
-  max-width: 88px;
+.row-state {
+  grid-area: state;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--ring, var(--subtext)) 70%, var(--text));
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.slot3 {
-  font-size: 12px;
-  color: var(--subtext);
-  font-variant-numeric: tabular-nums;
+.row[data-state="ended"] .glyph,
+.row[data-state="ended"] .row-name,
+.row[data-state="ended"] .row-state {
+  color: color-mix(in srgb, var(--subtext) 60%, var(--bg));
 }
 
-/* Corner badges: read, never clicked. */
-.badge-mode {
-  position: absolute;
-  top: 3px;
-  right: 7px;
-  font-size: 11px;
-  color: var(--subtext);
-  pointer-events: none;
+/* Unknown steps back so live sessions stand out, but stays well above
+   ended: it may be a session that is really waiting on you and has not
+   spoken since Deckhand started. */
+.row[data-state="unknown"] .glyph,
+.row[data-state="unknown"] .row-state {
+  color: color-mix(in srgb, var(--c-unknown) 75%, var(--bg));
+}
+.row[data-state="unknown"] .row-name {
+  font-weight: 400;
+  color: color-mix(in srgb, var(--text) 72%, var(--bg));
 }
 
-.badge-children {
-  position: absolute;
-  bottom: 3px;
-  right: 7px;
+/* A Reveal miss, shown for a few seconds in its own column so it never
+   covers the name or the state word. */
+.row:has(.row-note) {
+  grid-template-columns: 30px auto minmax(0, 1fr);
+  grid-template-areas:
+    "glyph name name"
+    "glyph state note";
+}
+
+/* One short line (format.ts shortens the daemon's sentence), so the row
+   never grows past ROW_H_LOGICAL and never pushes the list into a
+   scrollbar. */
+.row-note {
+  grid-area: note;
+  justify-self: end;
+  align-self: center;
+  max-width: 100%;
+  margin-left: 10px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
   font-size: 12px;
   font-weight: 700;
-  color: var(--text);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 
-/* ---- Side buttons --------------------------------------------------- */
-
-#side {
+.row-empty {
+  min-height: 64px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.side-btn {
-  min-width: 52px;
-  min-height: 44px;
-  border-radius: 8px;
-  border: 1px solid var(--tile-border);
-  background: var(--tile);
-  color: var(--text);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-}
-
-.side-btn .side-label {
-  font-size: 9px;
-  color: var(--subtext);
-}
-
-.side-btn:active {
-  background: var(--tile-border);
-}
-
-/* ---- Bind picker ---------------------------------------------------- */
-
-#picker {
-  position: absolute;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  padding: 4px 8px;
-  z-index: 10;
-}
-
-#picker[hidden] {
-  display: none;
-}
-
-.picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--subtext);
-  padding: 2px 4px;
-}
-
-.picker-rows {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.picker-row {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid var(--tile-border);
   background: var(--tile);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-  font-size: 12px;
-}
-
-.picker-row .row-state {
   color: var(--subtext);
-  font-size: 11px;
-  margin-left: auto;
-  white-space: nowrap;
-}
-
-.picker-row .row-cwd {
-  color: var(--subtext);
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 260px;
-}
-
-.picker-btn {
-  min-width: 44px;
-  min-height: 32px;
-  border-radius: 6px;
-  border: 1px solid var(--tile-border);
-  background: var(--tile);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 10px;
+  font-size: 15px;
+  cursor: default;
 }

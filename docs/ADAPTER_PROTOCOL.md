@@ -7,6 +7,11 @@ An adapter connects Deckhand to one agent runtime. The daemon knows only this
 contract. Everything specific to Claude Code lives behind it, documented in
 [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md).
 
+The [OpenAI integration plan](OPENAI_INTEGRATION_PLAN.md) proposes a
+second implementation and records gaps between this interface and the
+current Rust code, including operation events and session identity. It
+does not revise version `0` or enable any additional capability.
+
 ## Capabilities
 
 An adapter declares what it can do. The surface reads these declarations and
@@ -56,7 +61,7 @@ declarations exist:
 | Interrupt | `interrupt` |
 | Continue | `send_prompt` |
 | Send | `send_prompt` |
-| Reveal | `focus_session` |
+| Tile click, Reveal | `focus_session` |
 | Dial commit target | `set_option` |
 
 A control whose capability is `false` ships visible and disabled, and names the

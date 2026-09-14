@@ -33,23 +33,23 @@ So the surface is judged on motion arithmetic:
 
 - **Glance beats click.** Any state that matters must be readable with zero
   interaction. That is why unread is a colour and not a badge you hover for.
-- **One click per decision.** Select tile, approve, deny, answer a question,
-  continue: each is a single press on a static target.
-- **Short travel.** Controls that act on the selected tile sit adjacent to the
-  tile strip, not across the window. The surface docks to a screen edge so it
-  lives near wherever the pointer already works.
+- **One click per decision.** Selecting a session is a single press on a
+  static target today; approve, deny, and answering a question will be too
+  whenever they return to the surface (they are Phase 2 or later, and
+  currently off it, see [ADR-028](DECISIONS.md#adr-028)).
+- **Short travel.** The session list sits together as one control and stays
+  where it was last placed, near wherever the pointer already works
+  (placing it is currently drag-only, see the exception below).
 - **No interaction taxes.** No hover-to-reveal with a timeout, no drag-only
   controls, no scroll-to-reach-the-button, no confirmation dialogs that appear
   at a different screen position than the action that raised them.
-- **Reading is motion too.** Deciding on a tool call means reading its input,
-  and a long input has to be reachable without a wheel, a drag, or a keyboard.
-  That is what the stick's up and down targets are for: they scroll the detail
-  panel over the pending input. Before that mapping there was no cheap pointer
-  path to the second half of a long command, which left approving blind or
-  leaving the surface. Reading is never *required*, because the approval
-  buttons stay live on a truncated input (see
-  [SECURITY_MODEL.md](SECURITY_MODEL.md)); the point is that choosing to read
-  costs a click, not a window switch.
+- **Reading is motion too.** Whenever a future decision requires reading a
+  tool call's input, that reading has to be reachable without a wheel, a
+  drag, or a keyboard, the same rule that shaped the stick before ADR-028
+  removed it along with the panel it scrolled. The requirement carries
+  forward even though the controls that were going to satisfy it do not
+  currently exist: reading must never be *required* before a decision is
+  usable, only offered as a click.
 - **Never manufacture a click.** A feature that creates more presses than it
   removes is a regression, however cheap each press is. This is why the
   permission gate ships scoped to shell execution and file deletion rather than
@@ -64,7 +64,9 @@ than a tool denial, and answering one costs a window switch, a read, and a
 keypress today. Collapsing that into one click on a labelled target is the
 strongest accessibility argument in the whole design. One machine's habits are
 not a general finding and the claim is scoped to that, but on this machine it
-is not close.
+is not close. The current surface does not implement an answer control
+([ADR-028](DECISIONS.md#adr-028)); this argument is preserved as the case for
+one returning, not as a description of what ships today.
 
 ## Forbidden interactions
 
@@ -72,17 +74,31 @@ These may not ship as the only way to do anything:
 
 | Forbidden as sole path | Because | Provided alternative |
 | --- | --- | --- |
-| Press-and-hold | Sustained force is the exact cost being avoided | Click-to-toggle (talk defaults to this) |
-| Drag | Sustained force plus precision | Dial has click targets; windows move via a move mode, click destination |
-| Double-click | Timing windows exclude dwell clickers | Every double-click action also exists as a single-click affordance (select tile, then a Reveal target in the detail panel) |
-| Hover-only reveals | Dwell users cannot hover without clicking, and the surface never takes focus, so there is no keyboard route to a tooltip either | Everything visible is clickable; anything a tooltip would have said is revealed into the detail panel by a click |
+| Press-and-hold | Sustained force is the exact cost being avoided | Click-to-toggle, used wherever a sustained action would otherwise be required |
+| Drag | Sustained force plus precision | Repositioning the window is a named exception (see below); every other drag on the surface remains optional |
+| Double-click | Timing windows exclude dwell clickers | Nothing is double-clicked: a row click selects and raises in one click, and every other action is a single click on its own target |
+| Hover-only reveals | Dwell users cannot hover without clicking, and the surface never takes focus, so there is no keyboard route to a tooltip either | Everything visible is clickable, and anything a control needs to explain itself is shown in the open, never gated behind a hover |
 | Keyboard input | The whole premise | Text entry delegates to the system keyboard of choice, for example alpha-osk; naming things is optional everywhere |
 | Chorded or simultaneous inputs | One pointer, one action | Never used |
 
-The 350 ms double-click window inherited from the Codex Micro survives as an
-*optional accelerator* with an adjustable window (up to 2000 ms) and an off
-switch, because for a mouse user it is genuinely faster, and for everyone else
-it must not be load-bearing.
+**Drag is no longer optional for one action.**
+[ADR-031](DECISIONS.md#adr-031) removed Move, the click-to-place
+command that had been the required alternative to dragging the
+window, at the owner's explicit request; the owner is also the
+mouse-only user this rule exists to protect, and accepted the trade-off
+knowingly. Repositioning the window now has no click-based route: a
+saved position is still restored and clamped into the currently
+connected monitors' work area at startup ([ADR-028](DECISIONS.md#adr-028)),
+so the window never starts off-screen, but nothing short of a drag
+can move it once it is placed. This is a real, open accessibility
+gap, not a compliant reading of the rule above, and it stands until a
+click-based reposition control returns, which would need its own ADR.
+
+The 350 ms double-click inherited from the Codex Micro has no accelerator
+here: since [ADR-027](DECISIONS.md#adr-027) the row's single click already
+raises, so there is nothing for a double-click to be faster at. If one ever
+returns for some other action it must be optional, adjustable (up to 2000 ms),
+switchable off, and never load-bearing.
 
 Two consequences of the hover row are load-bearing enough to state outside the
 table.
@@ -90,16 +106,16 @@ table.
 **A tooltip is not a slow reveal here, it is no reveal at all.** The surface
 never takes keyboard focus (see [UI_SPEC.md](UI_SPEC.md)), so a tooltip has
 neither a hover route for a dwell or eye-tracker user nor a focus route for
-anyone else. Any text a control needs in order to be understood belongs in the
-detail panel, reached by a click. If the panel is collapsed, that click expands
-it.
+anyone else. Any text a control needs in order to be understood has to be
+shown directly, as label text on the control itself, never behind a hover.
 
 **Clicking a disabled control is never a no-op.** It reveals why the control is
 disabled: nothing pending, the wrong kind of amber, a permission mode in which
 the decision would not have reached you, or a channel Deckhand does not have.
 A control that neither acts nor explains teaches its user to distrust their own
 click, and a doubted click gets repeated, which costs more than the action ever
-would have.
+would have. No control on the current surface is disabled; the rule binds
+whatever control is added next.
 
 ## Targets and sizing
 
@@ -107,20 +123,26 @@ would have.
   interactive, measured at 100% surface scale. WCAG 2.2 asks 24 at AA and 44
   at AAA; Deckhand takes the AAA number as its floor and treats it as a build
   constant, not a guideline (the PR template asks about it by name).
-- Default tiles are much larger than the floor. The floor exists for the layer
-  strip and dial steppers, the smallest things on the surface.
-- **Surface scale from 100% to 300%**, everything scaling together. At 300% on
-  a 1080p screen, four tiles and the command keys must still fit; if a layout
-  cannot survive that, the layout is wrong.
-- Adjacent destructive and constructive controls (Approve next to Deny) get
-  a mandatory gap of at least half a target width, so a tremor miss lands on
-  dead space, not the opposite decision.
-- **A question's options are targets, not a legend.** When a session asks a
-  multiple-choice question, every option is its own hit target carrying the
-  full option label, never a bare letter or an index the user has to map back
-  to something else. The 44 px floor applies to each option, and so does the
-  half-target dead gap between adjacent options: picking the wrong answer is
-  the same class of mistake as Deny landing where Approve was.
+- Session rows are larger than the floor: 64 px, fixed, per
+  [UI_SPEC.md](UI_SPEC.md#row-anatomy). The floor binds hardest on the
+  header, now 52 px total ([ADR-031](DECISIONS.md#adr-031)): Quit is
+  44 by 44 px, exactly the floor, and the grey toggle is a
+  variable-width text button with a 44 px minimum height; both hold
+  the floor on the dimension that matters.
+- **Surface scale from 100% to 300%**, everything scaling together. At 300%
+  on a 1080p screen, the header and at least a few rows must still render
+  legibly; if a layout cannot survive that, the layout is wrong.
+- **Standing rule for any future control:** adjacent destructive and
+  constructive controls get a mandatory gap of at least half a target
+  width, so a tremor miss lands on dead space, not the opposite decision.
+  Approve and Deny are the anticipated case (Phase 2) and are not
+  currently on the surface to apply it to.
+- **Standing rule for any future question control:** a session's
+  multiple-choice options are targets, not a legend. Every option would get
+  its own hit target carrying the full option label, never a bare letter or
+  an index the user has to map back to something else, at the 44 px floor
+  with the same half-target dead gap. No answer control is currently on the
+  surface ([ADR-028](DECISIONS.md#adr-028)).
 
 ## Status without colour
 
@@ -134,19 +156,35 @@ colour is the fastest channel, never the only one:
 | Needs input | Amber | Hand | Waiting on you |
 | Complete | Green | Check | Done, unread |
 | Error | Red | Cross | Problem |
-| Unknown | Grey | Question, hatched fill | Unknown |
-| Ended or unbound | None | Dashed outline | Empty |
+| Unknown | Grey | Question | Not heard yet, or Unknown |
+| Ended or unbound | None | Dash | Empty |
 
-Amber carries a kind, a permission request or a question, and that distinction
-has to reach the label, not only the enabled buttons: someone reading the board
-in glyph-only mode still needs to know whether the next click is Approve or an
-answer. It is the same colour, the same glyph, and the same state, so
+Unknown carries two labels for the one state: "Not heard yet" for a session
+bound by enumeration or restored from disk that no hook has spoken for yet
+this run, and "Unknown" for one that had spoken and then gone quiet past
+`T_unknown`. Colour and glyph are identical between the two; only the word
+differs, so the distinction still reaches glyph-only and colour-blind modes
+without adding a channel ([ADR-029](DECISIONS.md#adr-029)). Unknown and
+ended rows no longer carry a shared dashed outline either; that treatment
+was removed by [ADR-031](DECISIONS.md#adr-031), which leaves the two
+states to read apart from a live row by glyph shape and dimming alone.
+Unknown rows are also dimmer than the rest of the list, though deliberately
+less dim than an ended row: glyph and state word go to 75% grey toward the
+background, and the name drops from bold to regular weight at 72% text
+colour.
+
+Amber can carry a kind, a permission request or a question, at the protocol
+level. Should a future control ever key off it, that distinction would have
+to reach the label, not only the enabled buttons: someone reading the board
+in glyph-only mode would still need to know what the next click does. Today
+no control on the surface reads kind, so it does not change the row. It is
+the same colour, the same glyph, and the same state either way, so
 [ADR-008](DECISIONS.md#adr-008) is untouched.
 
 Plus: a high-contrast theme, glyph-only mode for monochrome displays, reduced
-motion mode (spinners become static badges; the talk sweep becomes a steady
-border), and adjustable pulse behaviour, since the selected tile's pulsing is
-information for some and noise for others.
+motion mode (spinners become static glyphs), and adjustable pulse behaviour,
+since the selected row's pulsing is information for some and noise for
+others.
 
 ## What the hardware does better
 

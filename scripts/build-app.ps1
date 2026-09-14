@@ -8,11 +8,13 @@ $repo = Split-Path -Parent $PSScriptRoot
 Push-Location (Join-Path $repo "app\ui")
 try {
     if (-not (Test-Path "node_modules")) {
-        npm install --no-audit --no-fund
-        if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
+        npm ci --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
     }
     npx tsc
     if ($LASTEXITCODE -ne 0) { throw "tsc failed" }
+    npm test
+    if ($LASTEXITCODE -ne 0) { throw "npm test failed" }
 } finally {
     Pop-Location
 }

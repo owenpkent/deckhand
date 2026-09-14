@@ -63,6 +63,9 @@ pub struct Session {
     /// Rendered as text on the tile badge; "unknown" when absent, which
     /// is not rare. Never a colour (docs/UI_SPEC.md#corner-badges).
     pub permission_mode: Option<String>,
+    /// From the enumeration where known; hooks do not carry one. Feeds
+    /// Reveal's window match, nothing else.
+    pub pid: Option<u32>,
     pub state: SessionState,
     pub state_since_ms: i64,
     pub detail_kind: Option<InputKind>,
@@ -81,6 +84,12 @@ pub struct Session {
     child_ids: Vec<String>,
     pub open_ops: Vec<OpenOp>,
     pub last_event_at_ms: i64,
+    /// True once any hook event has arrived for this session in this
+    /// run. Separates the two roads to unknown for the surface's state
+    /// word: bound by enumeration or restored from disk and never heard
+    /// from, versus heard from and then silent past `T_unknown`. Neither
+    /// is a guess, and neither changes the colour.
+    pub heard: bool,
     pub unread_since_ms: Option<i64>,
     /// A turn ended while children were live; green arrives when the
     /// ledger empties (docs/UI_SPEC.md#the-child-ledger-and-complete).
@@ -93,6 +102,7 @@ impl Session {
             id,
             label: String::new(),
             cwd: None,
+            pid: None,
             permission_mode: None,
             // A session first seen by enumeration rather than by an
             // event starts here. Never idle: idle is the one guess that
@@ -108,6 +118,7 @@ impl Session {
             child_ids: Vec::new(),
             open_ops: Vec::new(),
             last_event_at_ms: now_ms,
+            heard: false,
             unread_since_ms: None,
             pending_complete: false,
         }
@@ -159,24 +170,49 @@ impl Session {
     /// Unrecognised events update liveness and nothing else: the daemon
     /// takes no state change from an event it does not understand.
     pub fn apply_hook(&mut self, payload: &Value, now_ms: i64) -> bool {
-        self.last_event_at_ms = now_ms;
-
-        if let Some(m) = payload.get("permission_mode").and_then(Value::as_str) {
-            self.permission_mode = Some(m.to_string());
-        }
-        if let Some(cwd) = payload.get("cwd").and_then(Value::as_str) {
-            if self.cwd.is_none() {
-                self.cwd = Some(cwd.to_string());
-            }
-            if self.label.is_empty() {
-                self.label = dir_name(cwd);
-            }
-        }
-
         let event = payload
             .get("hook_event_name")
             .and_then(Value::as_str)
             .unwrap_or("");
+
+        // Once a session has ended, only a session-start event (a resume)
+        // may revive it. Every other event is ignored outright, not
+        // merely processed to no effect: a straggler delivered late, or
+        // racing SessionEnd itself (a Stop, a PostToolUseFailure, ...),
+        // would otherwise flip Ended back to Complete/Thinking/Error.
+        // Registry::apply_hook decides list membership from the state
+        // left here after this call returns, so a straggler that got
+        // through this guard would re-list a session that has already
+        // left (docs/ARCHITECTURE.md#the-session-state-machine).
+        if self.state == SessionState::Ended && event != "SessionStart" {
+            return false;
+        }
+
+        self.last_event_at_ms = now_ms;
+        self.heard = true;
+
+        if let Some(m) = payload.get("permission_mode").and_then(Value::as_str) {
+            self.permission_mode = Some(m.to_string());
+        }
+        // A payload carrying `agent_id` is a subagent's, not the
+        // session's own: subagent hook payloads share the parent
+        // session_id but can carry a different cwd (their own working
+        // directory), which would otherwise latch onto the session and
+        // poison every later Reveal (docs/CONTROL_MAPPING.md). Liveness
+        // above still updates; only cwd and the label derived from it
+        // are skipped.
+        let is_subagent_payload = payload.get("agent_id").is_some();
+        if !is_subagent_payload {
+            if let Some(cwd) = payload.get("cwd").and_then(Value::as_str) {
+                if self.cwd.is_none() {
+                    self.cwd = Some(cwd.to_string());
+                }
+                if self.label.is_empty() {
+                    self.label = dir_name(cwd);
+                }
+            }
+        }
+
         let tool_name = payload.get("tool_name").and_then(Value::as_str);
         let tool_use_id = payload.get("tool_use_id").and_then(Value::as_str);
 
@@ -367,6 +403,11 @@ impl Session {
                 self.child_ids.clear();
                 self.open_ops.clear();
                 self.pending_complete = false;
+                // Lifecycle invalidation: the OS is free to reuse this
+                // pid for an unrelated process the moment this one
+                // exits, so it must not survive to name Reveal's target
+                // for whatever comes next under the same session id.
+                self.pid = None;
                 self.set_state(SessionState::Ended, now_ms);
                 true
             }
@@ -644,6 +685,7 @@ mod tests {
         assert!(!x.tick(T_UNKNOWN_MS));
         assert!(x.tick(T_UNKNOWN_MS + 2));
         assert_eq!(x.state, SessionState::Unknown);
+        assert!(x.heard, "a timed-out session was heard from; the surface words it apart from never-heard");
         // Any authoritative event leaves unknown.
         ev(&mut x, T_UNKNOWN_MS + 3, json!({"hook_event_name": "UserPromptSubmit"}));
         assert_eq!(x.state, SessionState::Thinking);
@@ -653,6 +695,7 @@ mod tests {
     fn a_session_first_seen_by_enumeration_is_unknown_not_idle() {
         let x = Session::new("enumerated".into(), 5);
         assert_eq!(x.state, SessionState::Unknown, "never guess idle");
+        assert!(!x.heard, "no hook event has arrived yet");
     }
 
     #[test]
@@ -666,9 +709,150 @@ mod tests {
     }
 
     #[test]
+    fn a_subagent_payload_arriving_first_does_not_set_cwd() {
+        // SubagentStart carries agent_id and, on this machine, its own
+        // cwd rather than the parent session's. If that cwd latched, it
+        // would poison Reveal for the whole session (registry.rs is the
+        // correction path once enumeration reports the real cwd).
+        let mut x = s();
+        ev(&mut x, 1, json!({
+            "hook_event_name": "SubagentStart",
+            "agent_id": "a1",
+            "agent_type": "Explore",
+            "cwd": "C:\\Users\\o\\dev\\undertow\\subagent-scratch"
+        }));
+        assert_eq!(x.cwd, None, "a subagent's own cwd must never be taken as the session's");
+        assert_eq!(x.label, "", "no cwd means no derived label either");
+        // The parent's own event still sets it normally afterward.
+        ev(&mut x, 2, json!({"hook_event_name": "UserPromptSubmit", "cwd": "C:\\Users\\o\\dev\\undertow"}));
+        assert_eq!(x.cwd.as_deref(), Some("C:\\Users\\o\\dev\\undertow"));
+        assert_eq!(x.label, "undertow");
+    }
+
+    #[test]
     fn permission_mode_travels_on_any_payload() {
         let mut x = s();
         ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit", "permission_mode": "auto"}));
         assert_eq!(x.permission_mode.as_deref(), Some("auto"));
+    }
+
+    #[test]
+    fn dir_name_handles_windows_posix_trailing_and_edge_cases() {
+        assert_eq!(dir_name("C:\\Users\\o\\dev\\undertow"), "undertow");
+        assert_eq!(dir_name("/home/o/dev/undertow"), "undertow");
+        assert_eq!(dir_name("/home/o/dev/undertow/"), "undertow", "a trailing separator must not leave an empty name");
+        assert_eq!(dir_name("bare-name"), "bare-name");
+        assert_eq!(dir_name(""), "");
+    }
+
+    #[test]
+    fn truncate_at_and_past_the_boundary() {
+        assert_eq!(truncate("hello", 5), "hello", "exactly at the boundary must not be cut");
+        assert_eq!(truncate("hello!", 5), "hello...", "one byte past the boundary is cut and marked");
+    }
+
+    #[test]
+    fn parse_question_reads_the_first_question_and_its_option_labels() {
+        let input = json!({"questions": [{"question": "Which?", "options": [{"label": "A"}, {"label": "B"}]}]});
+        let (q, opts) = parse_question(Some(&input));
+        assert_eq!(q.as_deref(), Some("Which?"));
+        assert_eq!(opts, vec!["A", "B"]);
+    }
+
+    #[test]
+    fn parse_question_on_missing_or_malformed_input_gives_no_question_and_no_options() {
+        assert_eq!(parse_question(None), (None, Vec::new()));
+        assert_eq!(parse_question(Some(&json!({"not_questions": []}))), (None, Vec::new()));
+        assert_eq!(parse_question(Some(&json!({"questions": []}))), (None, Vec::new()));
+        assert_eq!(parse_question(Some(&json!({"questions": [{"no_question_field": true}]}))), (None, Vec::new()));
+    }
+
+    #[test]
+    fn post_tool_use_closes_only_the_matching_operation() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_use_id": "t2"}));
+        ev(&mut x, 3, json!({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        assert_eq!(x.open_ops.len(), 1);
+        assert_eq!(x.open_ops[0].id.as_deref(), Some("t2"), "the unrelated operation stays open");
+    }
+
+    #[test]
+    fn post_tool_use_failure_without_interrupt_closes_only_its_own_op() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_use_id": "t2"}));
+        let long = "z".repeat(300);
+        ev(&mut x, 3, json!({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash", "tool_use_id": "t1", "error": long, "is_interrupt": false}));
+        assert_eq!(x.open_ops.len(), 1);
+        assert_eq!(x.open_ops[0].id.as_deref(), Some("t2"), "a non-interrupt failure closes only its own bracket");
+        assert!(x.error.as_ref().unwrap().message.as_ref().unwrap().ends_with("..."), "the long error text is truncated");
+    }
+
+    #[test]
+    fn stop_with_live_children_sets_pending_complete_flag() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SubagentStart", "agent_id": "a1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "Stop"}));
+        assert!(x.pending_complete, "green is deferred while a child is still open");
+        ev(&mut x, 3, json!({"hook_event_name": "SubagentStop", "agent_id": "a1"}));
+        assert!(!x.pending_complete, "the flag clears once the ledger empties");
+        assert_eq!(x.state, SessionState::Complete);
+    }
+
+    #[test]
+    fn notification_with_an_unknown_type_only_updates_liveness() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        let changed = ev(&mut x, 5, json!({"hook_event_name": "Notification", "notification_type": "mystery"}));
+        assert!(!changed);
+        assert_eq!(x.state, SessionState::Thinking, "an unrecognised notification type must not move state");
+        assert_eq!(x.last_event_at_ms, 5, "liveness still updates");
+    }
+
+    #[test]
+    fn ended_session_ignores_every_event_except_session_start() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SessionEnd", "reason": "exit"}));
+        assert_eq!(x.state, SessionState::Ended);
+        assert!(
+            !ev(&mut x, 2, json!({"hook_event_name": "Stop"})),
+            "a straggler Stop must report no change"
+        );
+        assert_eq!(x.state, SessionState::Ended, "a straggler Stop must not revive an ended session");
+        assert!(
+            !ev(&mut x, 3, json!({"hook_event_name": "PostToolUseFailure", "error": "boom", "is_interrupt": false})),
+            "a straggler PostToolUseFailure must report no change"
+        );
+        assert_eq!(x.state, SessionState::Ended, "a straggler failure must not revive an ended session either");
+        assert!(x.error.is_none(), "an ignored straggler must not even record its error detail");
+    }
+
+    #[test]
+    fn session_end_clears_the_pid() {
+        let mut x = s();
+        x.pid = Some(4242);
+        ev(&mut x, 1, json!({"hook_event_name": "SessionEnd", "reason": "exit"}));
+        assert_eq!(x.pid, None, "the OS may reuse an ended session's pid for something else entirely");
+    }
+
+    #[test]
+    fn session_start_revives_an_ended_session() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SessionEnd", "reason": "exit"}));
+        assert_eq!(x.state, SessionState::Ended);
+        assert!(ev(&mut x, 2, json!({"hook_event_name": "SessionStart", "source": "resume"})));
+        assert_eq!(x.state, SessionState::Idle, "a resume legitimately revives an ended session");
+    }
+
+    #[test]
+    fn state_since_ms_moves_only_on_a_state_change() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert_eq!(x.state_since_ms, 1);
+        ev(&mut x, 5, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        assert_eq!(x.state_since_ms, 1, "staying in thinking must not bump the timestamp");
+        ev(&mut x, 9, json!({"hook_event_name": "Stop"}));
+        assert_eq!(x.state_since_ms, 9, "an actual state change updates it");
     }
 }
