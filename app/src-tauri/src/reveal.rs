@@ -454,6 +454,22 @@ fn code_cmd_path(ancestor_pid: u32) -> Option<std::path::PathBuf> {
     cmd.is_file().then_some(cmd)
 }
 
+/// True when `folder` is safe to hand to `code.cmd` as a launch
+/// argument: an absolute path naming a directory that actually exists.
+/// `folder` is a `workspaceFolders` string read out of a
+/// `~/.claude/ide/*.lock` file (`read_ide_locks`), which this process
+/// does not write and does not otherwise validate, so `run_code_cli`
+/// only launches once this passes; a relative path, a nonexistent
+/// path, or a path naming something other than a directory takes the
+/// same "skipped" log path as `code.cmd` itself not being found. Plain
+/// data in, data out, like `normalize_path` and `is_ancestor_of` above,
+/// so it is tested without touching the filesystem for anything but a
+/// real path.
+fn is_launchable_folder(folder: &str) -> bool {
+    let path = std::path::Path::new(folder);
+    path.is_absolute() && path.is_dir()
+}
+
 /// Run `code.cmd "<folder>"` hidden and wait up to five seconds for it
 /// to exit. VS Code's own CLI already focuses an already-open folder's
 /// window when invoked again, so this call alone typically does most of
@@ -461,7 +477,8 @@ fn code_cmd_path(ancestor_pid: u32) -> Option<std::path::PathBuf> {
 /// on top where a title match makes that possible. A timeout does not
 /// necessarily mean failure (the CLI can be slow handing back from a
 /// detached shell), so it is logged and otherwise ignored rather than
-/// treated as an error.
+/// treated as an error. The caller (`reveal_vscode`) never invokes this
+/// unless `is_launchable_folder(folder)` already held.
 #[cfg(windows)]
 fn run_code_cli(code_cmd: &std::path::Path, folder: &str) -> Option<i32> {
     use std::os::windows::process::CommandExt;
@@ -572,11 +589,21 @@ fn reveal_vscode(label: &str, dir: Option<&str>, cwd: Option<&str>, pid: u32, se
     let code_cmd = ancestor_pid.and_then(code_cmd_path);
     // Only a clean exit counts as the CLI having focused the folder's
     // window; a timeout or a non-zero exit is no evidence of a raise.
-    let cli_exit = code_cmd.as_ref().map(|cmd| run_code_cli(cmd, folder));
+    // `folder` comes from a lock file this process did not write
+    // (`read_ide_locks`), so it is only ever launched once it names a
+    // real, absolute directory (`is_launchable_folder`); anything else
+    // is treated exactly like code.cmd not being found.
+    let folder_ok = is_launchable_folder(folder);
+    let cli_exit = if folder_ok {
+        code_cmd.as_ref().map(|cmd| run_code_cli(cmd, folder))
+    } else {
+        None
+    };
     let cli_ran = matches!(cli_exit, Some(Some(0)));
     let cli_note = match cli_exit {
         Some(Some(code)) => format!("ran, exit={code}"),
         Some(None) => "ran, timed out or exit unknown".to_string(),
+        None if !folder_ok => "skipped (folder is not an existing absolute path)".to_string(),
         None => "skipped (code.cmd not found)".to_string(),
     };
 
@@ -828,5 +855,43 @@ mod tests {
         // exact match.
         let locks = vec![lock(1, &[r"C:\dev\deckhand"]), lock(2, &[r"C:\dev\deckhand"])];
         assert!(match_workspace(&locks, r"C:\dev\deckhand\app").is_none());
+    }
+
+    // ---- is_launchable_folder (CVE-2024-24576 defense in depth) --------
+
+    #[test]
+    fn an_existing_absolute_directory_is_launchable() {
+        let dir = std::env::temp_dir();
+        assert!(dir.is_absolute(), "sanity: std::env::temp_dir is absolute");
+        assert!(is_launchable_folder(dir.to_str().unwrap()));
+    }
+
+    #[test]
+    fn a_relative_path_is_never_launchable_even_if_it_exists() {
+        // "." always exists and always resolves to a real directory,
+        // but it is not absolute, which is exactly the shape a lock
+        // file could use to smuggle a launch-time-relative surprise.
+        assert!(!is_launchable_folder("."));
+    }
+
+    #[test]
+    fn a_nonexistent_absolute_path_is_not_launchable() {
+        let mut dir = std::env::temp_dir();
+        dir.push("deckhand-reveal-test-does-not-exist");
+        assert!(!is_launchable_folder(dir.to_str().unwrap()));
+    }
+
+    #[test]
+    fn an_absolute_path_to_a_file_not_a_directory_is_not_launchable() {
+        let mut path = std::env::temp_dir();
+        path.push("deckhand-reveal-test-file.txt");
+        std::fs::write(&path, b"not a directory").expect("write a scratch file");
+        assert!(!is_launchable_folder(path.to_str().unwrap()));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn an_empty_folder_is_not_launchable() {
+        assert!(!is_launchable_folder(""));
     }
 }
