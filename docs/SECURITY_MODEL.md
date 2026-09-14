@@ -260,7 +260,12 @@ that rule 2 above already scopes:
   the cap gets `413` and is dropped whole: never parsed, never
   partially applied. Hook payloads are prompts and tool inputs, nowhere
   near this size in practice; the cap exists only to stop a malformed
-  or hostile POST from growing the daemon's memory without bound.
+  or hostile POST from growing the daemon's memory without bound. A
+  declared `Content-Length` over the cap also gets `413`, before any of
+  the body is read. A request with any `Transfer-Encoding` gets `411`,
+  unread: `tiny_http`'s chunked decoder buffers chunk-size lines
+  without a bound, beneath the cap, and the shim always sends
+  `Content-Length`.
 - **Constant-time token comparison.** The per-start ingest token (rule
   2) used to be compared with `==`, which returns as soon as it finds a
   mismatched byte. `http.rs` now walks every byte regardless of an

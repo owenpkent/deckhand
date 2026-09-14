@@ -39,6 +39,20 @@ pub fn start(events: Sender<serde_json::Value>) -> Option<HttpServer> {
                     401
                 } else if request.url() != "/hook" {
                     404
+                } else if request
+                    .headers()
+                    .iter()
+                    .any(|h| h.field.equiv("Transfer-Encoding"))
+                {
+                    // Refuse chunked bodies unread. tiny_http's chunked
+                    // decoder buffers each chunk-size line without a
+                    // bound, below the `take` cap further down, so a
+                    // body that is never read is the only safe one. The
+                    // shim always sends Content-Length.
+                    411
+                } else if request.body_length().map_or(false, |n| n as u64 > MAX_BODY_BYTES) {
+                    // Declared over the cap: refuse before reading.
+                    413
                 } else {
                     let mut body = String::new();
                     // Read at most one byte past the limit: that extra
@@ -240,6 +254,47 @@ mod tests {
             rx.recv_timeout(Duration::from_millis(200)).is_err(),
             "an oversized body must never reach the channel, even in part"
         );
+    }
+
+    #[test]
+    fn a_chunked_body_gives_411_unread_and_nothing_arrives() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let mut stream = TcpStream::connect(("127.0.0.1", server.port)).expect("connect to the ingest server");
+        stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
+        let head = format!(
+            "POST /hook HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nX-Deckhand-Token: {}\r\nTransfer-Encoding: chunked\r\n\r\n",
+            server.token
+        );
+        stream.write_all(head.as_bytes()).expect("write request headers");
+        // An oversized chunk-size line: the framing the decoder would
+        // have buffered without bound. The server replies without
+        // reading it, so a failed write here is fine.
+        let _ = stream.write_all(&vec![b'0'; 1024 * 1024]);
+        let mut resp = Vec::new();
+        let _ = stream.read_to_end(&mut resp);
+        let text = String::from_utf8_lossy(&resp);
+        assert!(text.starts_with("HTTP/1.1 411"), "got: {}", text.lines().next().unwrap_or(""));
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+    }
+
+    #[test]
+    fn a_declared_length_over_the_cap_gives_413_unread() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        let mut stream = TcpStream::connect(("127.0.0.1", server.port)).expect("connect to the ingest server");
+        stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
+        let head = format!(
+            "POST /hook HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nX-Deckhand-Token: {}\r\nContent-Length: {}\r\n\r\n{{}}",
+            server.token,
+            MAX_BODY_BYTES + 1
+        );
+        stream.write_all(head.as_bytes()).expect("write request");
+        let mut resp = Vec::new();
+        let _ = stream.read_to_end(&mut resp);
+        let text = String::from_utf8_lossy(&resp);
+        assert!(text.starts_with("HTTP/1.1 413"), "got: {}", text.lines().next().unwrap_or(""));
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
     }
 
     #[test]

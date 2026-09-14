@@ -21,7 +21,9 @@ version number is invented and no past release is backfilled.
   nothing in the surface needed a looser policy. The daemon's loopback
   ingest endpoint (`http.rs`) now caps a request body at 8 MiB,
   answering `413` and dropping the event outright, never partially
-  applied, over that limit, and compares the per-start ingest token in
+  applied, over that limit; refuses chunked bodies unread with `411`,
+  since the chunked decoder's framing buffer sits beneath that cap; and
+  compares the per-start ingest token in
   constant time instead of with a short-circuiting `==`. Reveal's VS
   Code path (`reveal.rs`) now refuses to launch `code.cmd` unless the
   workspace folder it read from `~/.claude/ide/*.lock` is an absolute
