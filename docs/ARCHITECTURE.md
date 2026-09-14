@@ -337,6 +337,15 @@ registry and state machine. The proposed
 extraction before adding a second runtime. Its requirements are a plan,
 not evidence that the Rust adapter interface exists today.
 
+The proposed [architecture hardening plan](ARCHITECTURE_HARDENING_PLAN.md)
+stages reliability work on the current observation implementation:
+duplicate-safe events, one mutation controller with owned effects,
+explicit scan completeness, stable session and process identity, and
+supervised I/O. It shares the adapter extraction above and supplies
+acceptance tests against the production coordinator. The plan records
+review findings and future work; it does not change this accepted
+architecture or claim that those components exist.
+
 This boundary is not speculative generality. It exists because the Claude Code
 integration deliberately mixes documented interfaces with fragile ones, and the
 boundary is where that risk gets contained: when an internal changes, one

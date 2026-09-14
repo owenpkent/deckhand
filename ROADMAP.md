@@ -51,6 +51,13 @@ silently assumed, and both spikes have answered their questions.
 **Goal:** prove that Claude Code session status can be inferred reliably
 enough to show on the surface, before any authority is put behind it.
 
+The proposed [architecture hardening plan](docs/ARCHITECTURE_HARDENING_PLAN.md)
+orders reliability work toward this goal, starting with the review's
+correctness findings and then separating state mutation from external
+effects. It defines acceptance tests for duplicate events, incomplete
+scans, resume, slow I/O, and instance ownership. These stages are proposed
+implementation work, not additional shipped capabilities.
+
 Deliverables:
 
 - The Deckhand daemon (local background process, transport per

@@ -163,6 +163,14 @@ version number is invented and no past release is backfilled.
 ### Added
 
 - A proposed
+  [architecture hardening plan](docs/ARCHITECTURE_HARDENING_PLAN.md)
+  based on the review of `330d495`. It records the reproduced
+  duplicate-child completion defect and stages controller, event,
+  identity, view-contract, lifecycle, and I/O changes with acceptance
+  tests. Architecture, adapter, security, roadmap, and task-list
+  references identify the plan as proposed; no runtime behavior changes.
+
+- A proposed
   [OpenAI integration implementation plan](docs/OPENAI_INTEGRATION_PLAN.md)
   with requirements, evidence limits, adapter and identity changes,
   migration, security gates, work packages, and validation criteria.

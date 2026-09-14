@@ -12,6 +12,13 @@ second implementation and records gaps between this interface and the
 current Rust code, including operation events and session identity. It
 does not revise version `0` or enable any additional capability.
 
+The proposed [architecture hardening plan](ARCHITECTURE_HARDENING_PLAN.md)
+describes how the current Claude implementation can reach this boundary:
+typed observation events, explicit identity and scan completeness, and
+idempotent reduction. It also separates the surface's view contract from
+internal session state. These are implementation proposals, not adopted
+protocol changes; version `0` and capability declarations are unchanged.
+
 ## Capabilities
 
 An adapter declares what it can do. The surface reads these declarations and

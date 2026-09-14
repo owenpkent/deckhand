@@ -149,6 +149,13 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 
 - [ ] Design the daemon's process lifecycle (start on login, restart on
       crash, single instance).
+- [ ] Review and implement the staged
+      [architecture hardening proposal](docs/ARCHITECTURE_HARDENING_PLAN.md):
+      duplicate-safe operation tracking, a production mutation controller,
+      explicit scan completeness, stable identity and view contracts,
+      isolated reveal execution, and bounded lifecycle and I/O. The plan
+      records acceptance tests and the newly reproduced duplicate-child
+      completion defect; this item is not an implementation claim.
 - [x] Implement the hook shim: the small program Claude Code calls, per
       `docs/CLAUDE_CODE_ADAPTER.md`. Done 2026-08-02: `shim/`, std-only,
       reads stdin, POSTs to the daemon's loopback port with the token

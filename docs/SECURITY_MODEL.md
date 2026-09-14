@@ -18,6 +18,13 @@ must prove request identity, safe native handback, credential handling,
 and reconnect behavior before any capability is enabled. This plan does
 not extend today's permission authority or weaken the fail-to-ask rule.
 
+The proposed [architecture hardening plan](ARCHITECTURE_HARDENING_PLAN.md)
+covers observation reliability: contact-file ownership, bounded ingest,
+atomic persistence, and a smaller surface data contract. It adds no
+permission-decision channel or write authority. Its lifecycle and
+transport changes need implementation tests before their guarantees can
+be treated as built; the fail-to-ask rule remains the same.
+
 ## Assets
 
 | Asset | Why it matters |
