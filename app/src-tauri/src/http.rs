@@ -3,12 +3,18 @@
 // local attacker; in Phase 1 nothing here can act, only observe, and the
 // response never carries a decision.
 
+use std::io::Read;
 use std::sync::mpsc::Sender;
 
 pub struct HttpServer {
     pub port: u16,
     pub token: String,
 }
+
+/// Ceiling on one ingest request body. Hook payloads are prompts and
+/// tool inputs, never anything close to this; the limit exists only to
+/// stop a malformed or hostile POST from growing memory without bound.
+const MAX_BODY_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Start the ingest server on an ephemeral loopback port. Each accepted
 /// hook payload is sent up the channel; the daemon thread owns all state.
@@ -35,17 +41,30 @@ pub fn start(events: Sender<serde_json::Value>) -> Option<HttpServer> {
                     404
                 } else {
                     let mut body = String::new();
-                    let _ = request.as_reader().read_to_string(&mut body);
-                    // Tolerate a UTF-8 BOM: PowerShell test harnesses
-                    // prepend one when piping into the shim, and
-                    // serde_json rejects it.
-                    let body = body.trim_start_matches('\u{feff}');
-                    match serde_json::from_str::<serde_json::Value>(body) {
-                        Ok(v) => {
-                            let _ = events.send(v);
-                            204
+                    // Read at most one byte past the limit: that extra
+                    // byte is what tells an exactly-at-limit body apart
+                    // from an over-limit one without ever buffering more
+                    // than MAX_BODY_BYTES + 1.
+                    let _ = request
+                        .as_reader()
+                        .take(MAX_BODY_BYTES + 1)
+                        .read_to_string(&mut body);
+                    if body.len() as u64 > MAX_BODY_BYTES {
+                        // Over the cap: drop the event outright rather
+                        // than parse and apply a truncated body.
+                        413
+                    } else {
+                        // Tolerate a UTF-8 BOM: PowerShell test harnesses
+                        // prepend one when piping into the shim, and
+                        // serde_json rejects it.
+                        let body = body.trim_start_matches('\u{feff}');
+                        match serde_json::from_str::<serde_json::Value>(body) {
+                            Ok(v) => {
+                                let _ = events.send(v);
+                                204
+                            }
+                            Err(_) => 400,
                         }
-                        Err(_) => 400,
                     }
                 };
                 let _ = request.respond(tiny_http::Response::empty(status));
@@ -68,7 +87,7 @@ fn random_token() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
+    use std::io::Write;
     use std::net::TcpStream;
     use std::time::Duration;
 
@@ -161,6 +180,36 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let server = start(tx).expect("start the ingest server");
         let status = post(server.port, "/hook", Some(&server.token), "X-DECKHAND-TOKEN", br#"{"a":3}"#);
+        assert_eq!(status, 204);
+        assert!(rx.recv_timeout(Duration::from_millis(500)).is_ok());
+    }
+
+    #[test]
+    fn a_body_over_the_cap_gives_413_and_nothing_arrives() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        // One byte past the cap: the smallest body that must be rejected.
+        let oversized = vec![b'0'; (MAX_BODY_BYTES + 1) as usize];
+        let status = post(server.port, "/hook", Some(&server.token), "X-Deckhand-Token", &oversized);
+        assert_eq!(status, 413);
+        assert!(
+            rx.recv_timeout(Duration::from_millis(200)).is_err(),
+            "an oversized body must never reach the channel, even in part"
+        );
+    }
+
+    #[test]
+    fn a_body_exactly_at_the_cap_is_still_accepted() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = start(tx).expect("start the ingest server");
+        // Pad valid JSON out to exactly MAX_BODY_BYTES with leading
+        // whitespace, which serde_json ignores; pins the cap check at
+        // its boundary rather than merely somewhere below it.
+        let json = br#"{"a":1}"#;
+        let mut body = vec![b' '; MAX_BODY_BYTES as usize - json.len()];
+        body.extend_from_slice(json);
+        assert_eq!(body.len() as u64, MAX_BODY_BYTES);
+        let status = post(server.port, "/hook", Some(&server.token), "X-Deckhand-Token", &body);
         assert_eq!(status, 204);
         assert!(rx.recv_timeout(Duration::from_millis(500)).is_ok());
     }
