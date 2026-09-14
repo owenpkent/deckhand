@@ -236,6 +236,14 @@ grey until a hook for it actually arrives. That is a smaller claim than the
 one [ADR-017](DECISIONS.md#adr-017) made, and it is the one the observation
 supports.
 
+The daemon tracks that wait as `heard` on the session: false at binding,
+whether by enumeration or by restoring from disk, and set true on the
+first hook event received in this run. The state value stays `UNKNOWN`
+either way, so this is bookkeeping for the surface's word, not a new state;
+the row itself reads "not heard yet" instead of "unknown" for exactly the
+session this paragraph describes, per
+[ADR-029](DECISIONS.md#adr-029) and [UI_SPEC.md](UI_SPEC.md#row-anatomy).
+
 A bound session leaves the list when it ends, or when a *successful*
 enumeration run no longer lists it and it has had no hook event for 60
 seconds. A failed enumeration call (a non-zero exit that is not the known
@@ -421,8 +429,16 @@ extended-style pass at setup, is what the Phase 1 window ships. See
 [DECISIONS.md](DECISIONS.md#adr-002).
 
 The window itself is a vertical list, about 360 logical pixels wide, with
-its height following the row count at 48 px per row, clamped into the
-monitor's work area so it can never render partly off-screen. A saved
+its height following the row count at 64 px per row plus a 64 px header
+([ADR-029](DECISIONS.md#adr-029); the layout was 48 px and 56 px until
+then), clamped into the monitor's work area so it can never render partly
+off-screen. Since [ADR-030](DECISIONS.md#adr-030) the row count that
+sizing uses is `visible_row_count`, the visible rows once the Hide grey
+filter is applied, not the bound count; the `T_unknown` watchdog (see
+[Liveness, by open operation](#liveness-by-open-operation)) that can move
+a session into `unknown` while the filter is on routes through the same
+resize path, so a session going quiet under a hidden filter shrinks the
+window exactly as toggling the control would. A saved
 position is checked against the monitors actually connected at startup
 before it is trusted: a position saved on a monitor that is no longer
 attached is discarded in favour of a position inside the current work
@@ -442,7 +458,7 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 
 | Data | Where | Notes |
 | --- | --- | --- |
-| Settings | Local config directory, JSON | Portable, hand-editable |
+| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown`, the Hide grey toggle's state ([ADR-030](DECISIONS.md#adr-030)); a missing field or a corrupt file loads as `false` |
 | Session bindings | Same | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
 | Session transcripts | Not stored | Deckhand reads them where they already are and copies nothing |

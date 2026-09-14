@@ -36,10 +36,12 @@ plus the hook shim, building and passing their tests, with the
 observation pipeline proven end to end against live sessions.
 [ADR-028](docs/DECISIONS.md#adr-028) (2026-09-13) narrowed the surface
 to a session list plus Move and Quit, and replaced the six-slot binding
-with an auto-binding, unbounded list; the code implements that list,
-and on its first run bound ten live sessions across four repos. One
-Phase 0 item also stays open alongside it: hook payload validation
-against a live install has
+with an auto-binding, unbounded list; [ADR-030](docs/DECISIONS.md#adr-030),
+the same day, added a third header control, Hide grey, that filters
+`unknown` rows out of the list and shows how many it hid on the button
+itself. The code implements both, and on its first run bound ten live
+sessions across four repos. One Phase 0 item also stays open alongside
+it: hook payload validation against a live install has
 ten of the twelve documented events observed, with `Notification` and
 `StopFailure` still unseen.
 
@@ -121,10 +123,12 @@ for what was planned and why it was cut.
 
 These are **design mockups**, not screenshots, and they predate
 [ADR-028](docs/DECISIONS.md#adr-028) (2026-09-13), which narrowed the
-target to a vertical session list with only Move and Quit in the header.
-The mockups below still show the wider control set from before that
-change: six tiles in a horizontal strip, command keys, a stick, a dial,
-talk and send. None of that is the current design. Where a mockup and
+target to a vertical session list with Move and Quit in the header, and
+[ADR-030](docs/DECISIONS.md#adr-030), the same day, which added a third
+header control, Hide grey. The mockups below still show the wider
+control set from before both changes: six tiles in a horizontal strip,
+command keys, a stick, a dial, talk and send. None of that is the
+current design. Where a mockup and
 [docs/UI_SPEC.md](docs/UI_SPEC.md) disagree, the spec wins; treat the
 images as historical until they are redrawn.
 

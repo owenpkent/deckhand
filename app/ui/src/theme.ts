@@ -19,8 +19,8 @@ export interface Theme {
 }
 
 export const dark: Theme = {
-  bg: "#14161a",
-  tile: "#1e2128",
+  bg: "#0f1114",
+  tile: "#1a1d22",
   tileBorder: "#3a3f47",
   text: "#f2f4f6",
   subtext: "#b8c2cc",

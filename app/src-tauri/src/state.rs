@@ -84,6 +84,12 @@ pub struct Session {
     child_ids: Vec<String>,
     pub open_ops: Vec<OpenOp>,
     pub last_event_at_ms: i64,
+    /// True once any hook event has arrived for this session in this
+    /// run. Separates the two roads to unknown for the surface's state
+    /// word: bound by enumeration or restored from disk and never heard
+    /// from, versus heard from and then silent past `T_unknown`. Neither
+    /// is a guess, and neither changes the colour.
+    pub heard: bool,
     pub unread_since_ms: Option<i64>,
     /// A turn ended while children were live; green arrives when the
     /// ledger empties (docs/UI_SPEC.md#the-child-ledger-and-complete).
@@ -112,6 +118,7 @@ impl Session {
             child_ids: Vec::new(),
             open_ops: Vec::new(),
             last_event_at_ms: now_ms,
+            heard: false,
             unread_since_ms: None,
             pending_complete: false,
         }
@@ -164,6 +171,7 @@ impl Session {
     /// takes no state change from an event it does not understand.
     pub fn apply_hook(&mut self, payload: &Value, now_ms: i64) -> bool {
         self.last_event_at_ms = now_ms;
+        self.heard = true;
 
         if let Some(m) = payload.get("permission_mode").and_then(Value::as_str) {
             self.permission_mode = Some(m.to_string());
@@ -648,6 +656,7 @@ mod tests {
         assert!(!x.tick(T_UNKNOWN_MS));
         assert!(x.tick(T_UNKNOWN_MS + 2));
         assert_eq!(x.state, SessionState::Unknown);
+        assert!(x.heard, "a timed-out session was heard from; the surface words it apart from never-heard");
         // Any authoritative event leaves unknown.
         ev(&mut x, T_UNKNOWN_MS + 3, json!({"hook_event_name": "UserPromptSubmit"}));
         assert_eq!(x.state, SessionState::Thinking);
@@ -657,6 +666,7 @@ mod tests {
     fn a_session_first_seen_by_enumeration_is_unknown_not_idle() {
         let x = Session::new("enumerated".into(), 5);
         assert_eq!(x.state, SessionState::Unknown, "never guess idle");
+        assert!(!x.heard, "no hook event has arrived yet");
     }
 
     #[test]

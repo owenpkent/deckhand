@@ -60,7 +60,18 @@ test("styles.css has a row [data-state] rule for every session state", () => {
 
 test("unknown and ended rows are marked dashed, a shape difference, not colour alone", () => {
   const block = ruleBlock('.row[data-state="unknown"],\n.row[data-state="ended"]');
-  assert.match(block, /border-left-style:\s*dashed/);
+  assert.match(block, /outline:[^;]*dashed/);
+});
+
+test("row and header heights match ROW_H_LOGICAL and HEADER_H_LOGICAL in window.rs", () => {
+  // The daemon sizes the window from those constants; a mismatch spills
+  // the list into a scrollbar or leaves dead space under the last row.
+  const rs = readFileSync(path.join(here, "../../../src-tauri/src/window.rs"), "utf8");
+  const rowRs = /ROW_H_LOGICAL: f64 = (\d+)/.exec(rs);
+  const headerRs = /HEADER_H_LOGICAL: f64 = (\d+)/.exec(rs);
+  assert.ok(rowRs && headerRs, "constants not found in window.rs");
+  assert.match(ruleBlock(".row"), new RegExp(`min-height:\\s*${rowRs![1]}px`));
+  assert.match(ruleBlock("#header"), new RegExp(`height:\\s*${headerRs![1]}px`));
 });
 
 // ---- 44 px minimum hit target (docs/ACCESSIBILITY.md) --------------------

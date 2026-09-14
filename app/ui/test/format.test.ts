@@ -12,6 +12,9 @@ import {
   GLYPHS,
   isRevealSuccess,
   STATE_WORDS,
+  stateWord,
+  summaryCounts,
+  unknownCount,
 } from "../src/format.js";
 import type { SessionState } from "../src/types.js";
 
@@ -134,4 +137,56 @@ test("isRevealSuccess is false for a found-but-refused miss", () => {
 
 test("isRevealSuccess is false for an unbound row", () => {
   assert.equal(isRevealSuccess("No session is bound to this row."), false);
+});
+
+// ---- summaryCounts ------------------------------------------------------------
+
+test("summaryCounts keeps only non-zero header states, in display order", () => {
+  const states: SessionState[] = ["thinking", "idle", "needs_input", "thinking", "ended", "complete"];
+  assert.equal(
+    JSON.stringify(summaryCounts(states)),
+    JSON.stringify([
+      ["needs_input", 1],
+      ["thinking", 2],
+      ["complete", 1],
+    ])
+  );
+  assert.equal(summaryCounts([]).length, 0);
+});
+
+// ---- stateWord ------------------------------------------------------------------
+
+test("stateWord says not heard yet only for an unknown session no hook has spoken for", () => {
+  assert.equal(stateWord({ state: "unknown", heard: false }), "not heard yet");
+  assert.equal(stateWord({ state: "unknown", heard: true }), "unknown");
+  for (const state of STATES) {
+    if (state === "unknown") continue;
+    assert.equal(stateWord({ state, heard: false }), STATE_WORDS[state]);
+  }
+});
+
+// ---- unknownCount ---------------------------------------------------------
+
+test("unknownCount counts only tiles whose session state is unknown", () => {
+  assert.equal(
+    unknownCount([
+      { session: { state: "unknown" } },
+      { session: { state: "idle" } },
+      { session: { state: "unknown" } },
+      { session: { state: "thinking" } },
+    ]),
+    2
+  );
+});
+
+test("unknownCount is zero when there are no unknown tiles", () => {
+  assert.equal(unknownCount([{ session: { state: "idle" } }, { session: { state: "complete" } }]), 0);
+});
+
+test("unknownCount is zero for an empty tile list", () => {
+  assert.equal(unknownCount([]), 0);
+});
+
+test("unknownCount treats a null session (defensive-only row) as not unknown", () => {
+  assert.equal(unknownCount([{ session: null }, { session: { state: "unknown" } }]), 1);
 });

@@ -109,9 +109,12 @@ whatever control is added next.
   interactive, measured at 100% surface scale. WCAG 2.2 asks 24 at AA and 44
   at AAA; Deckhand takes the AAA number as its floor and treats it as a build
   constant, not a guideline (the PR template asks about it by name).
-- Session rows are larger than the floor: 48 px minimum, per
+- Session rows are larger than the floor: 64 px, fixed, per
   [UI_SPEC.md](UI_SPEC.md#row-anatomy). The floor binds hardest on the
-  header, where Move and Quit are the smallest targets on the surface.
+  header, where Move and Quit (48 px wide) and Hide grey (56 px wide,
+  [ADR-030](DECISIONS.md#adr-030)) are the smallest targets on the
+  surface; all three still hold the 44 px floor on the dimension that
+  matters, height.
 - **Surface scale from 100% to 300%**, everything scaling together. At 300%
   on a 1080p screen, the header and at least a few rows must still render
   legibly; if a layout cannot survive that, the layout is wrong.
@@ -139,8 +142,19 @@ colour is the fastest channel, never the only one:
 | Needs input | Amber | Hand | Waiting on you |
 | Complete | Green | Check | Done, unread |
 | Error | Red | Cross | Problem |
-| Unknown | Grey | Question, hatched fill | Unknown |
+| Unknown | Grey | Question, hatched fill | Not heard yet, or Unknown |
 | Ended or unbound | None | Dashed outline | Empty |
+
+Unknown carries two labels for the one state: "Not heard yet" for a session
+bound by enumeration or restored from disk that no hook has spoken for yet
+this run, and "Unknown" for one that had spoken and then gone quiet past
+`T_unknown`. Colour, glyph, and dashed outline are identical between the
+two; only the word differs, so the distinction still reaches glyph-only and
+colour-blind modes without adding a channel ([ADR-029](DECISIONS.md#adr-029)).
+Unknown rows are also dimmer than the rest of the list, though deliberately
+less dim than an ended row: glyph and state word go to 75% grey toward the
+background, and the name drops from bold to regular weight at 72% text
+colour.
 
 Amber can carry a kind, a permission request or a question, at the protocol
 level. Should a future control ever key off it, that distinction would have

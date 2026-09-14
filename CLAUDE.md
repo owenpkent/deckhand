@@ -9,10 +9,11 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
 - **What:** A software reimplementation of the Codex Micro macropad as an
   always-on-top, mouse-only control surface for Claude Code sessions. An
   ordered list of session rows (colour, glyph, name, state word), click
-  to select and raise, plus Move and Quit in the header. Approve and
-  deny via the `PreToolUse` hook are Phase 2 and not currently planned
-  on the surface (ADR-028); the dial, stick, talk, and layers this
-  overview used to list here are removed by the same decision.
+  to select and raise, plus a Hide grey toggle, Move, and Quit in the
+  header (ADR-030). Approve and deny via the `PreToolUse` hook are
+  Phase 2 and not currently planned on the surface (ADR-028); the dial,
+  stick, talk, and layers this overview used to list here are removed
+  by the same decision.
 - **Status:** Phase 1, observation only, started 2026-08-02. The code
   lives in `app/` (daemon plus surface, one Tauri application) and
   `shim/`; `spikes/` is frozen Phase 0 evidence. Nothing has write
@@ -103,7 +104,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 029.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 031.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -152,7 +153,9 @@ the window spike pass that Phase 1's window builds on. ADR-027 folded
 the raise into the tile click: selecting a session brings its window
 forward. ADR-028 then cut the surface down to that session list plus
 Move and Quit, replacing the six-slot binding with an auto-binding,
-unbounded list; `app/` implements that list.
+unbounded list; ADR-030 added a third header control, Hide grey, that
+filters `unknown` rows out of the list and shows how many it hid on the
+button itself; `app/` implements both.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

@@ -50,6 +50,43 @@ struct SavedBinding {
     label: String,
 }
 
+/// The header's grey-hiding toggle. `#[serde(default)]` matters here: a
+/// file written before this setting existed still parses, and loads as
+/// false, same as no file at all.
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct Settings {
+    #[serde(default)]
+    pub hide_unknown: bool,
+}
+
+pub fn save_hide_unknown(hide_unknown: bool) {
+    if let Some(dir) = data_dir() {
+        save_hide_unknown_in(&dir, hide_unknown);
+    }
+}
+
+pub fn save_hide_unknown_in(dir: &Path, hide_unknown: bool) {
+    if let Ok(body) = serde_json::to_string(&Settings { hide_unknown }) {
+        let _ = fs::write(dir.join("settings.json"), body);
+    }
+}
+
+/// Defaults to false with no file, a corrupt file, or a file predating
+/// this field: none of those are a guess, they are all the same "never
+/// asked to hide anything" starting point.
+pub fn load_hide_unknown() -> bool {
+    let Some(dir) = data_dir() else { return false };
+    load_hide_unknown_in(&dir)
+}
+
+pub fn load_hide_unknown_in(dir: &Path) -> bool {
+    fs::read_to_string(dir.join("settings.json"))
+        .ok()
+        .and_then(|body| serde_json::from_str::<Settings>(&body).ok())
+        .map(|s| s.hide_unknown)
+        .unwrap_or(false)
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct WindowPos {
     pub x: i32,
@@ -274,6 +311,40 @@ mod tests {
         load_bindings_in(&dir, &mut reg, 1);
         assert!(reg.sessions.is_empty());
         assert!(reg.bindings.is_empty());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn hide_unknown_round_trips() {
+        let dir = temp_dir();
+        save_hide_unknown_in(&dir, true);
+        assert!(load_hide_unknown_in(&dir));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn hide_unknown_defaults_false_with_no_file() {
+        let dir = temp_dir();
+        assert!(!load_hide_unknown_in(&dir));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn an_older_settings_file_missing_the_field_loads_as_false() {
+        let dir = temp_dir();
+        fs::write(dir.join("settings.json"), "{}").unwrap();
+        assert!(
+            !load_hide_unknown_in(&dir),
+            "serde default must cover a settings.json saved before this field existed"
+        );
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn corrupt_settings_json_loads_as_false_rather_than_panicking() {
+        let dir = temp_dir();
+        fs::write(dir.join("settings.json"), "not json").unwrap();
+        assert!(!load_hide_unknown_in(&dir));
         cleanup(&dir);
     }
 }

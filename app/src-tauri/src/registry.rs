@@ -32,6 +32,10 @@ pub struct Registry {
     /// and reveal_session take.
     pub bindings: Vec<String>,
     pub selected: Option<usize>,
+    /// The header's grey toggle. Owned here so `snapshot` can report it
+    /// and so a resize can be sized off the visible row count; persisted
+    /// by persist.rs, not here.
+    pub hide_unknown: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -47,6 +51,9 @@ pub struct TileSnapshot {
 pub struct Snapshot {
     pub tiles: Vec<TileSnapshot>,
     pub now_ms: i64,
+    /// Mirrors `Registry::hide_unknown`. Tiles are never filtered out of
+    /// this list on account of it; the surface decides what to draw.
+    pub hide_unknown: bool,
 }
 
 impl Registry {
@@ -222,6 +229,7 @@ impl Registry {
                 })
                 .collect(),
             now_ms,
+            hide_unknown: self.hide_unknown,
         }
     }
 }
@@ -391,6 +399,16 @@ mod tests {
     fn snapshot_on_an_empty_registry_has_no_tiles() {
         let r = Registry::default();
         assert!(r.snapshot(1).tiles.is_empty());
+    }
+
+    #[test]
+    fn snapshot_carries_hide_unknown_and_still_lists_every_tile() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.hide_unknown = true;
+        let snap = r.snapshot(2);
+        assert!(snap.hide_unknown);
+        assert_eq!(snap.tiles.len(), 1, "hide_unknown must not remove a tile from the snapshot itself");
     }
 
     #[test]

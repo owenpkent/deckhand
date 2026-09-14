@@ -5,6 +5,17 @@
    never the only channel for a session's state: every row also carries
    a glyph and a state word. */
 
+/* Bundled, not a system face: Atkinson Hyperlegible Next is drawn for
+   low-vision reading. Latin subset, variable weight, SIL OFL (see
+   fonts/OFL.txt). Anything outside the subset falls back to Segoe UI. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("./fonts/AtkinsonHyperlegibleNext-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: block;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -17,7 +28,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
   overflow: hidden;
 }
 
@@ -32,24 +43,30 @@ body {
   opacity: 0.55;
 }
 
-/* ---- Header: drag grip, Move, Quit ---------------------------------- */
+.glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Header: drag grip, state counts, Move, Quit ---------------------- */
 
 #header {
   display: flex;
   align-items: stretch;
-  gap: 8px;
-  /* 56px total, matching HEADER_H_LOGICAL in window.rs: 44px controls
+  gap: 6px;
+  /* 64px total, matching HEADER_H_LOGICAL in window.rs: 52px controls
      plus 6px above and below. A taller header than the daemon sizes for
      spills into the list and puts a scrollbar on a list that fits. */
-  box-sizing: border-box;
-  height: 56px;
+  height: 64px;
   padding: 6px;
   flex: 0 0 auto;
 }
 
 #grip {
   width: 14px;
-  border-radius: 7px;
+  flex: 0 0 auto;
+  border-radius: 4px;
   background: repeating-linear-gradient(
     0deg,
     var(--tile),
@@ -60,12 +77,59 @@ body {
   cursor: grab;
 }
 
-.side-btn {
+/* Read-only counts of the states worth a glance (waiting, error,
+   thinking, complete). Not a control: clicking it does nothing, and each
+   count carries its state's glyph as well as its colour. */
+#summary {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+  overflow: hidden;
+}
+
+.count {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 6px 0 5px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--ring) 18%, transparent);
+  color: color-mix(in srgb, var(--ring) 70%, var(--text));
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.count .glyph {
+  width: 15px;
+  height: 15px;
+}
+
+.count[data-state="needs_input"] {
+  --ring: var(--c-needs-input);
+}
+.count[data-state="error"] {
+  --ring: var(--c-error);
+}
+.count[data-state="thinking"] {
+  --ring: var(--c-thinking);
+}
+.count[data-state="complete"] {
+  --ring: var(--c-complete);
+}
+
+.side-btn {
+  width: 48px;
+  flex: 0 0 auto;
   min-height: 44px;
-  border-radius: 8px;
-  border: 1px solid var(--tile-border);
-  background: var(--tile);
+  border: none;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 6%, var(--tile));
   color: var(--text);
   font-family: inherit;
   cursor: pointer;
@@ -73,16 +137,37 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  gap: 2px;
+}
+
+#grey {
+  width: 56px;
+}
+
+.side-btn .side-glyph {
+  font-size: 18px;
+  line-height: 1;
+}
+
+#grey .glyph {
+  width: 18px;
+  height: 18px;
+  color: var(--c-unknown);
 }
 
 .side-btn .side-label {
-  font-size: 10px;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--subtext);
 }
 
 .side-btn:active {
   background: var(--tile-border);
+}
+
+.side-btn[aria-pressed="true"] {
+  background: var(--tile-border);
+  box-shadow: inset 0 0 0 2px var(--text);
 }
 
 /* ---- Session list ---------------------------------------------------- */
@@ -95,19 +180,24 @@ body {
   flex-direction: column;
 }
 
+/* 64px including the 2px ground-coloured bottom border that separates
+   rows, matching ROW_H_LOGICAL in window.rs. */
 .row {
   position: relative;
-  min-height: 48px;
+  min-height: 64px;
   flex: 0 0 auto;
   width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 12px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-areas:
+    "glyph name"
+    "glyph state";
+  column-gap: 14px;
+  align-content: center;
+  padding: 8px 14px;
   border: none;
-  border-left: 4px solid var(--ring, var(--tile-border));
-  border-bottom: 1px solid var(--tile-border);
-  background: var(--tile);
+  border-bottom: 2px solid var(--bg);
+  background: color-mix(in srgb, var(--ring, var(--tile-border)) 14%, var(--tile));
   color: var(--text);
   font-family: inherit;
   cursor: pointer;
@@ -115,44 +205,49 @@ body {
 }
 
 .row.selected {
-  background: var(--tile-border);
-  border-left-width: 6px;
+  box-shadow: inset 0 0 0 3px var(--text);
 }
 
 .row[data-state="idle"] {
   --ring: var(--c-idle);
+  background: color-mix(in srgb, var(--c-idle) 6%, var(--tile));
 }
 .row[data-state="thinking"] {
   --ring: var(--c-thinking);
 }
 .row[data-state="needs_input"] {
   --ring: var(--c-needs-input);
-  background: color-mix(in srgb, var(--c-needs-input) 15%, var(--tile));
+  background: color-mix(in srgb, var(--c-needs-input) 22%, var(--tile));
 }
 .row[data-state="complete"] {
   --ring: var(--c-complete);
-  background: color-mix(in srgb, var(--c-complete) 10%, var(--tile));
 }
 .row[data-state="error"] {
   --ring: var(--c-error);
-  background: color-mix(in srgb, var(--c-error) 15%, var(--tile));
+  background: color-mix(in srgb, var(--c-error) 22%, var(--tile));
 }
 .row[data-state="unknown"] {
   --ring: var(--c-unknown);
+  background: var(--tile);
 }
 .row[data-state="ended"] {
-  --ring: transparent;
+  --ring: var(--tile-border);
+  background: var(--bg);
 }
 
 .row[data-state="unknown"],
 .row[data-state="ended"] {
-  border-left-style: dashed;
+  /* Soft enough that a run of adjacent unknown rows reads as rows, not
+     as a stack of doubled dashed lines. */
+  outline: 2px dashed color-mix(in srgb, var(--ring) 32%, transparent);
+  outline-offset: -2px;
 }
 
 .row .glyph {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
+  grid-area: glyph;
+  align-self: center;
+  width: 30px;
+  height: 30px;
   color: var(--ring, var(--subtext));
 }
 
@@ -173,9 +268,10 @@ body {
 }
 
 .row-name {
-  font-size: 14px;
-  font-weight: 600;
-  flex: 1;
+  grid-area: name;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -183,30 +279,68 @@ body {
 }
 
 .row-state {
-  font-size: 12px;
-  color: var(--subtext);
+  grid-area: state;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--ring, var(--subtext)) 70%, var(--text));
   white-space: nowrap;
-  flex: 0 0 auto;
+}
+
+.row[data-state="ended"] .glyph,
+.row[data-state="ended"] .row-name,
+.row[data-state="ended"] .row-state {
+  color: color-mix(in srgb, var(--subtext) 60%, var(--bg));
+}
+
+/* Unknown steps back so live sessions stand out, but stays well above
+   ended: it may be a session that is really waiting on you and has not
+   spoken since Deckhand started. */
+.row[data-state="unknown"] .glyph,
+.row[data-state="unknown"] .row-state {
+  color: color-mix(in srgb, var(--c-unknown) 75%, var(--bg));
+}
+.row[data-state="unknown"] .row-name {
+  font-weight: 400;
+  color: color-mix(in srgb, var(--text) 72%, var(--bg));
+}
+
+/* A Reveal miss, shown for a few seconds in its own column so it never
+   covers the name or the state word. */
+.row:has(.row-note) {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "glyph name note"
+    "glyph state note";
 }
 
 .row-note {
-  position: absolute;
-  right: 12px;
-  bottom: 3px;
-  font-size: 11px;
-  color: var(--subtext);
-  background: var(--bg);
-  padding: 1px 6px;
+  grid-area: note;
+  align-self: center;
+  max-width: 170px;
+  margin-left: 10px;
+  padding: 3px 8px;
   border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
   pointer-events: none;
 }
 
 .row-empty {
-  min-height: 48px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--tile);
   color: var(--subtext);
-  font-size: 13px;
+  font-size: 15px;
   cursor: default;
 }

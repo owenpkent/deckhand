@@ -26,6 +26,36 @@ export const STATE_WORDS: Record<SessionState, string> = {
   unknown: "unknown",
 };
 
+// The word a row shows. Unknown has two roads in and says which one it
+// took: a session bound at startup that no hook has spoken for yet is
+// "not heard yet"; one that went silent past T_unknown stays "unknown".
+// Same state, same colour, same glyph (ADR-008).
+export function stateWord(s: { state: SessionState; heard: boolean }): string {
+  return s.state === "unknown" && !s.heard ? "not heard yet" : STATE_WORDS[s.state];
+}
+
+// The states the header counts, in display order: what needs a human
+// first, then what is running, then what finished. Idle, unknown, and
+// ended are left to the rows.
+export const SUMMARY_STATES: readonly SessionState[] = ["needs_input", "error", "thinking", "complete"];
+
+// Non-zero counts of SUMMARY_STATES among `states`, in SUMMARY_STATES
+// order.
+export function summaryCounts(states: readonly SessionState[]): [SessionState, number][] {
+  return SUMMARY_STATES.map((s): [SessionState, number] => [s, states.filter((x) => x === s).length]).filter(
+    ([, n]) => n > 0,
+  );
+}
+
+// Count of bound rows currently in the unknown state, either road in
+// (never heard from, or heard from and then silent past T_unknown).
+// Feeds the grey toggle's label and its all-hidden placeholder; takes
+// the minimal per-tile shape rather than the full TileSnapshot so it
+// stays DOM-free and easy to test.
+export function unknownCount(tiles: readonly { session: { state: SessionState } | null }[]): number {
+  return tiles.filter((t) => t.session?.state === "unknown").length;
+}
+
 // ---- Small helpers --------------------------------------------------
 
 export function fmtElapsed(fromMs: number, nowMs: number): string {

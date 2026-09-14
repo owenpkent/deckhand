@@ -217,7 +217,8 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       and its manual bind picker, command keys, stick, dial, talk and
       send placeholders, detail panel, layer strip, and corner badges
       with the session-list surface (one row per session: colour, glyph,
-      name, state word) and a header holding only Move and Quit.
+      name, state word) and a header holding Hide grey, Move, and Quit
+      (ADR-030 added Hide grey on top of ADR-028's Move and Quit).
 - [ ] Replace the six-slot manual binding with ADR-028's auto-binding:
       bind a session on its first hook event or enumeration hit, into an
       ordered, unbounded list; drop the null slots when loading a legacy
@@ -228,9 +229,9 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       hook event for 60 s; a failed enumeration must prune nothing
       (ADR-028).
 - [ ] Size and place the window per ADR-028: about 360 px wide, height
-      following the row count at 48 px per row, clamped to the monitor
-      work area, with a saved position validated against the monitors
-      actually connected at startup.
+      following the row count at 64 px per row plus a 64 px header
+      (ADR-029), clamped to the monitor work area, with a saved position
+      validated against the monitors actually connected at startup.
 - [ ] Exclude Deckhand's own window from the raise match (ADR-028).
 - [x] Register the shim in user-level Claude Code settings so sessions in
       every repo report state, not only this one (done on the owner's

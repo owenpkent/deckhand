@@ -35,10 +35,23 @@ fn emit_snapshot(app: &tauri::AppHandle, reg: &registry::Registry) {
     let _ = app.emit("deckhand://snapshot", reg.snapshot(now_ms()));
 }
 
+/// The row count actually on screen right now: every binding, minus the
+/// ones hidden because they are unknown and the grey toggle is on. Every
+/// resize must size off this, not `reg.bindings.len()`, so a toggle or a
+/// session crossing into or out of unknown resizes the window exactly
+/// like a binding appearing or disappearing always has.
+fn visible_rows(reg: &registry::Registry) -> usize {
+    window::visible_row_count(
+        reg.bindings.iter().filter_map(|id| reg.sessions.get(id)).map(|s| s.state),
+        reg.hide_unknown,
+    )
+}
+
 /// Everything that follows a registry mutation which may have changed
-/// the row count: persist the (now ordered) list, resize the window to
-/// match, and repaint. Selection alone does not need this (the row count
-/// is unchanged), so it calls `emit_snapshot` directly instead.
+/// the visible row count: persist the (now ordered) list, resize the
+/// window to match, and repaint. Selection alone does not need this (the
+/// visible row count is unchanged), so it calls `emit_snapshot` directly
+/// instead.
 ///
 /// Callers hold the registry lock, and sync commands take that same lock
 /// on the main thread, so the window calls must not block this thread on
@@ -46,9 +59,9 @@ fn emit_snapshot(app: &tauri::AppHandle, reg: &registry::Registry) {
 /// lock is long gone, with only the row count captured.
 fn after_change(app: &tauri::AppHandle, reg: &registry::Registry) {
     persist::save_bindings(reg);
-    let row_count = reg.bindings.len();
+    let row_count = visible_rows(reg);
     // Hook traffic calls this constantly; the window only needs touching
-    // when the row count actually moved.
+    // when the visible row count actually moved.
     if LAST_ROW_COUNT.swap(row_count, Ordering::SeqCst) != row_count {
         let handle = app.clone();
         let _ = app.run_on_main_thread(move || {
@@ -175,6 +188,16 @@ fn quit(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Flip the header's grey toggle, persist it, and let `after_change`
+/// repaint and resize off the now-different visible row count.
+#[tauri::command]
+fn toggle_hide_unknown(shared: State<Shared>, app: tauri::AppHandle) {
+    let mut reg = shared.0.lock().unwrap();
+    reg.hide_unknown = !reg.hide_unknown;
+    persist::save_hide_unknown(reg.hide_unknown);
+    after_change(&app, &reg);
+}
+
 /// Raise the host window of the session bound to a row. Returns a
 /// sentence the surface shows as a brief inline row note either way;
 /// Reveal never fails silently (docs/CONTROL_MAPPING.md).
@@ -273,7 +296,8 @@ fn main() {
             select_tile,
             quit,
             reveal_session,
-            cycle_position
+            cycle_position,
+            toggle_hide_unknown
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").expect("main window");
@@ -309,9 +333,13 @@ fn main() {
             }
 
             let shared = Arc::new(Mutex::new(registry::Registry::default()));
-            persist::load_bindings(&mut shared.lock().unwrap(), now_ms());
+            {
+                let mut reg = shared.lock().unwrap();
+                persist::load_bindings(&mut reg, now_ms());
+                reg.hide_unknown = persist::load_hide_unknown();
+            }
             app.manage(Shared(shared.clone()));
-            let initial_rows = shared.lock().unwrap().bindings.len();
+            let initial_rows = visible_rows(&shared.lock().unwrap());
             LAST_ROW_COUNT.store(initial_rows, Ordering::SeqCst);
             resize_for_rows(&window, initial_rows);
 
@@ -335,8 +363,12 @@ fn main() {
                 })
                 .expect("spawn apply thread");
 
-            // T_unknown watchdog. Liveness only: it never changes who is
-            // bound, so it repaints without touching persistence or size.
+            // T_unknown watchdog. Never changes who is bound, but can
+            // change who is visible: a session tipping into unknown
+            // while the grey toggle is on must shrink the window the
+            // same as a binding disappearing would, so this goes through
+            // after_change like any other registry mutation rather than
+            // emitting a snapshot on its own.
             let tick_handle = app.handle().clone();
             let tick_reg = shared.clone();
             std::thread::Builder::new()
@@ -345,7 +377,7 @@ fn main() {
                     std::thread::sleep(Duration::from_secs(2));
                     let mut reg = tick_reg.lock().unwrap();
                     if reg.tick(now_ms()) {
-                        emit_snapshot(&tick_handle, &reg);
+                        after_change(&tick_handle, &reg);
                     }
                 })
                 .expect("spawn tick thread");

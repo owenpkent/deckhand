@@ -13,13 +13,14 @@
 /// (`window_height`) and changes as sessions bind and unbind.
 pub const WINDOW_W_LOGICAL: f64 = 360.0;
 
-/// Header row: drag grip, Move, Quit.
-pub const HEADER_H_LOGICAL: f64 = 56.0;
+/// Header row: drag grip, state counts, Move, Quit. Must match
+/// `#header` in app/ui/styles.css.
+pub const HEADER_H_LOGICAL: f64 = 64.0;
 
-/// One session row. 48 is comfortably above the 44px accessibility
-/// floor (docs/ACCESSIBILITY.md); the floor itself is a minimum, not a
-/// target.
-pub const ROW_H_LOGICAL: f64 = 48.0;
+/// One session row, two lines of large type. 64 is well above the 44px
+/// accessibility floor (docs/ACCESSIBILITY.md); the floor itself is a
+/// minimum, not a target. Must match `.row` in app/ui/styles.css.
+pub const ROW_H_LOGICAL: f64 = 64.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
@@ -53,6 +54,19 @@ impl Rect {
 /// sitting in space that no longer exists.
 pub fn intersects(rect: Rect, area: Rect) -> bool {
     rect.x < area.right() && rect.right() > area.x && rect.y < area.bottom() && rect.bottom() > area.y
+}
+
+/// The row count actually on screen: every bound session, minus the
+/// ones sitting in `unknown` when `hide_unknown` is on. `window_height`
+/// takes this, not the raw binding count, so a toggle and a session
+/// crossing into or out of unknown both resize the window the same way
+/// a binding appearing or disappearing always has.
+pub fn visible_row_count(states: impl Iterator<Item = crate::state::SessionState>, hide_unknown: bool) -> usize {
+    if hide_unknown {
+        states.filter(|s| *s != crate::state::SessionState::Unknown).count()
+    } else {
+        states.count()
+    }
 }
 
 /// The window's height for a given row count: the header plus one row
@@ -140,9 +154,39 @@ pub fn default_rect(area: Rect, w: i32, h: i32) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::SessionState;
 
     fn area(x: i32, y: i32, w: i32, h: i32) -> Rect {
         Rect::new(x, y, w, h)
+    }
+
+    #[test]
+    fn visible_row_count_counts_every_row_when_not_hiding() {
+        let states = vec![SessionState::Idle, SessionState::Unknown, SessionState::Thinking];
+        assert_eq!(visible_row_count(states.into_iter(), false), 3);
+    }
+
+    #[test]
+    fn visible_row_count_excludes_unknown_rows_when_hiding() {
+        let states = vec![
+            SessionState::Idle,
+            SessionState::Unknown,
+            SessionState::Unknown,
+            SessionState::Thinking,
+        ];
+        assert_eq!(visible_row_count(states.into_iter(), true), 2);
+    }
+
+    #[test]
+    fn visible_row_count_is_zero_when_every_row_is_hidden() {
+        let states = vec![SessionState::Unknown, SessionState::Unknown];
+        assert_eq!(visible_row_count(states.into_iter(), true), 0);
+    }
+
+    #[test]
+    fn visible_row_count_of_an_empty_list_is_zero_either_way() {
+        assert_eq!(visible_row_count(std::iter::empty(), false), 0);
+        assert_eq!(visible_row_count(std::iter::empty(), true), 0);
     }
 
     #[test]

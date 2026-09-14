@@ -3,7 +3,9 @@
 Status: **accepted**. [ADR-028](DECISIONS.md#adr-028) narrowed the surface to
 a session list on 2026-09-13 and removed the command keys, the stick, the
 dial, talk, the detail panel, the bind picker, the layer strip, and the
-corner badges that earlier versions of this file described. What follows
+corner badges that earlier versions of this file described.
+[ADR-030](DECISIONS.md#adr-030), the same day, added a third header
+control, Hide grey, back on top of that narrower surface. What follows
 describes the current design. The retabling and the usage measurements that
 shaped the removed controls are preserved in the ADRs that ADR-028 names as
 superseded, not restated here.
@@ -116,11 +118,37 @@ timing lives in [ARCHITECTURE.md](ARCHITECTURE.md#observation-channels),
 since it is a daemon behaviour, not a control. There is no bind picker and no
 unbind action: nothing here is managed by hand.
 
-### Header: Move and Quit
+### Header: Hide grey, Move, and Quit
 
-The header carries exactly two controls. Move is the existing click-to-place
-alternative to dragging the window to a screen edge; drag also works, but is
-never required. Quit closes the daemon and the surface together.
+The header carries three controls, in order: Hide grey, Move, and Quit
+([ADR-030](DECISIONS.md#adr-030); before it, exactly two).
+
+Hide grey filters rows out of the list, not sessions out of the daemon.
+A single click flips the setting. Off, the control reads "Hide." On, it
+shows pressed and reads "Show N," where N is the number of rows currently
+in the `unknown` state, "not heard yet" and past `T_unknown` alike, so a
+hidden session is always counted and never simply disappears. If every
+bound session is hidden, the list shows one placeholder row, "N grey
+hidden," instead of the normal list. The header's own state-count summary
+is computed before this filter and never changes when the toggle does.
+The control's glyph is the same grey question mark the unknown state
+already uses, so it reads as "the grey one" on sight.
+
+The setting is the daemon's, not the surface's: it persists across
+restarts, and a session that leaves the `unknown` state while hidden
+reappears on its own, which moves every target below it without the
+owner having clicked anything. Because `heard`
+([ADR-029](DECISIONS.md#adr-029)) resets on every daemon restart, a
+session that genuinely needed the owner before the restart also renders
+`unknown` until a hook fires for it again, so hiding grey can hide a row
+that needs a human; "Show N" is the accepted mitigation for that, not a
+fix for it. See [ADR-030](DECISIONS.md#adr-030) for the full trade-off
+and the alternative, folding every grey row into one expandable row,
+that was considered and not chosen.
+
+Move is the existing click-to-place alternative to dragging the window to
+a screen edge; drag also works, but is never required. Quit closes the
+daemon and the surface together.
 
 ### What has no software equivalent
 
@@ -166,5 +194,6 @@ decision with a reason, recorded here so it is not silently re-litigated.
 
 The device calls them Agent Keys, Command Keys, the Dial, the Stick, the Mic
 Key, and the Codex Key. Deckhand uses **rows** for the session list and
-**Move** and **Quit** for the two header controls. None of the device's other
-names apply to anything on the current surface.
+**Hide grey** (labelled "Hide" or "Show N"), **Move**, and **Quit** for the
+three header controls. None of the device's other names apply to anything
+on the current surface.

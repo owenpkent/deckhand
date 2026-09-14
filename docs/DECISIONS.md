@@ -1017,3 +1017,176 @@ tracked as open work in `TODO.md`. The control mapping, the UI spec,
 the architecture document's binding and enumeration sections, the
 accessibility document's references to the removed controls, the
 roadmap, and the task list are updated in the same change.
+
+---
+
+<a id="adr-029"></a>
+## ADR-029: Taller rows, header counts, a bundled typeface
+
+Date: 2026-09-13
+
+**Context.** [ADR-028](#adr-028) cut the surface down to a session list
+earlier the same day, but the list itself still read as a spreadsheet: 10
+px labels, a single 4 px coloured edge carrying the whole state signal,
+and only three of the surface's seven states, needs input, error, and the
+child-ledger-gated complete, tinted at all. Nothing on the header said how
+many sessions needed attention without reading every row. The owner
+reviewed three mockups, Keycaps, Triage, and Large print, and picked a
+combination: Triage's header counts on top of Large print's taller,
+two-line rows.
+
+**Decision.** Rows grow to a fixed 64 px, no longer a 48 px minimum, and
+carry two lines: the session name, 17 px bold, over the state word in
+caps, with a 30 px glyph on the left. Every coloured state now tints the
+row's background toward its colour instead of only the edge: idle 6%,
+thinking and complete 14%, needs input and error 22%. Unknown and ended
+get a dashed outline instead of a tint. A selected row gets a 3 px inset
+outline in the text colour, on top of whatever the state already draws. A
+Reveal miss note moves into its own column at the right of the row, up to
+3 lines, instead of overlapping the state word.
+
+The header grows to match, 64 px (was 56), and gains a read-only summary
+between the drag grip and the two controls: one pill per state that
+currently has at least one session, each pairing that state's glyph and
+colour with a count, in a fixed order (waiting on you, error, thinking,
+complete; idle, unknown, and ended stay row-only). The summary reports;
+it does not select or filter, so the header still has exactly two
+controls, Move and Quit, unchanged. The window's initial height in
+`tauri.conf.json` follows, 128 px (was 104), matching one header plus one
+row at the new constants.
+
+The surface's type changes from the plain Segoe UI system font to
+Atkinson Hyperlegible Next, bundled rather than left to whatever happens
+to be installed, because it is drawn for low-vision reading. Only the
+latin subset ships, one variable-weight woff2 at
+`app/ui/fonts/AtkinsonHyperlegibleNext-latin.woff2`, licensed SIL OFL 1.1
+(`app/ui/fonts/OFL.txt`); anything outside that subset falls back to
+Segoe UI, as before.
+
+The empty list's text changes from "No sessions" to "Watching for
+sessions," to read as a state rather than a failure.
+
+**Context, continued.** A gap surfaced once the taller rows above were
+running against a real restart: every session that was open but quiet came
+back as `UNKNOWN`, identical to a session that had gone silent mid-turn,
+and a board with several sessions open read as one wall of grey with no
+way to tell which rows might really be waiting on the owner.
+
+**Decision, continued.** The daemon's `Session`
+(`app/src-tauri/src/state.rs`) gains `heard: bool`: false at creation,
+whether the session is bound by `claude agents --json` enumeration or
+restored from disk, and set true on any hook event received in this run.
+`stateWord()` in `app/ui/src/format.ts` reads it: an unknown row says "not
+heard yet" while `heard` is false, and "unknown" once it has been heard
+from and then gone quiet past `T_unknown`. The state, the colour, and the
+glyph are the same in both cases; ADR-008 is unchanged, only the row's own
+word now splits the two roads into it. Unknown rows also dim, short of
+ended: glyph and state word go to 75% grey toward the background, and the
+name drops from bold to regular weight at 72% text colour. Deliberately
+brighter than ended, because a session that has not been heard from since
+Deckhand restarted may still be one that is really waiting on the owner.
+
+**Consequences.** A 64 px row shows fewer sessions before the list
+scrolls than a 48 px one did; the owner accepted that trade for
+legibility. The bundled font is a new binary asset and licence file
+committed to the repository, not a new runtime dependency; it is a
+static asset with no network or execution behaviour, so nothing about it
+moves the trust boundary in [SECURITY_MODEL.md](SECURITY_MODEL.md).
+`ROW_H_LOGICAL` and `HEADER_H_LOGICAL` in `app/src-tauri/src/window.rs`
+and the CSS that draws the row and header are now pinned together by
+`styles.test.ts`, so one can no longer drift without the other;
+`format.test.ts` covers `summaryCounts`, the pure helper behind the
+header pills. [UI_SPEC.md](UI_SPEC.md), [ACCESSIBILITY.md](ACCESSIBILITY.md),
+[ARCHITECTURE.md](ARCHITECTURE.md), `CHANGELOG.md`, and `TODO.md` are
+updated to match in the same change. ADR-008's six colours and their
+meanings are unchanged; this entry only changes how much of each row
+they cover.
+
+`heard` is tested in `state.rs`; `stateWord()`'s two outcomes are tested in
+`format.test.ts`. It is a daemon bookkeeping field surfaced only as a word
+and a dimming rule, not a new state and not a new colour, so
+[ADR-008](#adr-008) and the session state machine in
+[ARCHITECTURE.md](ARCHITECTURE.md#the-session-state-machine) are unchanged;
+[UI_SPEC.md](UI_SPEC.md) and [ACCESSIBILITY.md](ACCESSIBILITY.md) are
+updated to match in the same change.
+
+---
+
+<a id="adr-030"></a>
+## ADR-030: A Hide grey toggle joins the header
+
+Date: 2026-09-13
+
+**Context.** [ADR-029](#adr-029)'s `heard` bookkeeping means any session
+bound by enumeration or restored from disk after a restart renders
+`unknown`, "not heard yet," until a hook actually arrives for it. With
+several repos now registered at the user level, that grey can be most of
+the list on a fresh start, and [ADR-028](#adr-028) left the header at
+exactly two controls, Move and Quit, with nothing to cut that noise
+besides waiting for hooks to arrive. The owner reviewed one alternative,
+folding every grey row into a single expandable row, and did not choose
+it: a plain show or hide toggle is simpler and leaves every row a real,
+individually clickable target once it is shown again.
+
+**Decision.** The header gains a third control, Hide grey, ordered: drag
+grip, the read-only state-count summary ([ADR-029](#adr-029), unchanged),
+Hide grey, Move, Quit. This supersedes only the "exactly two controls"
+line in [ADR-028](#adr-028)'s decision and its counterpart in
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md); everything else ADR-028
+decided, the list itself, auto-binding, and Move and Quit themselves,
+stands.
+
+A single click flips `Registry.hide_unknown`. Off, the control reads
+"Hide" and sits unpressed. On, it shows pressed, a 2 px inset outline
+echoing the row selection treatment, and its label switches to "Show N,"
+where N is the count of rows currently in the `unknown` state, both "not
+heard yet" and past `T_unknown`. Hidden sessions are always counted,
+never silently gone. If every bound session is hidden, the list shows one
+placeholder row, "N grey hidden," instead of the normal list or the
+"Watching for sessions" empty state. The header's own state-count pills
+are computed before this filter and do not change when it is toggled. The
+control's glyph is the same grey question mark [ADR-008](#adr-008)
+already draws for the unknown state, so the toggle reads as "the grey
+one" without needing its label read first.
+
+The daemon owns the setting, not the surface: `Registry.hide_unknown` in
+`app/src-tauri/src/registry.rs`, persisted in a new `settings.json` in
+the same data directory as `window.json` and `bindings.json`. A missing
+field or a corrupt file loads as `false`. The daemon sends the current
+value to the surface as `hideUnknown` on every snapshot; the snapshot
+itself is unchanged otherwise and still lists every bound session
+regardless of the setting, so the filtering is a rendering choice, not a
+narrower observation. `toggle_hide_unknown` is the Tauri command the
+surface calls on a click. The window's height, computed in
+`app/src-tauri/src/window.rs`, now follows the visible row count rather
+than the bound count, through a new `visible_row_count`, and the
+`T_unknown` watchdog
+([ARCHITECTURE.md](ARCHITECTURE.md#liveness-by-open-operation)) that can
+move a session into `unknown` while the toggle is on now routes through
+that same resize path, so a session timing out into a hidden row shrinks
+the window exactly as toggling the control would.
+
+Header geometry: the drag grip narrows to 14 px (was 18), Move and Quit
+narrow to 48 px wide (were 56), Hide grey is 56 px wide, and all three controls are at least 44 px
+tall, holding the [ACCESSIBILITY.md](ACCESSIBILITY.md#targets-and-sizing)
+floor. The count pills are tightened to make room in the fixed header
+width.
+
+**Consequences.** The accepted trade-off: because `heard` resets on every
+daemon restart ([ADR-029](#adr-029)), a session that was genuinely
+waiting on the owner before the restart also renders `unknown` until the
+owner acts in it and a hook fires, indistinguishable here from a session
+that simply has nothing to report. Hiding grey can therefore hide a
+session that needs a human. The "Show N" count is the mitigation, not a
+fix: it says how many rows are hidden, never claims that none of them
+matter, and a hidden session's row reappears, shifting every target
+below it, the moment that session speaks and its state moves off
+`unknown`. The owner accepted this knowingly on 2026-09-13 in exchange for
+a quieter list on a multi-repo restart.
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md), [UI_SPEC.md](UI_SPEC.md),
+[ACCESSIBILITY.md](ACCESSIBILITY.md), [ARCHITECTURE.md](ARCHITECTURE.md),
+`CHANGELOG.md`, and `TODO.md` are updated to match in the same change.
+ADR-008's six colours, ADR-027's
+click-to-select-and-raise, and ADR-029's row and header sizing are all
+unchanged; this entry only adds a third header control and a filter on
+top of what they already draw.

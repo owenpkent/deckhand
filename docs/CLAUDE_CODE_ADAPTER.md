@@ -517,7 +517,10 @@ Cold start, in order:
    `idle`: white is a claim that a session is sitting waiting for you, and
    this channel does not support that claim.
 3. A tile whose binding no enumeration explains stays `unknown` until an
-   event arrives for it. That is the correct answer, not a failure.
+   event arrives for it. That is the correct answer, not a failure. The
+   surface's row for that case reads "not heard yet" rather than "unknown",
+   since the daemon knows the two roads into this state apart even though
+   the state value itself is not ([ADR-029](DECISIONS.md#adr-029)).
 4. `~/.claude/projects/` is read only to populate the bind picker with recent
    sessions. It is the `internal` interface: it names things, it never infers
    state, and if the mangling changes tomorrow the only casualty is a

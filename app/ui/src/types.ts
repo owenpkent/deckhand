@@ -39,6 +39,7 @@ export interface SessionSnap {
   children: number;
   openOps: OpenOp[];
   lastEventAtMs: number;
+  heard: boolean;
   unreadSinceMs: number | null;
   pendingComplete: boolean;
 }
@@ -52,6 +53,7 @@ export interface TileSnapshot {
 export interface Snapshot {
   tiles: TileSnapshot[];
   nowMs: number;
+  hideUnknown: boolean;
 }
 
 // The pieces of the injected Tauri global this surface uses.
