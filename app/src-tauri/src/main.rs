@@ -9,9 +9,9 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use deckhand::{enumerate, http, persist, registry, reveal, reveal_queue, window};
+use deckhand::{enumerate, hook_status, http, installer, persist, registry, reveal, reveal_queue, runkey, window};
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -103,22 +103,47 @@ fn prepare_change(reg: &registry::Registry) -> PendingChange {
 fn after_change(app: &tauri::AppHandle, change: PendingChange) {
     persist::save_bindings_body(change.bindings_body);
     // Hook traffic calls this constantly; the window only needs touching
-    // when the visible row count actually moved.
-    if LAST_ROW_COUNT.swap(change.row_count, Ordering::SeqCst) != change.row_count {
-        let handle = app.clone();
-        let row_count = change.row_count;
-        let _ = app.run_on_main_thread(move || {
-            if let Some(win) = handle.get_webview_window("main") {
-                resize_for_rows(&win, row_count);
-            }
-        });
+    // when the visible row count actually moved. While the settings
+    // panel is open it owns the window's height instead of the session
+    // list (PANEL_ROW_COUNT, not change.row_count), so a hook event
+    // arriving mid-panel repaints the (hidden) list state without
+    // resizing the window out from under the panel the owner is
+    // looking at.
+    let row_count = if PANEL_OPEN.load(Ordering::SeqCst) { PANEL_ROW_COUNT } else { change.row_count };
+    if LAST_ROW_COUNT.swap(row_count, Ordering::SeqCst) != row_count {
+        queue_resize(app, row_count);
     }
     let _ = app.emit("deckhand://snapshot", change.snapshot);
+}
+
+/// Queues a resize to `row_count` rows on the main thread, exactly like
+/// `after_change` always has; pulled out so the settings panel's own
+/// open/close toggle can reuse the identical path (docs/DECISIONS.md#adr-033
+/// : "the existing resize path") instead of a second copy of it.
+fn queue_resize(app: &tauri::AppHandle, row_count: usize) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = handle.get_webview_window("main") {
+            resize_for_rows(&win, row_count);
+        }
+    });
 }
 
 /// Row count the window was last sized for; `usize::MAX` until the
 /// startup sizing in `setup` has run.
 static LAST_ROW_COUNT: AtomicUsize = AtomicUsize::new(usize::MAX);
+
+/// Row count the settings panel uses while it is open, replacing the
+/// session list: always on top, start with Windows, reset position,
+/// hide grey, hooks status, and repair, each a full row like a session
+/// row (docs/DECISIONS.md#adr-033).
+const PANEL_ROW_COUNT: usize = 6;
+
+/// Whether the settings panel is currently open. Pure surface
+/// navigation, not a persisted setting: it always starts closed, unlike
+/// `hide_unknown` and `always_on_top`, which are settings and survive a
+/// restart.
+static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
 
 /// The monitor's work area under the window right now, in physical
 /// pixels. `None` when the window has no monitor at all (a headless
@@ -236,6 +261,169 @@ fn toggle_hide_unknown(shared: State<Shared>, app: tauri::AppHandle) {
     after_change(&app, change);
 }
 
+/// Opens or closes the settings panel in place of the session list,
+/// resizing the window through the same `queue_resize` path every other
+/// row-count change uses. Returns the new open state so the gear
+/// button's pressed state and label follow the daemon's own idea of
+/// whether the panel is open, not an optimistic client guess.
+#[tauri::command]
+fn toggle_settings_panel(shared: State<Shared>, app: tauri::AppHandle) -> bool {
+    let open = !PANEL_OPEN.load(Ordering::SeqCst);
+    PANEL_OPEN.store(open, Ordering::SeqCst);
+    let row_count = if open { PANEL_ROW_COUNT } else { visible_rows(&shared.0.lock().unwrap()) };
+    LAST_ROW_COUNT.store(row_count, Ordering::SeqCst);
+    queue_resize(&app, row_count);
+    open
+}
+
+/// Everything the settings panel needs to render its rows besides
+/// `hide_unknown` (already on every session snapshot, so the panel's
+/// Hide grey row reuses that rather than duplicating it here).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsSnapshot {
+    always_on_top: bool,
+    start_with_windows: runkey::StartWithWindowsState,
+    hook_status: hook_status::HookStatus,
+    installer_available: bool,
+}
+
+/// This install's own exe path, as a plain string (a `PathBuf` does not
+/// serialise the way the surface expects, and every use here wants text
+/// anyway: the Run key value and hook-status shim comparison alike).
+fn this_exe_path() -> Option<String> {
+    std::env::current_exe().ok().map(|p| p.to_string_lossy().into_owned())
+}
+
+fn current_hook_status() -> hook_status::HookStatus {
+    let Some(exe) = std::env::current_exe().ok() else {
+        return hook_status::HookStatus::Unreadable;
+    };
+    let Some(shim) = hook_status::default_shim_path(&exe) else {
+        return hook_status::HookStatus::Unreadable;
+    };
+    hook_status::read_status(&shim.to_string_lossy())
+}
+
+fn build_settings_snapshot() -> SettingsSnapshot {
+    let always_on_top = persist::load_always_on_top();
+    let start_with_windows = match this_exe_path() {
+        Some(exe) => runkey::current_state(&exe),
+        None => runkey::StartWithWindowsState::Off,
+    };
+    let installer_available = std::env::current_exe()
+        .ok()
+        .and_then(|exe| installer::find_repo_root(&exe))
+        .is_some();
+    SettingsSnapshot {
+        always_on_top,
+        start_with_windows,
+        hook_status: current_hook_status(),
+        installer_available,
+    }
+}
+
+#[tauri::command]
+fn get_settings_snapshot() -> SettingsSnapshot {
+    build_settings_snapshot()
+}
+
+/// Applies the always-on-top setting to the real window: Tauri's own
+/// `set_always_on_top` for the topmost bit, then, since toggling
+/// topmost can reset it, a reapplication of the `WS_EX_NOACTIVATE` style
+/// ADR-025 depends on, so the window never steals focus in either mode.
+/// Turning it off also puts the window back in the taskbar
+/// (`set_skip_taskbar(false)`), since a board that is neither on top
+/// nor reachable from the taskbar could vanish behind everything else
+/// with no way back; turning it on restores whatever
+/// `tauri.conf.json`'s own `skipTaskbar` says for this window, `false`
+/// today, rather than assuming a value.
+fn apply_always_on_top(app: &tauri::AppHandle, on: bool) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    let _ = win.set_always_on_top(on);
+    #[cfg(windows)]
+    {
+        if let Ok(hwnd) = win.hwnd() {
+            win_style::apply_noactivate(hwnd.0 as isize);
+        }
+    }
+    if on {
+        let configured_skip = app
+            .config()
+            .app
+            .windows
+            .iter()
+            .find(|w| w.label == "main")
+            .map(|w| w.skip_taskbar)
+            .unwrap_or(false);
+        let _ = win.set_skip_taskbar(configured_skip);
+    } else {
+        let _ = win.set_skip_taskbar(false);
+    }
+}
+
+#[tauri::command]
+fn toggle_always_on_top(app: tauri::AppHandle) -> bool {
+    let now_on = !persist::load_always_on_top();
+    persist::save_always_on_top(now_on);
+    apply_always_on_top(&app, now_on);
+    now_on
+}
+
+#[tauri::command]
+fn toggle_start_with_windows() -> runkey::StartWithWindowsState {
+    match this_exe_path() {
+        Some(exe) => runkey::toggle(&exe),
+        None => runkey::StartWithWindowsState::Off,
+    }
+}
+
+/// Moves the window back to its default placement, the same one `setup`
+/// falls back to for a first run or a saved position that no longer
+/// intersects any connected monitor (`window::default_rect`): near the
+/// top-left margin of whichever monitor the window is on right now.
+/// Persists the result, so a restart does not silently undo the reset.
+#[tauri::command]
+fn reset_window_position(app: tauri::AppHandle) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    let Some(area) = current_work_area(&win) else { return };
+    let Ok(outer) = win.outer_size() else { return };
+    let target = window::default_rect(area, outer.width as i32, outer.height as i32);
+    let clamped = window::clamp_into(target, area);
+    let _ = win.set_position(tauri::PhysicalPosition::new(clamped.x, clamped.y));
+    persist::save_window_pos(clamped.x, clamped.y);
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepairResult {
+    outcome: installer::RepairOutcome,
+    hook_status: hook_status::HookStatus,
+}
+
+/// Reruns `scripts/install-hooks.ps1` against the running exe's own
+/// checkout, off the webview/event thread: `spawn_blocking`, exactly
+/// like `activate_session`'s own reveal wait, for the same reason (this
+/// can take real wall-clock time and must never freeze a click, a drag,
+/// or Quit while it runs). Bounded by `installer::REPAIR_TIMEOUT`. Takes
+/// no arguments from the webview; the repo root is found the same way
+/// `get_settings_snapshot`'s `installer_available` flag already found
+/// it, from the running exe, never from anything the caller supplies.
+#[tauri::command]
+async fn repair_hooks() -> Result<RepairResult, ()> {
+    let repo_root = std::env::current_exe().ok().and_then(|exe| installer::find_repo_root(&exe));
+    let Some(repo_root) = repo_root else {
+        return Ok(RepairResult {
+            outcome: installer::RepairOutcome::FailedToStart,
+            hook_status: current_hook_status(),
+        });
+    };
+    let outcome = tauri::async_runtime::spawn_blocking(move || installer::run_repair(&repo_root))
+        .await
+        .unwrap_or(installer::RepairOutcome::FailedToStart);
+    Ok(RepairResult { outcome, hook_status: current_hook_status() })
+}
+
 /// One intent, one session id (PR review: identity). Selects the row
 /// bound to `session_id` if it still exists (acknowledging its unread
 /// complete) and raises its host window, replacing the old two-call
@@ -308,7 +496,13 @@ fn main() {
             snapshot,
             activate_session,
             quit,
-            toggle_hide_unknown
+            toggle_hide_unknown,
+            toggle_settings_panel,
+            get_settings_snapshot,
+            toggle_always_on_top,
+            toggle_start_with_windows,
+            reset_window_position,
+            repair_hooks
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").expect("main window");
@@ -341,6 +535,15 @@ fn main() {
                     let hwnd = window.hwnd()?.0 as isize;
                     win_style::apply_noactivate(hwnd);
                 }
+            }
+
+            // The settings panel's always-on-top toggle persists across
+            // restarts; tauri.conf.json's own `alwaysOnTop: true` is
+            // only the first-run default, so a saved "off" has to be
+            // reapplied here before anything is visible, the same way a
+            // saved position and a saved hide_unknown already are.
+            if !persist::load_always_on_top() {
+                apply_always_on_top(app.handle(), false);
             }
 
             let shared = Arc::new(Mutex::new(registry::Registry::default()));

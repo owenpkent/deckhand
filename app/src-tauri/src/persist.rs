@@ -73,13 +73,28 @@ struct SavedBinding {
     label: String,
 }
 
-/// The header's grey-hiding toggle. `#[serde(default)]` matters here: a
-/// file written before this setting existed still parses, and loads as
-/// false, same as no file at all.
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+/// The header's grey-hiding toggle, and the settings panel's
+/// always-on-top switch ([ADR-033](../../../docs/DECISIONS.md#adr-033)).
+/// `#[serde(default)]` and `#[serde(default = "default_true")]` both
+/// matter here: a file written before either field existed still parses,
+/// `hide_unknown` loading as false and `always_on_top` loading as true,
+/// exactly the behaviour a file with no `settings.json` at all gets too.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Settings {
     #[serde(default)]
     pub hide_unknown: bool,
+    #[serde(default = "default_true")]
+    pub always_on_top: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { hide_unknown: false, always_on_top: true }
+    }
 }
 
 pub fn save_hide_unknown(hide_unknown: bool) {
@@ -88,8 +103,11 @@ pub fn save_hide_unknown(hide_unknown: bool) {
     }
 }
 
+/// Reads the rest of the file (`always_on_top`) before overwriting it,
+/// so toggling one setting never resets the other one to its default.
 pub fn save_hide_unknown_in(dir: &Path, hide_unknown: bool) {
-    if let Ok(body) = serde_json::to_string(&Settings { hide_unknown }) {
+    let always_on_top = load_always_on_top_in(dir);
+    if let Ok(body) = serde_json::to_string(&Settings { hide_unknown, always_on_top }) {
         let _ = write_atomic(&dir.join("settings.json"), &body);
     }
 }
@@ -103,11 +121,41 @@ pub fn load_hide_unknown() -> bool {
 }
 
 pub fn load_hide_unknown_in(dir: &Path) -> bool {
+    load_settings_in(dir).hide_unknown
+}
+
+pub fn save_always_on_top(always_on_top: bool) {
+    if let Some(dir) = data_dir() {
+        save_always_on_top_in(&dir, always_on_top);
+    }
+}
+
+/// Reads the rest of the file (`hide_unknown`) before overwriting it,
+/// for the same reason `save_hide_unknown_in` does.
+pub fn save_always_on_top_in(dir: &Path, always_on_top: bool) {
+    let hide_unknown = load_hide_unknown_in(dir);
+    if let Ok(body) = serde_json::to_string(&Settings { hide_unknown, always_on_top }) {
+        let _ = write_atomic(&dir.join("settings.json"), &body);
+    }
+}
+
+/// Defaults to true (the window starts always-on-top, matching
+/// `tauri.conf.json`) with no file, a corrupt file, or a file predating
+/// this field.
+pub fn load_always_on_top() -> bool {
+    let Some(dir) = data_dir() else { return true };
+    load_always_on_top_in(dir.as_path())
+}
+
+pub fn load_always_on_top_in(dir: &Path) -> bool {
+    load_settings_in(dir).always_on_top
+}
+
+fn load_settings_in(dir: &Path) -> Settings {
     fs::read_to_string(dir.join("settings.json"))
         .ok()
         .and_then(|body| serde_json::from_str::<Settings>(&body).ok())
-        .map(|s| s.hide_unknown)
-        .unwrap_or(false)
+        .unwrap_or_default()
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -447,6 +495,64 @@ mod tests {
         let dir = temp_dir();
         fs::write(dir.join("settings.json"), "not json").unwrap();
         assert!(!load_hide_unknown_in(&dir));
+        cleanup(&dir);
+    }
+
+    // ---- always_on_top ------------------------------------------------
+
+    #[test]
+    fn always_on_top_defaults_true_with_no_file() {
+        let dir = temp_dir();
+        assert!(load_always_on_top_in(&dir), "the window starts always-on-top per tauri.conf.json");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn always_on_top_round_trips() {
+        let dir = temp_dir();
+        save_always_on_top_in(&dir, false);
+        assert!(!load_always_on_top_in(&dir));
+        save_always_on_top_in(&dir, true);
+        assert!(load_always_on_top_in(&dir));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn an_older_settings_file_missing_always_on_top_loads_as_true() {
+        let dir = temp_dir();
+        // The exact shape save_hide_unknown_in wrote before this field
+        // existed: only hide_unknown.
+        fs::write(dir.join("settings.json"), r#"{"hide_unknown":true}"#).unwrap();
+        assert!(load_always_on_top_in(&dir), "serde default must cover a settings.json saved before this field existed");
+        assert!(load_hide_unknown_in(&dir), "the sibling field already in the file must still load");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn corrupt_settings_json_loads_always_on_top_as_true_rather_than_panicking() {
+        let dir = temp_dir();
+        fs::write(dir.join("settings.json"), "not json").unwrap();
+        assert!(load_always_on_top_in(&dir));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn toggling_hide_unknown_does_not_reset_always_on_top() {
+        let dir = temp_dir();
+        save_always_on_top_in(&dir, false);
+        save_hide_unknown_in(&dir, true);
+        assert!(!load_always_on_top_in(&dir), "saving hide_unknown must preserve the sibling setting already on disk");
+        assert!(load_hide_unknown_in(&dir));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn toggling_always_on_top_does_not_reset_hide_unknown() {
+        let dir = temp_dir();
+        save_hide_unknown_in(&dir, true);
+        save_always_on_top_in(&dir, false);
+        assert!(load_hide_unknown_in(&dir), "saving always_on_top must preserve the sibling setting already on disk");
+        assert!(!load_always_on_top_in(&dir));
         cleanup(&dir);
     }
 }
