@@ -243,6 +243,54 @@ This allowlist scopes to the *gating* hook only. Deckhand's observation hooks
 answer no permission decision, and may carry whatever their own event supports,
 `additionalContext` among it.
 
+## Phase 1 ingest hardening
+
+Added alongside a security-hardening pass on the loopback ingest path
+that rule 2 above already scopes:
+
+- **Content Security Policy.** `tauri.conf.json` sets `default-src
+  'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src
+  'self'; connect-src ipc: http://ipc.localhost` on the surface's
+  webview. The surface loads only its own bundled script, stylesheet,
+  and font, and talks to the daemon over Tauri's own IPC, so nothing in
+  this policy had to relax for anything real.
+- **A body cap on the ingest endpoint.** `http.rs` reads at most 8 MiB
+  of a POST body (`MAX_BODY_BYTES`), one byte over the cap included
+  only to tell "exactly at the cap" apart from "over it". A body over
+  the cap gets `413` and is dropped whole: never parsed, never
+  partially applied. Hook payloads are prompts and tool inputs, nowhere
+  near this size in practice; the cap exists only to stop a malformed
+  or hostile POST from growing the daemon's memory without bound.
+- **Constant-time token comparison.** The per-start ingest token (rule
+  2) used to be compared with `==`, which returns as soon as it finds a
+  mismatched byte. `http.rs` now walks every byte regardless of an
+  earlier mismatch, so the time a request takes no longer depends on
+  how many leading bytes of a guessed token were right.
+- **Reveal validates the folder before launching `code.cmd`.**
+  `reveal.rs`'s VS Code path reads a workspace folder out of
+  `~/.claude/ide/*.lock` (residual risk 3 below) and used to hand it
+  straight to `Command::new(code_cmd).arg(folder)`. It now refuses to
+  launch unless that string is an absolute path to a directory that
+  actually exists, and every `Cargo.toml` in `app/` and `shim/` now
+  pins `rust-version = "1.77.2"`, the release that closed
+  [CVE-2024-24576](https://github.com/rust-lang/rust/security/advisories/GHSA-q455-9v88-3vw2),
+  a Windows batch-file argument-quoting bug in `std::process::Command`
+  that this exact launch shape could otherwise have hit.
+
+None of this changes what the loopback endpoint can prove. **Any
+process running as the same OS user can still read the token file
+(`%LOCALAPPDATA%\deckhand\daemon.json`) and POST fabricated hook events
+to the ingest endpoint**, painting a false session state onto the
+board. Rule 2 already says loopback auth stops other users and
+unprivileged sandboxed processes, not a process running as you; this is
+that same limit, named again here because Phase 1 code gives it a new
+consequence, a believable but fake session, where before the code
+existed there was nothing to spoof. It is accepted for Phase 1, where
+the daemon only observes and a spoofed event cannot make anything
+happen, and it must be closed before Phase 2 gives `PreToolUse` an
+actual permission decision to answer, where a spoofed event could put
+an entirely fabricated request in front of the approve button.
+
 ## Residual risks, stated plainly
 
 1. **A process running as you can press Approve** by driving the surface's IPC
