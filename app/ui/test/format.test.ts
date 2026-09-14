@@ -10,7 +10,9 @@ import {
   escapeHtml,
   fmtElapsed,
   GLYPHS,
+  greyLabel,
   isRevealSuccess,
+  revealNote,
   STATE_WORDS,
   stateWord,
   summaryCounts,
@@ -124,6 +126,10 @@ test("isRevealSuccess is true for a raised-window sentence", () => {
   assert.equal(isRevealSuccess('Raised "deckhand - undertow".'), true);
 });
 
+test("isRevealSuccess is true for a VS Code lock-match raise, which has no window title to quote", () => {
+  assert.equal(isRevealSuccess('Raised "deckhand" in VS Code.'), true);
+});
+
 test("isRevealSuccess is false for a no-match miss", () => {
   assert.equal(
     isRevealSuccess('No window matched "undertow". Reveal is a title and pid heuristic; the session may have no window on this machine.'),
@@ -189,4 +195,32 @@ test("unknownCount is zero for an empty tile list", () => {
 
 test("unknownCount treats a null session (defensive-only row) as not unknown", () => {
   assert.equal(unknownCount([{ session: null }, { session: { state: "unknown" } }]), 1);
+});
+
+// ---- greyLabel ------------------------------------------------------------------
+
+test("greyLabel names what the toggle acts on and counts what it hid", () => {
+  assert.equal(greyLabel(6, false), "Hide unknown");
+  assert.equal(greyLabel(6, true), "Show 6 unknown");
+  assert.equal(greyLabel(0, true), "Show unknown");
+});
+
+// ---- revealNote -----------------------------------------------------------------
+
+test("revealNote shortens each daemon miss sentence to one short line", () => {
+  assert.equal(
+    revealNote('No window matched "undertow". Reveal is a title and pid heuristic; the session may have no window on this machine.'),
+    "No window found"
+  );
+  assert.equal(revealNote('Found "undertow" but Windows refused the raise.'), "Windows blocked it");
+  assert.equal(revealNote("No session is bound to this row."), "No session");
+  assert.equal(
+    revealNote('Found "undertow" in Windows Terminal, but more than one Terminal window is open.'),
+    "Multiple terminals"
+  );
+  assert.equal(
+    revealNote('Found "deckhand" in VS Code, but more than one matching window is open.'),
+    "Multiple VS Code windows"
+  );
+  assert.equal(revealNote("Something new"), "Something new");
 });

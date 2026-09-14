@@ -13,6 +13,80 @@ version number is invented and no past release is backfilled.
 
 ### Changed
 
+- **Reveal classifies the session's host and treats a tie as a miss,
+  recorded as ADR-032.** Fixes a real "No window matched" the owner hit:
+  a subagent hook payload's own `cwd` (it shares its parent session's
+  `session_id` but carries a different directory) was overwriting the
+  session's real working directory, poisoning every later Reveal for it.
+  `apply_hook` (`state.rs`) now skips `cwd` and the label derived from
+  it on any payload carrying `agent_id`, and `register_enumerated`
+  (`registry.rs`) corrects an existing `cwd` that disagrees with
+  `claude agents --json`'s own value rather than only filling in a
+  blank one, so an already-poisoned session repairs itself on the next
+  enumeration pass. Separately, Reveal no longer resolves a tie at the
+  top score by pick order: two or more windows tied for the best score
+  now report the same honest miss as no match at all. Reveal also stops
+  applying one scored match to every host: it classifies the session's
+  pid first, by walking its parent chain (a Toolhelp32 snapshot, at
+  most eight hops) into `Code.exe` (VS Code), `WindowsTerminal.exe`
+  (Windows Terminal), or a plain console, and picks a strategy per
+  host. A console is matched exactly with `AttachConsole` plus
+  `GetConsoleWindow`, falling back to the scored title match if the
+  attach fails (unverified against a live console session). Windows
+  Terminal raises its one open window, or reports an honest miss
+  naming the ambiguity when more than one is open, since no interface
+  can target a specific tab from outside the process
+  (`microsoft/terminal#19783` was closed not planned in January 2026).
+  VS Code reads `~/.claude/ide/*.lock` for the `pid` and
+  `workspaceFolders` fields only (never its `authToken`, never the
+  WebSocket MCP server the file also advertises), matches the
+  session's `cwd` against those folders (an ancestor tie is ambiguous,
+  same as any other tie), runs VS Code's own CLI against a matched
+  folder from the host's own resolved install directory (never `PATH`,
+  never anything the session controls), then restricts the title raise
+  to Code.exe-owned windows naming that folder, falling back to the
+  pre-existing pid-blind title match when nothing above resolves it.
+  The extension's own session-tab link is deliberately left unwired:
+  reading `extension.js` (2.1.270) shows it would risk opening a
+  second, duplicate session rather than revealing the first one in at
+  least two situations neither hooks nor `claude agents --json` can
+  currently rule out. `anthropics/claude-code#77827` (a terminal
+  refocus captured as a click on a permission prompt) is recorded as a
+  risk of Deckhand's click-to-raise, not mitigated. `docs/DECISIONS.md`,
+  `docs/CONTROL_MAPPING.md`, `docs/ARCHITECTURE.md`,
+  `docs/SECURITY_MODEL.md`, `docs/CLAUDE_CODE_ADAPTER.md`, `TODO.md`,
+  and `CLAUDE.md` are updated to match, and `app/` implements the
+  change.
+- **Move is removed and the header becomes a drag bar, recorded as
+  ADR-031.** The Move button and the `cycle_position` command it drove
+  are deleted; the window is now repositioned by dragging only, an
+  owner-approved exception to the no-required-drag rule in
+  `docs/ACCESSIBILITY.md`, recorded there as an open accessibility gap,
+  not as compliance. The whole header (`#header`) is now the drag
+  region, with the state-count pills passing pointer events through so
+  dragging on them drags too; the striped drag grip is gone. The header
+  shrinks to 52 px (was 64), 4 px padding, ordered state counts, grey
+  toggle, Quit; Quit is a 44 by 44 px icon-only button (a cross glyph,
+  `aria-label="Quit Deckhand"`). The window's initial height in
+  `tauri.conf.json` follows, 116 px. The grey toggle is relabelled to
+  name what it acts on: "Hide unknown" when rows show, "Show N unknown"
+  when hidden ("Show unknown" if N is 0, via a new `greyLabel()` helper
+  in `format.ts`, tested); its pressed style becomes a lighter
+  background and brighter text instead of an inset outline, and it
+  disappears entirely when there is nothing unknown and hiding is
+  already off, so Quit never moves. The all-hidden placeholder row now
+  reads "N unknown hidden." Header buttons are otherwise plain text
+  buttons: 44 px minimum height, 12 px side padding, 6 px radius, 14 px
+  bold. The dashed outline unknown and ended rows shared is removed;
+  they are set apart by glyph shape and dimming alone, which
+  `styles.test.ts` now pins directly. A Reveal miss note moves onto the
+  row's second line, one short line to the right of the state word
+  (`revealNote()` in `format.ts`, tested), instead of a multi-line side
+  column that used to squeeze the name, clip the state word, and grow
+  some rows past 64 px. `docs/DECISIONS.md`, `docs/CONTROL_MAPPING.md`,
+  `docs/UI_SPEC.md`, `docs/ACCESSIBILITY.md`, `docs/ARCHITECTURE.md`,
+  `README.md`, `CLAUDE.md`, and `TODO.md` are updated to match, and
+  `app/` implements the change.
 - **The header gains a Hide grey toggle, recorded as ADR-030.** Order is
   now drag grip, read-only state counts, Hide grey, Move, Quit: three
   header controls, not two. A single click flips the setting. Off, the

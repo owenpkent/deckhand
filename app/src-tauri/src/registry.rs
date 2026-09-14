@@ -100,6 +100,23 @@ impl Registry {
                 existing.pid = pid;
                 changed = true;
             }
+            // Unlike pid, cwd is corrected rather than only filled in:
+            // enumeration reports the session's own cwd, so it is the
+            // one channel that can repair a value a subagent payload
+            // latched onto the session before this fix (state.rs
+            // apply_hook). Label follows the same existing-name
+            // precedence as everywhere else: only filled in when blank,
+            // never overwritten.
+            if let Some(cwd) = cwd {
+                if existing.cwd.as_deref() != Some(cwd) {
+                    existing.cwd = Some(cwd.to_string());
+                    changed = true;
+                }
+                if existing.label.is_empty() {
+                    existing.label = crate::state::dir_name(cwd);
+                    changed = true;
+                }
+            }
             // A session the hooks already saw end stays off the list
             // even if the enumeration lags behind and still reports it.
             if existing.state == SessionState::Ended {
@@ -409,6 +426,33 @@ mod tests {
         let snap = r.snapshot(2);
         assert!(snap.hide_unknown);
         assert_eq!(snap.tiles.len(), 1, "hide_unknown must not remove a tile from the snapshot itself");
+    }
+
+    #[test]
+    fn register_enumerated_corrects_a_cwd_poisoned_by_a_subagent_payload() {
+        // state.rs now refuses to latch a subagent's cwd onto a session,
+        // but this pins the repair path for a value that got in before
+        // that fix, or by any other means: enumeration's cwd is the
+        // session's own and always wins.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        r.sessions.get_mut("s1").unwrap().cwd = Some("C:/dev/wrong-subagent-dir".to_string());
+        assert!(r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, 2));
+        assert_eq!(r.sessions["s1"].cwd.as_deref(), Some("C:/dev/undertow"));
+    }
+
+    #[test]
+    fn register_enumerated_fills_a_blank_label_from_cwd_but_never_overwrites_one() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        assert_eq!(r.sessions["s1"].label, "");
+        r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, 2);
+        assert_eq!(r.sessions["s1"].label, "undertow", "a blank label is filled in from the corrected cwd");
+
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s2"}), 1);
+        r.sessions.get_mut("s2").unwrap().label = "custom name".to_string();
+        r.register_enumerated("s2", None, Some("C:/dev/undertow"), None, 2);
+        assert_eq!(r.sessions["s2"].label, "custom name", "an existing label is never overwritten");
     }
 
     #[test]

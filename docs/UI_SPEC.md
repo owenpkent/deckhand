@@ -11,7 +11,11 @@ badges an earlier version of this file specified are removed.
 px two-line rows, header counts, a bundled typeface, and the other visual
 changes this file now describes. [ADR-030](DECISIONS.md#adr-030), also the
 same day, added a third header control, Hide grey, that filters `unknown`
-rows out of the list.
+rows out of the list. [ADR-031](DECISIONS.md#adr-031), also the same day,
+removed Move (the window is now repositioned by dragging only), made the
+whole header its own drag region, shrank it to 52 px, relabelled and
+restyled the grey toggle, and dropped the dashed outline unknown and
+ended rows used to share.
 
 Mockups in [`assets/`](../assets/), embedded in the README, predate both
 and still draw the wider control set at the old sizes. They are drawings,
@@ -25,7 +29,7 @@ as a single vertical list:
 
 ```
  ┌───────────────────────────────┐
- │ ⠿  ◆1 ✕1 ◐1   Hide Move Quit  │  header, 64 px, 44 px+ targets
+ │  ◆1 ✕1 ◐1   Hide unknown  ✕   │  header, 52 px, 44 px+ targets
  ├───────────────────────────────┤
  │ ○  undertow                   │  row, 64 px, two lines
  │    IDLE                       │
@@ -43,8 +47,12 @@ as a single vertical list:
 - About 360 logical pixels wide. Height follows the row count, each row a
   fixed 64 px, and the window is clamped into the monitor's work area so it
   can never render partly off-screen.
-- Docks to any screen edge with a click-to-place move mode (no drag
-  required; drag also works).
+- Repositioned by dragging the window; anywhere on the header works,
+  since the whole bar is the drag region. [ADR-031](DECISIONS.md#adr-031)
+  removed the click-to-place alternative dragging used to have. This is
+  an owner-approved exception to [ACCESSIBILITY.md](ACCESSIBILITY.md)'s
+  no-required-drag rule, recorded there as an open gap, not as a
+  compliant default.
 - A saved position is checked against the monitors actually connected at
   startup, not trusted blindly, so a window last placed on a monitor that
   is no longer attached lands back inside the current work area instead of
@@ -56,31 +64,36 @@ as a single vertical list:
 
 ## Header
 
-Header height: 64 px, fixed. In order: a drag grip (14 px), a read-only
-summary of session counts, then three controls, each at least 44 px tall
-([ADR-030](DECISIONS.md#adr-030); before it, two):
+Header height: 52 px, fixed ([ADR-031](DECISIONS.md#adr-031); 64 px
+before it). The whole bar is the drag region, `data-tauri-drag-region`
+on `#header` itself; there is no separate grip, and the count pills sit
+on top of it with pointer events passed through, so a drag started on a
+pill still drags the window. In order: a read-only summary of session
+counts, the grey toggle (present only when there is something to hide),
+and Quit, pinned to the header's right edge:
 
 | Control | Width | Does |
 | --- | --- | --- |
-| Hide grey | 56 px | Toggles whether rows in the `unknown` state are shown. Reads "Hide" when off. When on, shows pressed (a 2 px inset outline) and reads "Show N," N being the count of currently hidden `unknown` rows. |
-| Move | 48 px | Enters click-to-place mode; click a destination to move the window there. No drag is required, though dragging the window also works. |
-| Quit | 48 px | Closes the daemon and the surface together. |
+| Grey toggle | Variable, 44 px minimum | Toggles whether rows in the `unknown` state are shown. Reads "Hide unknown" when off. When on, shows pressed (background and text colour change; no inset outline) and reads "Show N unknown," N being the count of currently hidden `unknown` rows ("Show unknown" when N is 0). Hidden entirely when there is nothing unknown and hiding is already off. |
+| Quit | 44 px | Closes the daemon and the surface together. Icon only: a cross glyph, `aria-label="Quit Deckhand"`, no visible text. |
 
-The summary is a row of pills, tightened to make room for the third
-control, one per state that currently has at least one session in it, in
-a fixed order: waiting on you, error, thinking, complete (idle, unknown,
-and ended are left to the rows). Each pill pairs that state's glyph and
-colour with a count. It is read-only: it reports, it does not select or
-filter, and it is computed before the Hide grey filter, so it never
-changes when that control is toggled.
+The summary is a row of pills, one per state that currently has at least
+one session in it, in a fixed order: waiting on you, error, thinking,
+complete (idle, unknown, and ended are left to the rows). Each pill
+pairs that state's glyph and colour with a count. It is read-only: it
+reports, it does not select or filter, and it is computed before the
+grey toggle's filter, so it never changes when that control is toggled.
 
-When Hide grey is on and every bound session is hidden, the list shows
-one placeholder row in place of the normal rows, "N grey hidden," styled
-like the empty-list state rather than like a session row. A hidden row
-reappears on its own, and every target below it shifts, the moment that
-session's state moves off `unknown`; see
-[CONTROL_MAPPING.md](CONTROL_MAPPING.md#header-hide-grey-move-and-quit)
-for the toggle's full behaviour and the trade-off it accepts.
+When the grey toggle is on and every bound session is hidden, the list
+shows one placeholder row in place of the normal rows, "N unknown
+hidden," styled like the empty-list state rather than like a session
+row. A hidden row reappears on its own, and every target below it
+shifts, the moment that session's state moves off `unknown`; see
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#header-the-grey-toggle-and-quit)
+for the toggle's full behaviour and the trade-off it accepts. Move, the
+click-to-place alternative to dragging the window that used to sit here,
+is removed ([ADR-031](DECISIONS.md#adr-031)); see
+[ACCESSIBILITY.md](ACCESSIBILITY.md) for the open gap that leaves.
 
 ## Row anatomy
 
@@ -92,8 +105,10 @@ for the toggle's full behaviour and the trade-off it accepts.
 One row per session, two lines: a 30 px status glyph (colour plus shape) on
 the left, the session name (17 px, bold) above the state word (uppercase),
 filling the row's full width as a single click target. A Reveal miss note,
-when present, sits in its own column at the right of the row instead of
-overlapping the state word, wrapping up to 3 lines before it truncates.
+when present, sits on the row's second line, to the right of the state
+word, one line, instead of overlapping it; the daemon's full sentence is
+shortened to fit by `revealNote()` in `format.ts`
+([ADR-031](DECISIONS.md#adr-031)).
 
 - Row height: 64 px, fixed, above the
   [accessibility floor](ACCESSIBILITY.md#targets-and-sizing).
@@ -102,14 +117,15 @@ overlapping the state word, wrapping up to 3 lines before it truncates.
   [ACCESSIBILITY.md](ACCESSIBILITY.md#status-without-colour).
 - Every coloured state tints the row's background toward its colour: idle
   6%, thinking and complete 14%, needs input and error 22%. Unknown and
-  ended get a dashed outline instead of a tint. Selected: a 3 px inset
-  outline in the text colour, on top of whatever tint or dashed outline
-  the state already has.
+  ended get no tint; a dashed outline used to mark them instead, removed
+  by [ADR-031](DECISIONS.md#adr-031), and they are now set apart by
+  glyph shape and dimming alone. Selected: a 3 px inset outline in the
+  text colour, on top of whatever tint the state already has.
 - Unknown carries two words for the one state: "not heard yet" for a
   session bound by enumeration or restored from disk that no hook has
   spoken for yet this run, and "unknown" for one that spoke and then went
-  quiet past `T_unknown`. Same colour, same glyph, same dashed outline;
-  only the word differs ([ADR-029](DECISIONS.md#adr-029)). Unknown rows
+  quiet past `T_unknown`. Same colour, same glyph; only the word differs
+  ([ADR-029](DECISIONS.md#adr-029)). Unknown rows
   also dim, short of ended: the glyph and state word go to 75% grey toward
   the background, and the name drops from bold to regular weight at 72%
   text colour, since a not-heard-yet row may still be one really waiting
@@ -143,7 +159,7 @@ authoritative in [ARCHITECTURE.md](ARCHITECTURE.md#the-child-ledger).
 | Complete | Green | Check | One pulse on entry (none) |
 | Error | Red | Cross | None |
 | Unknown | Grey, hatched | Question | None |
-| Ended | Off | Dashed outline | None |
+| Ended | Off | Dash | None |
 
 Glyphs are drawn, not emoji, so they render identically across platforms and
 respect the theme.

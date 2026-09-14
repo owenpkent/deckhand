@@ -4,12 +4,16 @@ Status: **proposed**. This is the reference adapter and the reason Deckhand
 exists. It implements the contract in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md)
 against Claude Code.
 
-> **Verification stamp: partial, against Claude Code 2.1.220.** Checked on
-> 2026-07-30 and extended on 2026-08-02, on Windows 11, against both the
-> native single-binary build at `C:/Users/owenp/.local/bin/claude.exe` and
-> the copy the VS Code extension ships, under
-> `resources/native-binary/` inside
-> `.vscode/extensions/anthropic.claude-code-2.1.220-win32-x64/`.
+> **Verification stamp: partial, against Claude Code 2.1.220, extended
+> 2026-09-13 against 2.1.270 for the items marked with that version.**
+> Checked on 2026-07-30 and extended on 2026-08-02, on Windows 11, against
+> both the native single-binary build at
+> `C:/Users/owenp/.local/bin/claude.exe` and the copy the VS Code extension
+> ships, under `resources/native-binary/` inside
+> `.vscode/extensions/anthropic.claude-code-2.1.220-win32-x64/`. The
+> machine's own `claude --version` reported 2.1.270 on 2026-09-13, so the
+> items below dated that day are against the newer install; nothing here
+> claims the two versions were compared line for line.
 > The following are **observed**, meaning run or read on that machine:
 >
 > - `claude agents --json`, which returned the live sessions with `pid`,
@@ -74,6 +78,27 @@ against Claude Code.
 >   its twelve tools and the fact that `openFile` with `makeFrontmost`
 >   moves the active tab but not the OS foreground window. See
 >   [The three hosts](#the-three-hosts-concretely).
+> - **A `SubagentStart` or `SubagentStop` payload's `cwd` is the
+>   subagent's own, not the parent session's**, observed 2.1.270 on
+>   2026-09-13: `%LOCALAPPDATA%\deckhand\reveal.log` recorded a live
+>   session's directory as `dir=agent-a225d82809fcd6b14`, a subagent's
+>   own working directory, not the session's. Deckhand had latched that
+>   value onto the session before this was caught, poisoning Reveal for
+>   it; see [ADR-032](DECISIONS.md#adr-032).
+> - **`~/.claude/ide/*.lock`'s static fields, read directly rather than
+>   over its MCP server**, observed 2.1.270 on 2026-09-13: `pid` and
+>   `workspaceFolders` are enough to pick the VS Code window that has a
+>   session's `cwd` open, without connecting to the WebSocket server the
+>   file also advertises or touching its `authToken`. This is a narrower
+>   claim than the MCP server ADR-023 catalogued, not a new one: only the
+>   file's own JSON is read.
+> - **The extension's session-tab URI accepts an arbitrary id**, observed
+>   2.1.270 on 2026-09-13 by reading the shipped `extension.js`, this
+>   file's own bar for `observed` where reading counts alongside running:
+>   `createPanel` only reveals an existing panel for a session id its own
+>   window already tracks in memory, and falls through to opening a new
+>   one otherwise. Deckhand does not fire this URI; see
+>   [ADR-032](DECISIONS.md#adr-032) for why.
 >
 > Everything else is **documented** (read from the public Claude Code
 > documentation, not seen to fire here) or **unverified** (neither). Hook
@@ -110,7 +135,7 @@ that is what decides which controls can work. The two are separate axes per
 | Approve and deny | `PreToolUse` hook decision | The same, observed 2.1.220 | SDK permission callback |
 | Send a prompt | Turn-boundary channels only, none observed; `false` | No channel exists; `false` | Supported |
 | Interrupt | Synthetic only, off by default | No channel, and no window to type into; `false` | Supported |
-| Reveal | Window by `pid`, title as fallback | Window by title only; `pid` cannot discriminate | Nothing to raise |
+| Reveal | Window by `pid` where the host is a plain console, exactly; a single-window check where it is Windows Terminal | `~/.claude/ide/*.lock` workspace match plus VS Code's own CLI, falling back to title only ([ADR-032](DECISIONS.md#adr-032)) | Nothing to raise |
 | The UI you read | Your terminal, untouched | Your editor tab, untouched | None; the detail panel is the UI |
 | Phase | 1 to 3 | 1 to 3 | 4 |
 
@@ -171,15 +196,28 @@ It does not solve Reveal either. `openFile` takes a `makeFrontmost` flag,
 and setting it moved the active tab in the targeted window while leaving the
 OS foreground window alone, which is what its own schema describes. Worse,
 opening a file navigates that window away from the Claude tab, so using it
-for Reveal would hide the thing the user asked to see. Reveal on this host
-raises the window natively instead, matching the workspace name in the
-window title, because every VS Code window shares one process and a `pid`
-cannot tell them apart. Tab-level focus would need the extension's own
-`claude-vscode.focus` command, which only another VS Code extension can
-invoke, and Deckhand does not ship one.
+for Reveal would hide the thing the user asked to see. Tab-level focus would
+need the extension's own `claude-vscode.focus` command, which only another
+VS Code extension can invoke, and Deckhand does not ship one.
 
-This whole surface is `internal`, evidence `observed`. Under the rule below,
-nothing may be built on it.
+This MCP surface, its WebSocket transport and its twelve tools, is
+`internal`, evidence `observed`, and nothing is built on it: the rule below
+still holds. What Reveal reads instead, since [ADR-032](DECISIONS.md#adr-032),
+is the plain JSON each `~/.claude/ide/*.lock` file already holds on disk,
+its `pid` and `workspaceFolders` fields only, never the WebSocket server the
+same file advertises. Matching the session's `cwd` against those folders
+picks the VS Code window that has it open; on a match, Reveal runs VS
+Code's own CLI against that folder ahead of the window raise, and falls
+back to matching the workspace name in the window title, restricted to
+Code.exe-owned windows, exactly as before, whenever no folder matches or
+the CLI does not help. This is a narrower use of an already-`internal`
+interface, not a promotion past it: a missing or unreadable lock file
+degrades Reveal to the pre-existing title match rather than failing it.
+
+**`~/.claude/ide/*.lock`'s `authToken` is read and never kept.** The file's
+JSON is parsed into `pid` and `workspaceFolders` and nothing else survives
+that step; the token is dropped before Reveal does anything with the rest,
+and it never reaches the reveal log or any other file Deckhand writes.
 
 ## Interfaces used, and what they rest on
 
@@ -194,15 +232,23 @@ nothing may be built on it.
 | Agent SDK (`@anthropic-ai/claude-agent-sdk`) | Hosted mode | Documented |
 | Enumerating `~/.claude/projects/` | Populating the bind picker | **Internal**, mangling observed 2.1.220 |
 | Transcript JSONL per-line schema | Last-resort detail | **Internal, changes between releases** |
-| Window-title heuristics to find a session's window | Fallback host match when no usable `pid` exists, synthetic input. The only route on a `vscode-extension` host, where every window shares one `pid` | **Synthetic** |
-| The extension's per-window MCP server, `~/.claude/ide/<port>.lock` | Nothing. Enumerated, evaluated for Reveal, and rejected | **Internal**, observed 2.1.220 |
+| Window-title heuristics to find a session's window | Fallback host match when no usable `pid` exists, synthetic input. On a `vscode-extension` host it is the fallback for whichever session no lock file names a fitting workspace folder for, not the only route since [ADR-032](DECISIONS.md#adr-032) | **Synthetic** |
+| The extension's per-window MCP server, `~/.claude/ide/<port>.lock` (its WebSocket transport and twelve tools) | Nothing. Enumerated, evaluated for Reveal, and rejected | **Internal**, observed 2.1.220 |
+| The same lock file's plain JSON (`pid`, `workspaceFolders` only, never its `authToken` or its server) | Reveal's VS Code workspace match ([ADR-032](DECISIONS.md#adr-032)) | **Internal**, observed 2.1.270 |
 
 The design rule that follows: the `documented` rows may be load-bearing, the
-`internal` and `synthetic` rows may not. If every `internal` row broke
-tomorrow, Deckhand should degrade (the bind picker goes empty and you bind by
-hand) rather than fail. Note the direction of travel in the bottom two rows:
-`claude agents --json` reports a `pid` per session, so host matching prefers
-that `pid` and falls back to window titles only when it has none.
+`internal` and `synthetic` rows may not, meaning that losing one must
+degrade a feature, not fail it. If every `internal` row broke tomorrow,
+Deckhand should degrade (the bind picker goes empty and you bind by hand)
+rather than fail. The lock file's JSON row is the current test of that
+rule: Reveal depends on it for a more precise VS Code raise, but a missing
+or unreadable lock file falls back to the window-title row above it, which
+is what keeps the dependency inside the rule rather than an exception to
+it. Note the direction of travel across the bottom three rows: `claude
+agents --json` reports a `pid` per session, so host matching prefers that
+pid where one host is one window, the lock file's workspace match where a
+`pid` cannot discriminate but a folder still can, and window titles only
+once neither of those applies.
 
 `claude agents --json` is the one row that survives with hooks switched off,
 which is why it now carries cold start instead of `~/.claude/projects/`.
@@ -566,7 +612,7 @@ session.
 | --- | --- | --- | --- |
 | `observe_status` | `documented` | `documented` | `documented` |
 | `list_sessions` | `documented` (observed 2.1.220) | `documented` (observed 2.1.220) | `documented` |
-| `focus_session` | `synthetic` | `synthetic` (title only) | `false` (no window to raise) |
+| `focus_session` | `synthetic` | `synthetic` (lock-file workspace match plus title, since [ADR-032](DECISIONS.md#adr-032); title alone when no lock file fits) | `false` (no window to raise) |
 | `decide_permission` | `documented` | `documented` (observed 2.1.220) | `documented` |
 | `answer_question` | `false` (optional, and unproven) | `false` (optional, and unproven) | `false` (unproven) |
 | `send_prompt` | `false` (`synthetic` if the user opts in) | `false` (absent, and no synthetic route) | `documented` |

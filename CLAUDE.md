@@ -9,11 +9,16 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
 - **What:** A software reimplementation of the Codex Micro macropad as an
   always-on-top, mouse-only control surface for Claude Code sessions. An
   ordered list of session rows (colour, glyph, name, state word), click
-  to select and raise, plus a Hide grey toggle, Move, and Quit in the
-  header (ADR-030). Approve and deny via the `PreToolUse` hook are
-  Phase 2 and not currently planned on the surface (ADR-028); the dial,
-  stick, talk, and layers this overview used to list here are removed
-  by the same decision.
+  to select and raise, plus a grey toggle and Quit in the header, the
+  whole bar itself the drag region (ADR-030, ADR-031). Move, a
+  click-to-place alternative to dragging, was removed by ADR-031: the
+  window is now repositioned by dragging only, an owner-approved
+  exception to the no-required-drag rule in
+  [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md), not a compliant
+  default. Approve and deny via the `PreToolUse` hook are Phase 2 and
+  not currently planned on the surface (ADR-028); the dial, stick,
+  talk, and layers this overview used to list here are removed by the
+  same decision.
 - **Status:** Phase 1, observation only, started 2026-08-02. The code
   lives in `app/` (daemon plus surface, one Tauri application) and
   `shim/`; `spikes/` is frozen Phase 0 evidence. Nothing has write
@@ -63,16 +68,16 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 170 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 476 | Daemon, shim, surface, state machine |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 228 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 515 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 347 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 617 | Reference adapter; partial stamp |
-| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 279 | Approval path; fails to `ask` |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 679 | Reference adapter; partial stamp |
+| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 299 | Approval path; fails to `ask` |
 | [docs/UI_SPEC.md](docs/UI_SPEC.md) | 138 | Visual and interaction contract |
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 189 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 1019 | ADRs; append only |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 138 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 333 | Phases and open work |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 1473 | ADRs; append only |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 151 | Map and change-propagation table |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 364 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -104,7 +109,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 031.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 033.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -155,7 +160,10 @@ forward. ADR-028 then cut the surface down to that session list plus
 Move and Quit, replacing the six-slot binding with an auto-binding,
 unbounded list; ADR-030 added a third header control, Hide grey, that
 filters `unknown` rows out of the list and shows how many it hid on the
-button itself; `app/` implements both.
+button itself. ADR-031 then removed Move, made the whole header a drag
+region, relabelled and restyled the grey toggle, and dropped the dashed
+outline unknown and ended rows used to share; `app/` implements all
+three.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

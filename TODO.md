@@ -200,25 +200,34 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       headless since 2026-09-13 as `app/src-tauri/tests/pipeline.rs`,
       six sessions through the real endpoint into six colours; the
       screenshot walk and the logging decision are still owed.
-- [ ] Capture the session pid and host at the hook instead of guessing
+- [x] Capture the session pid and host at the hook instead of guessing
       later: the shim wraps the payload with `CLAUDE_PID`,
       `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`, and
       `VSCODE_PID` from its own environment (all observed on 2.1.270
       under the VS Code extension; the terminal case is not yet
       observed), and the daemon finds the window by walking that pid's
       ancestors to the first process owning a visible top-level window,
-      with the title match limited to that process's windows. Needs its
-      own ADR: it changes the shim contract and populates the ADR-023
-      `host` field.
+      with the title match limited to that process's windows.
+      Superseded by [ADR-032](docs/DECISIONS.md#adr-032) (2026-09-13),
+      which reaches the same goal a different way: the shim and its
+      payload are unchanged, and Reveal instead takes the `pid`
+      `claude agents --json` already reports and classifies the host at
+      click time from a Toolhelp32 snapshot of the running process tree
+      (`Code.exe`, `WindowsTerminal.exe`, or a plain console), then
+      raises through the strategy chosen for that host. It does not
+      populate an ADR-023 `host` field; that axis is unaffected.
 - [ ] Take liveness from the pid: hold a process handle per session and
       flip to `ended` the moment it exits, and stop greying a live idle
-      session at the fifteen-minute mark. Same ADR as the pid capture.
+      session at the fifteen-minute mark. Not resolved by ADR-032, which
+      only changed how Reveal finds a window for a pid it already has;
+      this still needs its own ADR.
 - [ ] Bring `app/` in line with ADR-028: replace the six-slot tile surface
       and its manual bind picker, command keys, stick, dial, talk and
       send placeholders, detail panel, layer strip, and corner badges
       with the session-list surface (one row per session: colour, glyph,
-      name, state word) and a header holding Hide grey, Move, and Quit
-      (ADR-030 added Hide grey on top of ADR-028's Move and Quit).
+      name, state word) and a header holding a grey toggle and Quit
+      (ADR-030 added Hide grey on top of ADR-028's Move and Quit;
+      ADR-031 then removed Move and made the header the drag region).
 - [ ] Replace the six-slot manual binding with ADR-028's auto-binding:
       bind a session on its first hook event or enumeration hit, into an
       ordered, unbounded list; drop the null slots when loading a legacy
@@ -229,10 +238,27 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       hook event for 60 s; a failed enumeration must prune nothing
       (ADR-028).
 - [ ] Size and place the window per ADR-028: about 360 px wide, height
-      following the row count at 64 px per row plus a 64 px header
-      (ADR-029), clamped to the monitor work area, with a saved position
-      validated against the monitors actually connected at startup.
+      following the row count at 64 px per row plus a 52 px header
+      (ADR-029 set it at 64 px; ADR-031 shrank it to 52), clamped to the
+      monitor work area, with a saved position validated against the
+      monitors actually connected at startup.
 - [ ] Exclude Deckhand's own window from the raise match (ADR-028).
+- [ ] Verify the console Reveal path (`AttachConsole` plus
+      `GetConsoleWindow`, [ADR-032](docs/DECISIONS.md#adr-032)) against a
+      real console-hosted session; so far it has only been exercised
+      against a fake process table in unit tests.
+- [ ] Fire the VS Code session-tab link
+      (`vscode://anthropic.claude-code/open?session=<id>`) once a safe
+      cross-window test exists. Blocked on Deckhand's own evidence, per
+      [ADR-032](docs/DECISIONS.md#adr-032): a session in VS Code's
+      integrated terminal is never tracked by the extension host, and
+      which window a multi-window instance routes the URI to has not
+      been observed, so firing it today risks a duplicate live session
+      rather than revealing the existing one.
+- [ ] Windows Terminal tab targeting (raising a specific tab, not only
+      the one open Terminal window) is blocked upstream, not by
+      Deckhand: `microsoft/terminal#19783` asked for exactly this and
+      was closed not planned in January 2026. Revisit if that changes.
 - [x] Register the shim in user-level Claude Code settings so sessions in
       every repo report state, not only this one (done on the owner's
       machine with scripts/install-hooks.ps1 on 2026-09-13; the repo-local

@@ -429,9 +429,10 @@ extended-style pass at setup, is what the Phase 1 window ships. See
 [DECISIONS.md](DECISIONS.md#adr-002).
 
 The window itself is a vertical list, about 360 logical pixels wide, with
-its height following the row count at 64 px per row plus a 64 px header
-([ADR-029](DECISIONS.md#adr-029); the layout was 48 px and 56 px until
-then), clamped into the monitor's work area so it can never render partly
+its height following the row count at 64 px per row plus a 52 px header
+([ADR-031](DECISIONS.md#adr-031); the header was 64 px under
+[ADR-029](DECISIONS.md#adr-029), and 48 px and 56 px before that),
+clamped into the monitor's work area so it can never render partly
 off-screen. Since [ADR-030](DECISIONS.md#adr-030) the row count that
 sizing uses is `visible_row_count`, the visible rows once the Hide grey
 filter is applied, not the bound count; the `T_unknown` watchdog (see
@@ -448,6 +449,28 @@ match the raise uses, see
 excludes Deckhand's own window from its candidates, so a title match can
 never find the board itself. Both fix findings from the same window and
 raise review; recorded together in [ADR-028](DECISIONS.md#adr-028).
+
+Reveal, the raise this window match performs, does not apply one scored
+match to every host. It classifies the session's pid first, by walking
+its parent chain (a Toolhelp32 snapshot, at most eight hops) for the
+first ancestor that is a host Reveal knows: `Code.exe` for VS Code,
+`WindowsTerminal.exe` for Windows Terminal, anything else falling back to
+a plain console. That split exists because a console session's process
+owns its window one to one, while a Windows Terminal or VS Code session
+shares one owning process across every window on the machine, so the
+same pid-and-title score that finds a console exactly can tie or
+misidentify a window on either of the other two. A console is matched by
+briefly attaching to it (`AttachConsole`); a Windows Terminal session is
+raised only when exactly one Terminal window is open; a VS Code session
+is matched against the workspace folders named in
+`~/.claude/ide/*.lock`, and, on a match, VS Code's own CLI is run against
+that folder ahead of the window raise. Across every host, a tie at the
+top score is now a miss rather than a guess. See
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#agent-keys-to-session-rows) for
+what this means as a control and [DECISIONS.md](DECISIONS.md#adr-032)
+for the full record, including the unverified console path and the two
+tab-targeting gaps, inside Windows Terminal and inside a VS Code window,
+that stay out of reach from outside either editor.
 
 ## Stack
 

@@ -56,6 +56,26 @@ export function unknownCount(tiles: readonly { session: { state: SessionState } 
   return tiles.filter((t) => t.session?.state === "unknown").length;
 }
 
+// The grey toggle's label, naming what it acts on: "Hide unknown" while
+// those rows show, "Show 6 unknown" while they are hidden, so a hidden
+// session is always counted.
+export function greyLabel(unknown: number, hidden: boolean): string {
+  if (!hidden) return "Hide unknown";
+  return unknown === 0 ? "Show unknown" : `Show ${unknown} unknown`;
+}
+
+// A Reveal miss, cut down to what fits beside the state word. The
+// daemon's full sentence explains the heuristic; the row only needs to
+// say what happened.
+export function revealNote(text: string): string {
+  if (text.startsWith("No window matched")) return "No window found";
+  if (text.includes("refused the raise")) return "Windows blocked it";
+  if (text.startsWith("No session is bound")) return "No session";
+  if (text.includes("more than one Terminal window")) return "Multiple terminals";
+  if (text.includes("more than one matching window")) return "Multiple VS Code windows";
+  return text;
+}
+
 // ---- Small helpers --------------------------------------------------
 
 export function fmtElapsed(fromMs: number, nowMs: number): string {

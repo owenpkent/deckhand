@@ -5,10 +5,12 @@ a session list on 2026-09-13 and removed the command keys, the stick, the
 dial, talk, the detail panel, the bind picker, the layer strip, and the
 corner badges that earlier versions of this file described.
 [ADR-030](DECISIONS.md#adr-030), the same day, added a third header
-control, Hide grey, back on top of that narrower surface. What follows
-describes the current design. The retabling and the usage measurements that
-shaped the removed controls are preserved in the ADRs that ADR-028 names as
-superseded, not restated here.
+control, Hide grey, back on top of that narrower surface.
+[ADR-031](DECISIONS.md#adr-031), also 2026-09-13, then removed Move,
+leaving the header with a grey toggle and Quit, and relabelled the
+toggle. What follows describes the current design. The retabling and the
+usage measurements that shaped the removed controls are preserved in the
+ADRs that ADR-028 names as superseded, not restated here.
 
 Deckhand is a software reimplementation of the [Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro),
 a limited-run macropad by Work Louder and OpenAI that acts as a command centre
@@ -64,20 +66,30 @@ it to accelerate, which satisfies
 Deckhand's own window still never takes focus (ADR-025): the raise moves the
 foreground to the session, never to the board.
 
-The raise matches a session to a window by pid where that works, since
-`claude agents --json` reports a `pid` per live session (observed on Claude
-Code 2.1.220). It works on a `pty` host. It does not work on a
-`vscode-extension` host, where every editor window shares a single process,
-so three windows report one pid and the pid identifies none of them
-(observed on 2.1.220). There, matching the workspace name in the window
-title is not the fallback but the only route, and it raises the window
-without selecting the session's tab within it: nothing reachable from
-outside the editor can do that. Sessions also run in the browser, and
-Deckhand can only raise a local window, so the raise is skipped with a
-logged reason whenever the host is not locatable rather than raising the
-wrong thing. Deckhand's own window is excluded from the candidates a match
-can land on ([ADR-028](DECISIONS.md#adr-028)). See
-[DECISIONS.md](DECISIONS.md#adr-023).
+The raise classifies the session's host before it decides how to look for
+a window, because a pid means something different on each one
+([ADR-032](DECISIONS.md#adr-032)). A plain console session's process owns
+its window one to one, and Reveal finds it exactly by briefly attaching to
+that console, no title guessing involved. A Windows Terminal session
+shares one process, `WindowsTerminal.exe`, with every other window and tab
+on the machine, so a pid only narrows "is this a Terminal window at all";
+Reveal raises the single open Terminal window when there is exactly one,
+and reports an honest miss, naming the ambiguity, when there is more than
+one, rather than guess a tab. A VS Code session shares one main `Code.exe`
+across every editor window the same way (three windows, one pid, observed
+on 2.1.220), so Reveal instead reads the workspace folders VS Code's
+Claude Code extension has open, matches the session's cwd against them,
+and, on a match, runs VS Code's own CLI against that folder before raising
+the window by title; a session in the browser, or one Reveal cannot place
+on any host, is skipped with a logged reason rather than raising the wrong
+thing. Across every host, two candidates tied for the best score is
+treated the same as no match: Reveal never guesses between two equally
+plausible windows. Deckhand's own window is excluded from the candidates a
+match can land on ([ADR-028](DECISIONS.md#adr-028)). See
+[DECISIONS.md](DECISIONS.md#adr-023) for the host axis this builds on and
+[DECISIONS.md](DECISIONS.md#adr-032) for the full record, including why
+tab-level targeting inside Windows Terminal or the session's own tab
+inside a VS Code window is still out of reach from outside either editor.
 
 ### Status colours
 
@@ -118,21 +130,28 @@ timing lives in [ARCHITECTURE.md](ARCHITECTURE.md#observation-channels),
 since it is a daemon behaviour, not a control. There is no bind picker and no
 unbind action: nothing here is managed by hand.
 
-### Header: Hide grey, Move, and Quit
+### Header: the grey toggle and Quit
 
-The header carries three controls, in order: Hide grey, Move, and Quit
-([ADR-030](DECISIONS.md#adr-030); before it, exactly two).
+The header carries two controls: a grey toggle and Quit, pinned to the
+header's right edge ([ADR-031](DECISIONS.md#adr-031); before it, three,
+Hide grey, Move, and Quit, added by [ADR-030](DECISIONS.md#adr-030) on
+top of [ADR-028](DECISIONS.md#adr-028)'s original two). The whole header
+is now the drag region: there is no separate grip, and dragging from any
+empty part of the bar, including the count pills, moves the window.
 
-Hide grey filters rows out of the list, not sessions out of the daemon.
-A single click flips the setting. Off, the control reads "Hide." On, it
-shows pressed and reads "Show N," where N is the number of rows currently
-in the `unknown` state, "not heard yet" and past `T_unknown` alike, so a
-hidden session is always counted and never simply disappears. If every
-bound session is hidden, the list shows one placeholder row, "N grey
-hidden," instead of the normal list. The header's own state-count summary
-is computed before this filter and never changes when the toggle does.
-The control's glyph is the same grey question mark the unknown state
-already uses, so it reads as "the grey one" on sight.
+The grey toggle filters rows out of the list, not sessions out of the
+daemon. A single click flips the setting. Off, the control reads "Hide
+unknown." On, it shows pressed (its background and text colour change;
+there is no inset outline) and reads "Show N unknown," where N is the
+number of rows currently in the `unknown` state, "not heard yet" and past
+`T_unknown` alike, so a hidden session is always counted and never simply
+disappears ("Show unknown" when N is 0). If every bound session is
+hidden, the list shows one placeholder row, "N unknown hidden," instead
+of the normal list. The toggle disappears from the header entirely when
+there is nothing unknown and hiding is already off, rather than sitting
+there with no job; Quit's position at the right edge does not move when
+it does. The header's own state-count summary is computed before this
+filter and never changes when the toggle does.
 
 The setting is the daemon's, not the surface's: it persists across
 restarts, and a session that leaves the `unknown` state while hidden
@@ -141,14 +160,22 @@ owner having clicked anything. Because `heard`
 ([ADR-029](DECISIONS.md#adr-029)) resets on every daemon restart, a
 session that genuinely needed the owner before the restart also renders
 `unknown` until a hook fires for it again, so hiding grey can hide a row
-that needs a human; "Show N" is the accepted mitigation for that, not a
-fix for it. See [ADR-030](DECISIONS.md#adr-030) for the full trade-off
-and the alternative, folding every grey row into one expandable row,
-that was considered and not chosen.
+that needs a human; "Show N unknown" is the accepted mitigation for
+that, not a fix for it. See [ADR-030](DECISIONS.md#adr-030) for the full
+trade-off and the alternative, folding every grey row into one
+expandable row, that was considered and not chosen.
 
-Move is the existing click-to-place alternative to dragging the window to
-a screen edge; drag also works, but is never required. Quit closes the
-daemon and the surface together.
+Move, the click-to-place alternative to dragging the window that
+[ADR-028](DECISIONS.md#adr-028) kept, is removed
+([ADR-031](DECISIONS.md#adr-031)). The window is now repositioned by
+dragging only; a saved position is still restored and clamped into the
+current monitors' work area at startup, but there is no click-based way
+to move it afterward. This is an owner-approved exception to
+[ACCESSIBILITY.md](ACCESSIBILITY.md)'s no-required-drag rule, not a
+reading that satisfies it; see ACCESSIBILITY.md for the open gap it
+leaves. Quit closes the daemon and the surface together; it is icon-only
+now, a cross glyph with `aria-label="Quit Deckhand"` and no visible
+text.
 
 ### What has no software equivalent
 
@@ -194,6 +221,8 @@ decision with a reason, recorded here so it is not silently re-litigated.
 
 The device calls them Agent Keys, Command Keys, the Dial, the Stick, the Mic
 Key, and the Codex Key. Deckhand uses **rows** for the session list and
-**Hide grey** (labelled "Hide" or "Show N"), **Move**, and **Quit** for the
-three header controls. None of the device's other names apply to anything
-on the current surface.
+**the grey toggle** (labelled "Hide unknown" or "Show N unknown") and
+**Quit** for the two header controls. Move had no device equivalent; it
+existed only in Deckhand and was removed by
+[ADR-031](DECISIONS.md#adr-031). None of the device's other names apply
+to anything on the current surface.

@@ -259,8 +259,19 @@ answer no permission decision, and may carry whatever their own event supports,
    worst case is the wrong window in front rather than keystrokes into it; it
    types nothing. The heuristic is weaker on a `vscode-extension` host, where
    a pid identifies no single window and the title is all there is, so send
-   has no synthetic route there at all and a raise brings up the window
-   without selecting a tab. The
+   has no synthetic route there at all. As of [ADR-032](DECISIONS.md#adr-032)
+   a raise on that host first tries to read the workspace folder VS Code's
+   own `~/.claude/ide/*.lock` file names for the session and, on a match,
+   run VS Code's own CLI against it, before falling back to the title-only
+   raise. That read and that spawn are both local and add no new authority:
+   the lock file's `pid` and `workspaceFolders` fields are the only ones
+   used, its `authToken` is parsed and discarded, never logged or written
+   anywhere, Deckhand never opens the WebSocket server the lock file
+   advertises, and the CLI binary run is resolved from the path of the VS
+   Code process already hosting the session, never from `PATH` or from
+   anything the session itself could redirect. No network channel is
+   opened by any of this; it is a local file read and a local process
+   spawn, the same trust level as everything else in this section. The
    approval path is unaffected by any of this: it runs over hooks and is
    host-independent, which was observed rather than assumed
    ([DECISIONS.md](DECISIONS.md#adr-023)).

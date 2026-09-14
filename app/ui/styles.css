@@ -49,31 +49,20 @@ body {
   height: 100%;
 }
 
-/* ---- Header: drag grip, state counts, Move, Quit ---------------------- */
+/* ---- Header: a title bar of counts, the grey toggle, and Quit -------- */
 
+/* The whole bar is the drag region. Only the buttons take clicks; the
+   counts pass pointer events through so dragging on them drags too. */
 #header {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
-  /* 64px total, matching HEADER_H_LOGICAL in window.rs: 52px controls
-     plus 6px above and below. A taller header than the daemon sizes for
+  align-items: center;
+  gap: 4px;
+  /* 52px total, matching HEADER_H_LOGICAL in window.rs: 44px controls
+     plus 4px above and below. A taller header than the daemon sizes for
      spills into the list and puts a scrollbar on a list that fits. */
-  height: 64px;
-  padding: 6px;
+  height: 52px;
+  padding: 4px 4px 4px 10px;
   flex: 0 0 auto;
-}
-
-#grip {
-  width: 14px;
-  flex: 0 0 auto;
-  border-radius: 4px;
-  background: repeating-linear-gradient(
-    0deg,
-    var(--tile),
-    var(--tile) 4px,
-    var(--tile-border) 4px,
-    var(--tile-border) 6px
-  );
   cursor: grab;
 }
 
@@ -83,11 +72,12 @@ body {
 #summary {
   flex: 1;
   min-width: 0;
+  align-self: stretch;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 2px;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .count {
@@ -124,41 +114,28 @@ body {
 }
 
 .side-btn {
-  width: 48px;
+  min-width: 44px;
   flex: 0 0 auto;
   min-height: 44px;
+  padding: 0 12px;
   border: none;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--text) 6%, var(--tile));
-  color: var(--text);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
+  color: var(--subtext);
   font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
 }
 
-#grey {
-  width: 56px;
-}
-
-.side-btn .side-glyph {
+#quit {
+  width: 44px;
+  padding: 0;
   font-size: 18px;
-  line-height: 1;
-}
-
-#grey .glyph {
-  width: 18px;
-  height: 18px;
-  color: var(--c-unknown);
-}
-
-.side-btn .side-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--subtext);
 }
 
 .side-btn:active {
@@ -167,7 +144,7 @@ body {
 
 .side-btn[aria-pressed="true"] {
   background: var(--tile-border);
-  box-shadow: inset 0 0 0 2px var(--text);
+  color: var(--text);
 }
 
 /* ---- Session list ---------------------------------------------------- */
@@ -235,13 +212,6 @@ body {
   background: var(--bg);
 }
 
-.row[data-state="unknown"],
-.row[data-state="ended"] {
-  /* Soft enough that a run of adjacent unknown rows reads as rows, not
-     as a stack of doubled dashed lines. */
-  outline: 2px dashed color-mix(in srgb, var(--ring) 32%, transparent);
-  outline-offset: -2px;
-}
 
 .row .glyph {
   grid-area: glyph;
@@ -310,27 +280,31 @@ body {
 /* A Reveal miss, shown for a few seconds in its own column so it never
    covers the name or the state word. */
 .row:has(.row-note) {
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: 30px auto minmax(0, 1fr);
   grid-template-areas:
-    "glyph name note"
+    "glyph name name"
     "glyph state note";
 }
 
+/* One short line (format.ts shortens the daemon's sentence), so the row
+   never grows past ROW_H_LOGICAL and never pushes the list into a
+   scrollbar. */
 .row-note {
   grid-area: note;
+  justify-self: end;
   align-self: center;
-  max-width: 170px;
+  max-width: 100%;
   margin-left: 10px;
-  padding: 3px 8px;
+  padding: 1px 8px;
   border-radius: 4px;
   background: var(--bg);
   color: var(--text);
   font-size: 12px;
-  line-height: 1.25;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 

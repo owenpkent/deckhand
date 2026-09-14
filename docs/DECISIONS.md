@@ -1190,3 +1190,284 @@ ADR-008's six colours, ADR-027's
 click-to-select-and-raise, and ADR-029's row and header sizing are all
 unchanged; this entry only adds a third header control and a filter on
 top of what they already draw.
+
+---
+
+<a id="adr-031"></a>
+## ADR-031: Move removed, the header redrawn as a drag bar
+
+Date: 2026-09-13
+
+**Context.** [ADR-028](#adr-028) kept Move, a click-to-place command
+that cycled the window through six edge presets, specifically because
+[ACCESSIBILITY.md](ACCESSIBILITY.md) forbids drag as a required path;
+the code comment on `cycle_position` called it "the route that must
+always exist" alongside dragging. Reviewing the header after
+[ADR-030](#adr-030) landed a third control on it, the owner asked for a
+plainer surface and said directly that a Move button was not needed.
+The owner is also the mouse-only user the drag rule protects, so this
+trades away that rule's own guarantee, deliberately and with their
+authorization, not by oversight. Separately, the header still read as
+busy for what a title bar does: a striped drag grip that did nothing
+but drag, a three-word Hide grey toggle whose pressed state was an
+inset outline easy to miss at a glance, and Quit carrying a redundant
+text label next to its glyph.
+
+**Decision.** Move and the `cycle_position` command it drove are
+deleted outright, not superseded by another control; the window is
+repositioned only by dragging from here on. The whole header becomes
+the drag region (`data-tauri-drag-region` on `#header` itself, no
+separate grip), so any empty part of the bar drags the window; the
+state-count pills sit on top of it with `pointer-events: none` so a
+drag started on a pill still drags rather than being swallowed. The
+header shrinks to 52 px (was 64) with 4 px padding (10 px on the
+left), and its order becomes: the read-only state counts on the left,
+the grey toggle, then Quit pinned to the right edge. Quit is a 44 by
+44 px button carrying only its glyph, a cross, `aria-label="Quit
+Deckhand"`, no visible text. The window's initial height in
+`tauri.conf.json` follows, 116 px, one 52 px header plus one 64 px
+row.
+
+The grey toggle is relabelled to say what it acts on rather than a
+bare count: "Hide unknown" while unknown rows show, "Show N unknown"
+while they are hidden ("Show unknown" when N is 0), computed by a new
+`greyLabel()` helper in `app/ui/src/format.ts`, tested in
+`format.test.ts`. Its pressed state changes from a 2 px inset outline
+to a lighter background and brighter text, matching how the header's
+other buttons read pressed. The toggle now disappears entirely,
+rather than sitting there reading "Hide unknown" with nothing to
+hide, when there are no unknown sessions and hiding is already off;
+Quit's position at the right edge does not move when it does, since
+Quit is anchored to the edge, not to a fixed slot in a row of
+controls. The all-hidden placeholder row's text changes to "N unknown
+hidden" (was "N grey hidden"), matching the toggle's own wording.
+Header buttons generally become plain text buttons, 44 px minimum
+height, 12 px side padding, 6 px corner radius, 14 px bold text,
+rather than the stacked glyph-over-label layout ADR-029 and ADR-030
+drew; Quit alone stays icon-only at 44 by 44 px.
+
+Two changes land on the row itself, orthogonal to the header. First,
+the dashed outline ADR-029 gave unknown and ended rows is removed;
+the two states now read apart from a live row by shape and dimming
+alone, both already in place from ADR-029: unknown's question-mark
+glyph and its name dropping to regular weight, ended's dash glyph and
+its own dimming. `styles.test.ts` now pins the regular-weight name
+and the ended dimming instead of asserting a dashed outline. Second,
+a Reveal miss note moves off its own multi-line side column, which
+had been squeezing the session name, clipping the state word, and
+growing some rows past the fixed 64 px, and onto the row's second
+line, one line, to the right of the state word. The daemon's full
+sentence is shortened for that space by a new `revealNote()` helper
+in `format.ts`: "No window found," "Windows blocked it," or "No
+session," tested alongside `greyLabel()`.
+
+This supersedes: [ADR-028](#adr-028)'s decision to keep Move as the
+header's click-to-place alternative to dragging (the header no longer
+has two controls, Move and Quit; it has a grey toggle, when there is
+something to hide, and Quit); and [ADR-030](#adr-030)'s toggle
+wording ("Hide" and "Show N"), its pressed style (a 2 px inset
+outline), and its header geometry (a 14 px drag grip, 48 px Move and
+Quit, a 56 px Hide grey, 64 px total). Everything else either entry
+decided, the auto-binding list, click-to-select-and-raise, the
+state-count summary and its fixed order, the daemon owning
+`hide_unknown` in `settings.json`, stands unchanged.
+
+**Consequences.** The accepted cost is exactly what
+[ACCESSIBILITY.md](ACCESSIBILITY.md) exists to prevent: dragging is
+now the only way to reposition the window, and a pointer user who
+cannot sustain a drag, the user the forbidden-interactions table
+protects, has no click-based route left to move it. A saved position
+is still restored and clamped into the currently connected monitors'
+work area at startup ([ADR-028](#adr-028)), so the window is never
+stranded off every screen, but it cannot be nudged from wherever that
+leaves it without a drag. This is recorded as an owner-approved
+exception, not as compliance: the owner asked for it directly on
+2026-09-13, is the person the rule protects, and accepted the
+trade-off knowingly. It is an open accessibility gap, not a closed
+one; a click-based reposition control, if one returns, would need its
+own ADR and would close it. The drag rule in
+[ACCESSIBILITY.md](ACCESSIBILITY.md) is not reworded for any other
+control by this entry, only carved out for this one, named case.
+
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md), [UI_SPEC.md](UI_SPEC.md),
+[ACCESSIBILITY.md](ACCESSIBILITY.md), [ARCHITECTURE.md](ARCHITECTURE.md),
+`README.md`, `CLAUDE.md`, `CHANGELOG.md`, and `TODO.md` are updated to
+match in the same change. ADR-008's six colours, ADR-027's
+click-to-select-and-raise, and ADR-029's row and header sizing and
+dimming rules are otherwise unchanged; this entry removes one
+control, redraws the remaining two, and drops one visual signal, the
+dashed outline, that ADR-029 added, in favour of signals ADR-029
+already drew.
+
+---
+
+<a id="adr-032"></a>
+## ADR-032: Reveal classifies the host, and a tie is a miss
+
+Date: 2026-09-13
+
+**Context.** The owner clicked a row and got "No window matched," the
+honest-miss sentence Reveal has carried since [ADR-028](#adr-028), and
+asked for research before a fix: local investigation, a web search, and
+a look at the Claude Code and Codex issue trackers on GitHub.
+
+The proximate cause was a poisoned `cwd`. `%LOCALAPPDATA%\deckhand\reveal.log`
+showed the session's stored directory reading
+`agent-a225d82809fcd6b14`: a subagent hook payload carries its parent
+session's `session_id` but its own `cwd`, and nothing had stopped that
+value from overwriting the session's real working directory the moment
+a subagent ran. Every later Reveal for that session scored against the
+wrong directory name and never had a chance.
+
+The second problem was structural. Reveal's one scored match, pid,
+label, and cwd text against every visible window, was built for a host
+where a pid identifies one window. A plain console session's process
+owns its window one to one. A Windows Terminal session shares its
+owning process, `WindowsTerminal.exe`, with every other tab and window
+on the machine, so a pid narrows "is this a Terminal window at all" and
+nothing further. A VS Code session shares one main `Code.exe` across
+every window the same way. The same score that finds a console exactly
+can tie two unrelated windows, or quietly prefer the wrong one, on
+either of the other two, and nothing before this entry treated a tie as
+anything other than whichever candidate `EnumWindows` happened to visit
+first.
+
+**Decision.** Two fixes close the immediate bug, and a third changes
+how Reveal decides at all.
+
+The poisoning is fixed at its source and given a second line of
+defence. `apply_hook` (`state.rs`) now recognises a payload carrying
+`agent_id` as a subagent's, not the session's own, and skips the `cwd`
+and the label derived from it; liveness still updates from the same
+payload. `register_enumerated` (`registry.rs`) treats
+`claude agents --json`'s own `cwd` as authoritative and corrects an
+existing value that disagrees with it, rather than only filling in a
+blank one, so a session poisoned before this fix, or by any gap this
+entry has not found, repairs itself on the next enumeration pass.
+
+A tie at the top score is now a miss, never resolved by pick order.
+`pick_scored` (`reveal.rs`) reports whether its winning score was
+unique; when two or more windows tie for the best score, Reveal returns
+no match rather than the one enumeration happened to visit first. Two
+equally plausible windows are exactly the case where guessing produces
+a confident wrong answer, and an honest miss is what Reveal exists to
+prefer over that.
+
+Reveal now classifies the session's host before it decides how to
+look, by walking the pid's parent chain (a Toolhelp32 snapshot, at most
+eight hops) for the first ancestor that is `Code.exe` or
+`Code - Insiders.exe` (VS Code), `WindowsTerminal.exe` (Windows
+Terminal), or neither (a plain console). This is a distinction inside
+what [ADR-023](#adr-023) calls the `pty` host, not a fourth value on
+`SessionInfo.host`: a console and a Windows Terminal tab are both `pty`
+at the protocol level, and only their window-finding strategy differs
+here.
+
+Each host gets the strategy that actually fits it:
+
+- **Console.** `AttachConsole(pid)` followed by `GetConsoleWindow`
+  gives the exact window, because the mapping is genuinely one to one;
+  no title or score is involved. `AttachConsole` is process-global, so
+  every call is serialised through a mutex. If the attach fails, most
+  likely because the session has already exited, Reveal falls back to
+  the same scored title match every other host uses as a last resort.
+  This path is unverified against a real console-hosted session; it
+  has only been exercised in unit tests against a fake process table.
+- **Windows Terminal.** Raise the one Terminal-owned window if exactly
+  one is open. If more than one is, report the honest miss, "Found
+  *label* in Windows Terminal, but more than one Terminal window is
+  open," rather than guess a tab. Targeting a specific tab from
+  outside the process is not attempted, because there is currently no
+  way to do it: `microsoft/terminal#19783`, which asked for exactly
+  this (focusing a tab by its `WT_SESSION`), was closed not planned in
+  January 2026, and `wt -w <id>` creates a new window rather than
+  finding an existing one when the id it is given is not currently
+  open.
+- **VS Code.** Read every `~/.claude/ide/*.lock` file, the same lock
+  files [ADR-023](#adr-023) catalogued and marked not to be built on,
+  for their `pid` and `workspaceFolders` fields only; the `authToken`
+  each one also carries is parsed and discarded, never logged or
+  stored, and Reveal never opens the WebSocket MCP server the lock
+  file advertises. The workspace folder that is the session's `cwd`
+  itself, or its longest ancestor directory, wins; two folders tied at
+  the same length are ambiguous and treated the same as no match, for
+  the same reason as the tie rule above. On a match, Reveal resolves
+  `<the owning Code.exe's own install directory>\bin\code.cmd` from
+  that process's own image path (never PATH, never anything the
+  session controls) and runs `code.cmd "<folder>"` hidden with a
+  five-second timeout; VS Code's own CLI already focuses an
+  already-open folder's window, so this one call typically does most
+  of the work by itself. Reveal then restricts its own window raise to
+  Code.exe-owned windows whose title contains the folder's basename,
+  and counts the attempt a success only on a single title hit or a
+  clean, exit-0 CLI run. No lock match, no `code.cmd` found, or a
+  title match that is itself ambiguous with a nonzero or timed-out CLI
+  exit, falls back to the pid-blind scored title match Reveal already
+  used for this host, or reports "Found *label* in VS Code, but more
+  than one matching window is open" when that fallback also ties.
+
+  This narrows what [ADR-023](#adr-023) said about the lock files:
+  they move from observed and deliberately not built on, to a
+  load-bearing input for Reveal specifically. That is still consistent
+  with the degrade-not-fail rule
+  [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md#interfaces-used-and-what-they-rest-on)
+  holds every internal interface to: every step above has a defined
+  fallback down to the pre-existing title match, so a lock file
+  disappearing tomorrow costs Reveal precision on this one host, not a
+  failure.
+
+Deliberately left unwired: the extension's own session-tab link,
+`vscode://anthropic.claude-code/open?session=<id>`, observed accepted
+(any non-path string up to 200 characters) by reading `extension.js`
+from the 2.1.270 install. Its handler, `createPanel`, reveals an
+existing panel only when the receiving window's extension host already
+tracks that session id in memory; any id it does not track, which is
+every id today, falls through to creating a new panel that resumes the
+session as a fresh process. That risks a second live copy of the
+session instead of revealing the first one, for two reasons nothing
+observable today rules out: a session running in VS Code's own
+integrated terminal is never tracked by the extension host at all (its
+immediate parent is a shell, not the extension host, which
+`host::parent_is_vscode_exe` records for the log though nothing acts
+on it yet), and which window a multi-window VS Code instance routes
+the URI to is decided by VS Code's own core routing, outside
+`extension.js`, and was not observed. Codex has the same gap for the
+same shape of reason; the Codex Micro sidesteps it entirely because
+every Codex thread lives in one desktop app window, which VS Code is
+not.
+
+Recorded as a risk, not mitigated: `anthropics/claude-code#77827`
+reports a session where refocusing a terminal window was captured as a
+click on a permission prompt already on screen there, silently denying
+it. Reveal raises a window on an ordinary tile click, which is exactly
+the action that issue describes, so the risk applies to Deckhand as
+shipped even though nothing here approves or denies anything yet. It
+is recorded now, not deferred to Phase 2, because Phase 2's approve and
+deny controls would sit on this same window-raising mechanism.
+
+**Consequences.** Reveal should miss less on the bug that prompted this
+entry, since the value it was scoring against is now corrected at the
+source and repaired on the next enumeration if it was not, but it also
+now misses, honestly, in three places it used to guess: a tie of any
+kind, more than one open Windows Terminal window, and more than one
+matching VS Code window with no lock file to disambiguate it. That
+trade is deliberate: an honest "no window matched" costs a second click
+to check by hand, and a wrong window raised silently costs trust in
+every tile after it. The console path carries a real hedge: it is
+unverified against a live console-hosted session, tracked in `TODO.md`
+rather than claimed here. Windows Terminal's tab targeting stays
+blocked on upstream, not on anything Deckhand controls, and the
+session-tab link stays unwired until a safe cross-window test exists,
+both also tracked in `TODO.md`. The `anthropics/claude-code#77827` risk
+is unmitigated by design for now; revisiting it belongs with Phase 2,
+when a click first gains the power to deny something.
+
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md),
+[ARCHITECTURE.md](ARCHITECTURE.md),
+[SECURITY_MODEL.md](SECURITY_MODEL.md), and
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) are updated to match
+in the same change, along with `TODO.md` and `CHANGELOG.md`.
+[ADR-023](#adr-023)'s host axis, mode and capability model, and
+[ADR-028](#adr-028)'s exclusion of Deckhand's own window from every
+candidate list, stand unchanged; this entry only narrows how a `pty`
+host's window is found and what counts as finding it.

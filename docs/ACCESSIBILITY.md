@@ -74,11 +74,24 @@ These may not ship as the only way to do anything:
 | Forbidden as sole path | Because | Provided alternative |
 | --- | --- | --- |
 | Press-and-hold | Sustained force is the exact cost being avoided | Click-to-toggle, used wherever a sustained action would otherwise be required |
-| Drag | Sustained force plus precision | Windows move via a move mode, click destination; drag also works but is never required |
+| Drag | Sustained force plus precision | Repositioning the window is a named exception (see below); every other drag on the surface remains optional |
 | Double-click | Timing windows exclude dwell clickers | Nothing is double-clicked: a row click selects and raises in one click, and every other action is a single click on its own target |
 | Hover-only reveals | Dwell users cannot hover without clicking, and the surface never takes focus, so there is no keyboard route to a tooltip either | Everything visible is clickable, and anything a control needs to explain itself is shown in the open, never gated behind a hover |
 | Keyboard input | The whole premise | Text entry delegates to the system keyboard of choice, for example alpha-osk; naming things is optional everywhere |
 | Chorded or simultaneous inputs | One pointer, one action | Never used |
+
+**Drag is no longer optional for one action.**
+[ADR-031](DECISIONS.md#adr-031) removed Move, the click-to-place
+command that had been the required alternative to dragging the
+window, at the owner's explicit request; the owner is also the
+mouse-only user this rule exists to protect, and accepted the trade-off
+knowingly. Repositioning the window now has no click-based route: a
+saved position is still restored and clamped into the currently
+connected monitors' work area at startup ([ADR-028](DECISIONS.md#adr-028)),
+so the window never starts off-screen, but nothing short of a drag
+can move it once it is placed. This is a real, open accessibility
+gap, not a compliant reading of the rule above, and it stands until a
+click-based reposition control returns, which would need its own ADR.
 
 The 350 ms double-click inherited from the Codex Micro has no accelerator
 here: since [ADR-027](DECISIONS.md#adr-027) the row's single click already
@@ -111,10 +124,10 @@ whatever control is added next.
   constant, not a guideline (the PR template asks about it by name).
 - Session rows are larger than the floor: 64 px, fixed, per
   [UI_SPEC.md](UI_SPEC.md#row-anatomy). The floor binds hardest on the
-  header, where Move and Quit (48 px wide) and Hide grey (56 px wide,
-  [ADR-030](DECISIONS.md#adr-030)) are the smallest targets on the
-  surface; all three still hold the 44 px floor on the dimension that
-  matters, height.
+  header, now 52 px total ([ADR-031](DECISIONS.md#adr-031)): Quit is
+  44 by 44 px, exactly the floor, and the grey toggle is a
+  variable-width text button with a 44 px minimum height; both hold
+  the floor on the dimension that matters.
 - **Surface scale from 100% to 300%**, everything scaling together. At 300%
   on a 1080p screen, the header and at least a few rows must still render
   legibly; if a layout cannot survive that, the layout is wrong.
@@ -143,14 +156,17 @@ colour is the fastest channel, never the only one:
 | Complete | Green | Check | Done, unread |
 | Error | Red | Cross | Problem |
 | Unknown | Grey | Question, hatched fill | Not heard yet, or Unknown |
-| Ended or unbound | None | Dashed outline | Empty |
+| Ended or unbound | None | Dash | Empty |
 
 Unknown carries two labels for the one state: "Not heard yet" for a session
 bound by enumeration or restored from disk that no hook has spoken for yet
 this run, and "Unknown" for one that had spoken and then gone quiet past
-`T_unknown`. Colour, glyph, and dashed outline are identical between the
-two; only the word differs, so the distinction still reaches glyph-only and
-colour-blind modes without adding a channel ([ADR-029](DECISIONS.md#adr-029)).
+`T_unknown`. Colour and glyph are identical between the two; only the word
+differs, so the distinction still reaches glyph-only and colour-blind modes
+without adding a channel ([ADR-029](DECISIONS.md#adr-029)). Unknown and
+ended rows no longer carry a shared dashed outline either; that treatment
+was removed by [ADR-031](DECISIONS.md#adr-031), which leaves the two
+states to read apart from a live row by glyph shape and dimming alone.
 Unknown rows are also dimmer than the rest of the list, though deliberately
 less dim than an ended row: glyph and state word go to 75% grey toward the
 background, and the name drops from bold to regular weight at 72% text

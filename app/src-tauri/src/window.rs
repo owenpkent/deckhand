@@ -13,9 +13,9 @@
 /// (`window_height`) and changes as sessions bind and unbind.
 pub const WINDOW_W_LOGICAL: f64 = 360.0;
 
-/// Header row: drag grip, state counts, Move, Quit. Must match
-/// `#header` in app/ui/styles.css.
-pub const HEADER_H_LOGICAL: f64 = 64.0;
+/// Header row, a title bar that is its own drag region: state counts,
+/// the grey toggle, Quit. Must match `#header` in app/ui/styles.css.
+pub const HEADER_H_LOGICAL: f64 = 52.0;
 
 /// One session row, two lines of large type. 64 is well above the 44px
 /// accessibility floor (docs/ACCESSIBILITY.md); the floor itself is a
@@ -89,7 +89,7 @@ pub fn reflow_height(old: Rect, new_h: i32, bottom_anchored: bool) -> Rect {
 }
 
 /// Whether `rect`'s centre sits in the bottom half of `area`: the
-/// heuristic `reflow_height` and `cycle_position` use to decide which
+/// heuristic `reflow_height` uses to decide which
 /// edge a resize should anchor to. There is no explicit anchor stored
 /// anywhere; the window's own position on screen is the anchor.
 pub fn is_bottom_anchored(rect: Rect, area: Rect) -> bool {

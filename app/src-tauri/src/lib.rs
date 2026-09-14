@@ -3,6 +3,7 @@
 // second copy of the state machine.
 
 pub mod enumerate;
+pub mod host;
 pub mod http;
 pub mod persist;
 pub mod registry;

@@ -13,7 +13,7 @@
         "label": "main",
         "title": "Deckhand",
         "width": 360,
-        "height": 128,
+        "height": 116,
         "resizable": false,
         "alwaysOnTop": true,
         "focus": false,

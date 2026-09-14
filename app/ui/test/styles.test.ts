@@ -58,9 +58,18 @@ test("styles.css has a row [data-state] rule for every session state", () => {
   }
 });
 
-test("unknown and ended rows are marked dashed, a shape difference, not colour alone", () => {
-  const block = ruleBlock('.row[data-state="unknown"],\n.row[data-state="ended"]');
-  assert.match(block, /outline:[^;]*dashed/);
+test("unknown and ended rows step back from live rows by more than colour", () => {
+  // Their glyphs differ in shape (question mark, dash); on top of that the
+  // name drops from bold, so a grey row reads apart from a live one even
+  // in greyscale.
+  assert.match(ruleBlock('.row[data-state="unknown"] .row-name'), /font-weight:\s*400/);
+  assert.match(ruleBlock('.row[data-state="ended"] .glyph,\n.row[data-state="ended"] .row-name,\n.row[data-state="ended"] .row-state'), /color:/);
+});
+
+test("the header is one drag region and its counts pass drags through", () => {
+  const html = readFileSync(path.join(here, "../../index.html"), "utf8");
+  assert.match(html, /<div id="header" data-tauri-drag-region>/);
+  assert.match(ruleBlock("#summary"), /pointer-events:\s*none/);
 });
 
 test("row and header heights match ROW_H_LOGICAL and HEADER_H_LOGICAL in window.rs", () => {

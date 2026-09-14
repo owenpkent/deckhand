@@ -176,12 +176,22 @@ impl Session {
         if let Some(m) = payload.get("permission_mode").and_then(Value::as_str) {
             self.permission_mode = Some(m.to_string());
         }
-        if let Some(cwd) = payload.get("cwd").and_then(Value::as_str) {
-            if self.cwd.is_none() {
-                self.cwd = Some(cwd.to_string());
-            }
-            if self.label.is_empty() {
-                self.label = dir_name(cwd);
+        // A payload carrying `agent_id` is a subagent's, not the
+        // session's own: subagent hook payloads share the parent
+        // session_id but can carry a different cwd (their own working
+        // directory), which would otherwise latch onto the session and
+        // poison every later Reveal (docs/CONTROL_MAPPING.md). Liveness
+        // above still updates; only cwd and the label derived from it
+        // are skipped.
+        let is_subagent_payload = payload.get("agent_id").is_some();
+        if !is_subagent_payload {
+            if let Some(cwd) = payload.get("cwd").and_then(Value::as_str) {
+                if self.cwd.is_none() {
+                    self.cwd = Some(cwd.to_string());
+                }
+                if self.label.is_empty() {
+                    self.label = dir_name(cwd);
+                }
             }
         }
 
@@ -677,6 +687,27 @@ mod tests {
         assert!(!changed);
         assert_eq!(x.state, SessionState::Thinking);
         assert_eq!(x.last_event_at_ms, 2, "liveness still updates");
+    }
+
+    #[test]
+    fn a_subagent_payload_arriving_first_does_not_set_cwd() {
+        // SubagentStart carries agent_id and, on this machine, its own
+        // cwd rather than the parent session's. If that cwd latched, it
+        // would poison Reveal for the whole session (registry.rs is the
+        // correction path once enumeration reports the real cwd).
+        let mut x = s();
+        ev(&mut x, 1, json!({
+            "hook_event_name": "SubagentStart",
+            "agent_id": "a1",
+            "agent_type": "Explore",
+            "cwd": "C:\\Users\\o\\dev\\undertow\\subagent-scratch"
+        }));
+        assert_eq!(x.cwd, None, "a subagent's own cwd must never be taken as the session's");
+        assert_eq!(x.label, "", "no cwd means no derived label either");
+        // The parent's own event still sets it normally afterward.
+        ev(&mut x, 2, json!({"hook_event_name": "UserPromptSubmit", "cwd": "C:\\Users\\o\\dev\\undertow"}));
+        assert_eq!(x.cwd.as_deref(), Some("C:\\Users\\o\\dev\\undertow"));
+        assert_eq!(x.label, "undertow");
     }
 
     #[test]

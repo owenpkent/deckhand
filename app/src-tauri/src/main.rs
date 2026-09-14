@@ -203,90 +203,20 @@ fn toggle_hide_unknown(shared: State<Shared>, app: tauri::AppHandle) {
 /// Reveal never fails silently (docs/CONTROL_MAPPING.md).
 #[tauri::command]
 fn reveal_session(index: usize, shared: State<Shared>) -> String {
-    let (label, dir, pid) = {
+    let (label, cwd, dir, pid, session_id) = {
         let reg = shared.0.lock().unwrap();
         let Some(session) = reg.bindings.get(index).and_then(|id| reg.sessions.get(id)) else {
             return "No session is bound to this row.".to_string();
         };
         (
             session.label.clone(),
+            session.cwd.clone(),
             session.cwd.as_deref().map(state::dir_name),
             session.pid,
+            session.id.clone(),
         )
     };
-    reveal::reveal(&label, dir.as_deref(), pid)
-}
-
-/// Click-to-place move: cycle through edge presets so moving the window
-/// never requires a drag (docs/ACCESSIBILITY.md). The drag grip also
-/// works; this is the route that must always exist. Presets use the
-/// window's actual current size (it grows and shrinks with the session
-/// list) and are clamped into the monitor's work area, the same as any
-/// other resize or restore.
-#[tauri::command]
-fn cycle_position(app: tauri::AppHandle) {
-    let Some(win) = app.get_webview_window("main") else {
-        return;
-    };
-    let Ok(Some(monitor)) = win.current_monitor() else {
-        return;
-    };
-    let scale = monitor.scale_factor();
-    let area = monitor.work_area();
-    let area_x = area.position.x as f64 / scale;
-    let area_y = area.position.y as f64 / scale;
-    let area_w = area.size.width as f64 / scale;
-    let area_h = area.size.height as f64 / scale;
-
-    let cur = win
-        .outer_position()
-        .map(|p| p.to_logical::<f64>(scale))
-        .unwrap_or(tauri::LogicalPosition::new(area_x, area_y));
-    let cur_size = win
-        .outer_size()
-        .map(|s| s.to_logical::<f64>(scale))
-        .unwrap_or(tauri::LogicalSize::new(
-            window::WINDOW_W_LOGICAL,
-            window::HEADER_H_LOGICAL + window::ROW_H_LOGICAL,
-        ));
-
-    let margin = 12.0;
-    let xs = [
-        area_x + (area_w - cur_size.width) / 2.0, // centre
-        area_x + margin,                          // left
-        area_x + area_w - cur_size.width - margin, // right
-    ];
-    let ys = [
-        area_y + area_h - cur_size.height - margin, // bottom
-        area_y + margin,                            // top
-    ];
-    // Presets in glance-friendly order.
-    let presets = [
-        (xs[0], ys[0]),
-        (xs[1], ys[0]),
-        (xs[2], ys[0]),
-        (xs[0], ys[1]),
-        (xs[1], ys[1]),
-        (xs[2], ys[1]),
-    ];
-    // Advance to the preset after the nearest current one.
-    let nearest = presets
-        .iter()
-        .enumerate()
-        .min_by_key(|(_, (x, y))| ((x - cur.x).abs() + (y - cur.y).abs()) as i64)
-        .map(|(i, _)| i)
-        .unwrap_or(0);
-    let (nx, ny) = presets[(nearest + 1) % presets.len()];
-
-    let target = window::Rect::new(
-        (nx * scale).round() as i32,
-        (ny * scale).round() as i32,
-        (cur_size.width * scale).round() as i32,
-        (cur_size.height * scale).round() as i32,
-    );
-    let area_physical = window::Rect::new(area.position.x, area.position.y, area.size.width as i32, area.size.height as i32);
-    let clamped = window::clamp_into(target, area_physical);
-    let _ = win.set_position(tauri::PhysicalPosition::new(clamped.x, clamped.y));
+    reveal::reveal(&label, dir.as_deref(), cwd.as_deref(), pid, &session_id)
 }
 
 fn main() {
@@ -296,7 +226,6 @@ fn main() {
             select_tile,
             quit,
             reveal_session,
-            cycle_position,
             toggle_hide_unknown
         ])
         .setup(|app| {

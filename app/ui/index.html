@@ -7,18 +7,10 @@
 </head>
 <body>
   <main id="surface" aria-label="Deckhand surface">
-    <div id="header">
-      <div id="grip" data-tauri-drag-region title=""></div>
+    <div id="header" data-tauri-drag-region>
       <div id="summary" aria-label="Session counts"></div>
-      <button id="grey" class="side-btn" aria-pressed="false">
-        <span class="side-glyph"></span><span class="side-label"></span>
-      </button>
-      <button id="move" class="side-btn" aria-label="Move the surface">
-        <span class="side-glyph">&#8690;</span><span class="side-label">Move</span>
-      </button>
-      <button id="quit" class="side-btn" aria-label="Quit Deckhand">
-        <span class="side-glyph">&#10005;</span><span class="side-label">Quit</span>
-      </button>
+      <button id="grey" class="side-btn" aria-pressed="false"></button>
+      <button id="quit" class="side-btn" aria-label="Quit Deckhand">&#10005;</button>
     </div>
     <div id="list" role="group" aria-label="Sessions"></div>
   </main>

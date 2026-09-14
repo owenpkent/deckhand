@@ -12,7 +12,9 @@ import {
   displayName,
   escapeHtml,
   GLYPHS,
+  greyLabel,
   isRevealSuccess,
+  revealNote,
   STATE_WORDS,
   stateWord,
   summaryCounts,
@@ -78,7 +80,7 @@ function renderRow(t: TileSnapshot): HTMLElement {
       .invoke("select_tile", { index: t.index })
       .then(() => api.core.invoke<string>("reveal_session", { index: t.index }))
       .then((text) => {
-        if (!isRevealSuccess(text)) showRowNote(t.index, text);
+        if (!isRevealSuccess(text)) showRowNote(t.index, revealNote(text));
       });
   });
   return el;
@@ -115,17 +117,15 @@ function renderSummary(): void {
 
 // Hides rows in the unknown state, either road in: not heard yet, or
 // heard from and then silent past T_unknown (docs/ACCESSIBILITY.md: a
-// single click, no hold, no keyboard).
+// single click, no hold, no keyboard). The label names what it hides.
+// With nothing unknown and nothing hidden it has no job, so it steps out
+// of the header; Quit, pinned to the right edge, never moves because of
+// it.
 function renderGrey(): void {
-  const glyphEl = grey.querySelector(".side-glyph")!;
-  glyphEl.classList.add("glyph");
-  glyphEl.innerHTML = GLYPHS["unknown"]!;
-
   const n = unknownCount(snapshot.tiles);
-  const showLabel = n === 0 ? "Show" : `Show ${n}`;
+  grey.hidden = n === 0 && !snapshot.hideUnknown;
   grey.setAttribute("aria-pressed", String(snapshot.hideUnknown));
-  grey.querySelector(".side-label")!.textContent = snapshot.hideUnknown ? showLabel : "Hide";
-  grey.setAttribute("aria-label", snapshot.hideUnknown ? `${showLabel} grey sessions` : "Hide grey sessions");
+  grey.textContent = greyLabel(n, snapshot.hideUnknown);
 }
 
 function render(): void {
@@ -144,7 +144,7 @@ function render(): void {
   if (snapshot.hideUnknown && visibleTiles.length === 0) {
     const hidden = document.createElement("div");
     hidden.className = "row row-empty";
-    hidden.textContent = `${unknownCount(snapshot.tiles)} grey hidden`;
+    hidden.textContent = `${unknownCount(snapshot.tiles)} unknown hidden`;
     list.replaceChildren(hidden);
     return;
   }
@@ -160,10 +160,6 @@ function wake(): void {
 
 grey.addEventListener("click", () => {
   void api.core.invoke("toggle_hide_unknown");
-});
-
-document.getElementById("move")!.addEventListener("click", () => {
-  void api.core.invoke("cycle_position");
 });
 
 document.getElementById("quit")!.addEventListener("click", () => {
