@@ -337,6 +337,44 @@ mod tests {
     }
 
     #[test]
+    fn a_straggler_event_after_session_end_stays_ended_and_off_the_list() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 2);
+        assert!(!r.is_bound("s1"));
+
+        // A Stop delivered late (out of order, or racing SessionEnd
+        // itself) used to flip the session back to Complete, and
+        // Registry::apply_hook reads state after applying the event, so
+        // it re-listed a session that had already ended.
+        let changed = r.apply_hook(&json!({"hook_event_name": "Stop", "session_id": "s1"}), 3);
+        assert!(!changed, "a straggler must not be an observable change");
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Ended);
+        assert!(!r.is_bound("s1"), "a straggler Stop must not re-list an ended session");
+
+        let changed2 = r.apply_hook(
+            &json!({"hook_event_name": "PostToolUseFailure", "session_id": "s1", "error": "boom", "is_interrupt": false}),
+            4,
+        );
+        assert!(!changed2);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Ended);
+        assert!(!r.is_bound("s1"), "a straggler failure must not re-list an ended session either");
+    }
+
+    #[test]
+    fn a_session_start_after_session_end_revives_and_rejoins_the_list() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 2);
+        assert!(!r.is_bound("s1"));
+
+        let changed = r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "resume", "session_id": "s1"}), 3);
+        assert!(changed);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Idle);
+        assert!(r.is_bound("s1"), "a resume after SessionEnd rejoins the list");
+    }
+
+    #[test]
     fn enumerated_sessions_do_not_overwrite_observed_ones() {
         let mut r = Registry::default();
         r.apply_hook(

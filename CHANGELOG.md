@@ -11,6 +11,20 @@ version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ENDED` now absorbs every straggler, not just a clear or a resume.**
+  `Session::apply_hook` (`state.rs`) had no guard for a session already in
+  `ENDED`: a `Stop` or a `PostToolUseFailure` delivered late, or racing
+  `SessionEnd` itself, was read like any other event and flipped the
+  session back to `COMPLETE`, `THINKING`, or `ERROR`. `Registry::apply_hook`
+  (`registry.rs`) decides list membership from the state left after
+  applying an event, so a straggler that got through re-listed a session
+  that had already ended. Every event but a session-start (a resume, which
+  legitimately revives an ended session) is now ignored outright once a
+  session is `ENDED`. `docs/ARCHITECTURE.md` records the rule alongside the
+  other events that read like state changes and are not.
+
 ### Security
 
 - **Ingest hardening: a CSP, a body cap, a constant-time token compare,

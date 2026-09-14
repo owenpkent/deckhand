@@ -112,6 +112,15 @@ generalises past one runtime: an adapter reports a lifecycle change only when
 the lifecycle actually changed, and the daemon takes no state change from an
 event whose reason it does not recognise.
 
+`ENDED` absorbs stragglers on the same principle. Once a session reaches
+`ENDED`, only a session-start event (a resume) is taken as a state change;
+every other event is ignored outright, not merely processed to no visible
+effect. A `Stop` or a tool-failure event delivered late, or racing the
+session-end event itself, must not flip a session that has already ended
+back to `COMPLETE`, `THINKING`, or `ERROR`, and must not re-list it: list
+membership follows the state left after an event is applied, so a straggler
+that got through this rule would put a dead session back on the board.
+
 ### The child ledger
 
 A turn can finish while work it started is still running. On the owner's

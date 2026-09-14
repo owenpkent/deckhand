@@ -170,6 +170,24 @@ impl Session {
     /// Unrecognised events update liveness and nothing else: the daemon
     /// takes no state change from an event it does not understand.
     pub fn apply_hook(&mut self, payload: &Value, now_ms: i64) -> bool {
+        let event = payload
+            .get("hook_event_name")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+
+        // Once a session has ended, only a session-start event (a resume)
+        // may revive it. Every other event is ignored outright, not
+        // merely processed to no effect: a straggler delivered late, or
+        // racing SessionEnd itself (a Stop, a PostToolUseFailure, ...),
+        // would otherwise flip Ended back to Complete/Thinking/Error.
+        // Registry::apply_hook decides list membership from the state
+        // left here after this call returns, so a straggler that got
+        // through this guard would re-list a session that has already
+        // left (docs/ARCHITECTURE.md#the-session-state-machine).
+        if self.state == SessionState::Ended && event != "SessionStart" {
+            return false;
+        }
+
         self.last_event_at_ms = now_ms;
         self.heard = true;
 
@@ -195,10 +213,6 @@ impl Session {
             }
         }
 
-        let event = payload
-            .get("hook_event_name")
-            .and_then(Value::as_str)
-            .unwrap_or("");
         let tool_name = payload.get("tool_name").and_then(Value::as_str);
         let tool_use_id = payload.get("tool_use_id").and_then(Value::as_str);
 
@@ -789,6 +803,33 @@ mod tests {
         assert!(!changed);
         assert_eq!(x.state, SessionState::Thinking, "an unrecognised notification type must not move state");
         assert_eq!(x.last_event_at_ms, 5, "liveness still updates");
+    }
+
+    #[test]
+    fn ended_session_ignores_every_event_except_session_start() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SessionEnd", "reason": "exit"}));
+        assert_eq!(x.state, SessionState::Ended);
+        assert!(
+            !ev(&mut x, 2, json!({"hook_event_name": "Stop"})),
+            "a straggler Stop must report no change"
+        );
+        assert_eq!(x.state, SessionState::Ended, "a straggler Stop must not revive an ended session");
+        assert!(
+            !ev(&mut x, 3, json!({"hook_event_name": "PostToolUseFailure", "error": "boom", "is_interrupt": false})),
+            "a straggler PostToolUseFailure must report no change"
+        );
+        assert_eq!(x.state, SessionState::Ended, "a straggler failure must not revive an ended session either");
+        assert!(x.error.is_none(), "an ignored straggler must not even record its error detail");
+    }
+
+    #[test]
+    fn session_start_revives_an_ended_session() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SessionEnd", "reason": "exit"}));
+        assert_eq!(x.state, SessionState::Ended);
+        assert!(ev(&mut x, 2, json!({"hook_event_name": "SessionStart", "source": "resume"})));
+        assert_eq!(x.state, SessionState::Idle, "a resume legitimately revives an ended session");
     }
 
     #[test]
