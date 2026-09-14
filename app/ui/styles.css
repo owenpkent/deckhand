@@ -132,6 +132,14 @@ body {
   justify-content: center;
 }
 
+/* .side-btn's own `display: flex` outranks the UA [hidden] stylesheet
+   rule (both are type selectors with zero specificity added, so the
+   later same-specificity rule wins), so grey.hidden = true (main.ts)
+   would otherwise never actually hide the grey toggle. */
+.side-btn[hidden] {
+  display: none;
+}
+
 #quit {
   width: 44px;
   padding: 0;
