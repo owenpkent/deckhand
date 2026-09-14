@@ -32,10 +32,8 @@ jobs:
         with:
           node-version: 24
 
-      # package-lock.json is gitignored, so there is nothing for npm ci
-      # to pin to; the only dependency is the TypeScript compiler.
       - name: Install the compiler
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Surface tests
         run: npm test
@@ -60,7 +58,7 @@ jobs:
       - name: Compile the surface
         working-directory: app/ui
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npx tsc
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
