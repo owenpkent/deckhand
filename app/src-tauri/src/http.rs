@@ -33,7 +33,7 @@ pub fn start(events: Sender<serde_json::Value>) -> Option<HttpServer> {
                     .iter()
                     .any(|h| {
                         h.field.as_str().as_str().eq_ignore_ascii_case("x-deckhand-token")
-                            && h.value.as_str() == expected
+                            && tokens_equal(h.value.as_str(), &expected)
                     });
                 let status = if !ok {
                     401
@@ -73,6 +73,28 @@ pub fn start(events: Sender<serde_json::Value>) -> Option<HttpServer> {
         .ok()?;
 
     Some(HttpServer { port, token })
+}
+
+/// Constant-time equality for the ingest token. A plain `==` returns as
+/// soon as it finds a mismatched byte, so how long the compare takes
+/// leaks how many leading bytes of a guessed token were right; a local
+/// attacker who can measure that timing could recover the token one
+/// byte at a time. This instead always walks every byte of the shorter
+/// operand and folds the differences together, so the time taken
+/// depends only on length, never on content. The length check up front
+/// is not itself a timing leak worth closing: `expected` is always the
+/// same fixed-length hex token (see `random_token`), so its length was
+/// never a secret.
+fn tokens_equal(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 fn random_token() -> String {
@@ -182,6 +204,28 @@ mod tests {
         let status = post(server.port, "/hook", Some(&server.token), "X-DECKHAND-TOKEN", br#"{"a":3}"#);
         assert_eq!(status, 204);
         assert!(rx.recv_timeout(Duration::from_millis(500)).is_ok());
+    }
+
+    #[test]
+    fn tokens_equal_accepts_the_same_string() {
+        assert!(tokens_equal("abc123", "abc123"));
+    }
+
+    #[test]
+    fn tokens_equal_rejects_a_same_length_mismatch() {
+        assert!(!tokens_equal("abc123", "abc124"));
+    }
+
+    #[test]
+    fn tokens_equal_rejects_different_lengths() {
+        assert!(!tokens_equal("abc123", "abc1234"));
+        assert!(!tokens_equal("abc1234", "abc123"));
+    }
+
+    #[test]
+    fn tokens_equal_rejects_empty_against_nonempty() {
+        assert!(!tokens_equal("", "abc123"));
+        assert!(tokens_equal("", ""));
     }
 
     #[test]
