@@ -10,7 +10,6 @@ dist/
 dist-ssr/
 .vite/
 *.tsbuildinfo
-package-lock.json
 
 # Bundled installers and signing material
 release/

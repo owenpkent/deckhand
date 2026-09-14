@@ -189,7 +189,7 @@ def setup_surface() -> bool:
     if (UI / "node_modules").exists():
         return True
     print("Installing the TypeScript compiler into app/ui/node_modules...")
-    return run(["npm", "install", "--no-audit", "--no-fund"], cwd=UI)
+    return run(["npm", "ci", "--no-audit", "--no-fund"], cwd=UI)
 
 
 def build() -> bool:

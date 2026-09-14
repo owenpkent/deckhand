@@ -263,6 +263,16 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       every repo report state, not only this one (done on the owner's
       machine with scripts/install-hooks.ps1 on 2026-09-13; the repo-local
       wiring was removed at the same time).
+- [ ] Rotate or disable `.claude/hooks/payload-capture.js`'s output.
+      `_scratch/hook-capture.jsonl` grows unbounded and holds raw
+      prompts and tool inputs; it is gitignored, but a local file that
+      never rotates is still a liability sitting on disk.
+- [ ] Close same-user event spoofing on the ingest endpoint
+      (`docs/SECURITY_MODEL.md#phase-1-ingest-hardening`) before Phase
+      2: any process running as the same OS user can read the daemon's
+      token today and POST fabricated hook events, which only paints a
+      false session in Phase 1 but would face an actual permission
+      decision once Phase 2 wires one up.
 
 ---
 

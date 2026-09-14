@@ -4,6 +4,11 @@ version = "0.1.0"
 description = "Always-on-top, mouse-only control surface for Claude Code sessions"
 edition = "2021"
 publish = false
+# CVE-2024-24576: rustc before 1.77.2 could mis-quote arguments passed
+# to a Windows .cmd/.bat via std::process::Command, letting a hostile
+# argument break out of quoting. reveal.rs launches code.cmd, so this
+# floor is load-bearing, not routine hygiene.
+rust-version = "1.77.2"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

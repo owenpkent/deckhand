@@ -11,6 +11,29 @@ version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Security
+
+- **Ingest hardening: a CSP, a body cap, a constant-time token compare,
+  and a validated Reveal launch folder.** The surface's webview now
+  loads under a Content Security Policy in `tauri.conf.json`
+  (`default-src 'self'; script-src 'self'; style-src 'self'; font-src
+  'self'; img-src 'self'; connect-src ipc: http://ipc.localhost`);
+  nothing in the surface needed a looser policy. The daemon's loopback
+  ingest endpoint (`http.rs`) now caps a request body at 8 MiB,
+  answering `413` and dropping the event outright, never partially
+  applied, over that limit; refuses chunked bodies unread with `411`,
+  since the chunked decoder's framing buffer sits beneath that cap; and
+  compares the per-start ingest token in
+  constant time instead of with a short-circuiting `==`. Reveal's VS
+  Code path (`reveal.rs`) now refuses to launch `code.cmd` unless the
+  workspace folder it read from `~/.claude/ide/*.lock` is an absolute
+  path to a directory that actually exists, and every `Cargo.toml` in
+  `app/` and `shim/` now pins `rust-version = "1.77.2"`, closing
+  CVE-2024-24576. `docs/SECURITY_MODEL.md` records the change and the
+  residual risk it does not close: any process running as the same OS
+  user can still read the ingest token and spoof hook events, tracked
+  in `TODO.md` to close before Phase 2.
+
 ### Changed
 
 - **Reveal classifies the session's host and treats a tie as a miss,
