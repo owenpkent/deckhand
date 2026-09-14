@@ -56,6 +56,34 @@ export interface Snapshot {
   hideUnknown: boolean;
 }
 
+// Mirrors of the daemon's settings-panel types
+// (app/src-tauri/src/runkey.rs, hook_status.rs, installer.rs). As with
+// SessionState above, the Rust side is authoritative; its serialization
+// tests (runkey.rs's serializes_as_the_wire_shape_the_surface_expects
+// and the sibling tests in hook_status.rs and installer.rs) pin the
+// exact shapes these types describe.
+
+export type StartWithWindowsState =
+  | { kind: "off" }
+  | { kind: "onThisExe" }
+  | { kind: "onOtherExe"; path: string };
+
+export type HookStatus = "installed" | "outdated" | "missing" | "unreadable";
+
+export type RepairOutcome = "ran" | "timed_out" | "failed_to_start";
+
+export interface SettingsSnapshot {
+  alwaysOnTop: boolean;
+  startWithWindows: StartWithWindowsState;
+  hookStatus: HookStatus;
+  installerAvailable: boolean;
+}
+
+export interface RepairResult {
+  outcome: RepairOutcome;
+  hookStatus: HookStatus;
+}
+
 // The pieces of the injected Tauri global this surface uses.
 export interface TauriApi {
   core: { invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> };

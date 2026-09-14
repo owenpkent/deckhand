@@ -132,14 +132,6 @@ body {
   justify-content: center;
 }
 
-/* .side-btn's own `display: flex` outranks the UA [hidden] stylesheet
-   rule (both are type selectors with zero specificity added, so the
-   later same-specificity rule wins), so grey.hidden = true (main.ts)
-   would otherwise never actually hide the grey toggle. */
-.side-btn[hidden] {
-  display: none;
-}
-
 #quit {
   width: 44px;
   padding: 0;
@@ -325,4 +317,44 @@ body {
   color: var(--subtext);
   font-size: 15px;
   cursor: default;
+}
+
+/* ---- Settings panel: replaces the session list in place while open
+   (docs/DECISIONS.md#adr-033). Rows reuse .row's 64px height and full
+   width but never a glyph column: a text label and a text state only,
+   so nothing here relies on colour. ---------------------------------- */
+
+.panel-row {
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "label state";
+  column-gap: 12px;
+  background: var(--tile);
+}
+
+.panel-row-label {
+  grid-area: label;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.panel-row-state {
+  grid-area: state;
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--subtext);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Styled inactive, not natively disabled: the row still accepts a
+   click (docs/ACCESSIBILITY.md forbids a control that clicking does
+   nothing to explain), it just has nothing further to do while its own
+   state text already names the reason. */
+.panel-row-inactive {
+  color: var(--subtext);
+  cursor: default;
+}
+.panel-row-inactive .panel-row-label {
+  color: var(--subtext);
 }

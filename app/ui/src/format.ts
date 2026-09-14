@@ -2,7 +2,7 @@
 // document, Tauri, or module-level mutable state, so these are safe to
 // unit-test without a browser (docs/ARCHITECTURE.md#the-surface).
 
-import { SessionState } from "./types.js";
+import { HookStatus, RepairOutcome, SessionState, StartWithWindowsState } from "./types.js";
 
 // ---- Glyphs: drawn, never emoji (docs/UI_SPEC.md#state-rendering) ----
 
@@ -77,13 +77,6 @@ export function unknownCount(tiles: readonly { session: { state: SessionState } 
   return tiles.filter((t) => t.session?.state === "unknown").length;
 }
 
-// The grey toggle's label, naming what it acts on: "Hide unknown" while
-// those rows show, "Show 6 unknown" while they are hidden, so a hidden
-// session is always counted.
-export function greyLabel(unknown: number, hidden: boolean): string {
-  if (!hidden) return "Hide unknown";
-  return unknown === 0 ? "Show unknown" : `Show ${unknown} unknown`;
-}
 
 // A Reveal miss, cut down to what fits beside the state word. The
 // daemon's full sentence explains the heuristic; the row only needs to
@@ -137,6 +130,88 @@ export function rowLabel(s: { id: string; label: string; state: SessionState; he
   const parts = [displayName(s), stateWord(s)];
   if (note) parts.push(note);
   return parts.join(", ");
+}
+
+// ---- Settings panel (docs/DECISIONS.md#adr-033) ------------------------
+//
+// Every row here reads as a text label plus a text state, never colour
+// alone (docs/ACCESSIBILITY.md), so each of these is plain text, never
+// an icon or a colour token.
+
+// The gear button's own visible text doubles as its pressed/open
+// signal: open and closed read as different words, not only a
+// different background colour.
+export function gearLabel(open: boolean): string {
+  return open ? "Close settings" : "Settings";
+}
+
+export function onOffText(on: boolean): string {
+  return on ? "On" : "Off";
+}
+
+// "On (other copy)" names the case the toggle cannot silently resolve
+// on its own: the Run key already points at a different Deckhand exe,
+// so a click repoints it at this one rather than turning it off.
+export function startWithWindowsText(state: StartWithWindowsState): string {
+  switch (state.kind) {
+    case "off":
+      return "Off";
+    case "onThisExe":
+      return "On";
+    case "onOtherExe":
+      return "On (other copy)";
+  }
+}
+
+// Naming the hidden count here is the same reasoning the header's own
+// toggle used to carry in its label before ADR-033 moved it into this
+// panel row: a hidden session must always be counted, never simply
+// gone.
+export function hideUnknownText(hidden: boolean, unknownCount: number): string {
+  return hidden ? `On, ${unknownCount} hidden` : "Off";
+}
+
+const HOOK_STATUS_TEXT: Record<HookStatus, string> = {
+  installed: "Installed",
+  outdated: "Outdated",
+  missing: "Missing",
+  unreadable: "Unreadable",
+};
+
+export function hookStatusText(status: HookStatus): string {
+  return HOOK_STATUS_TEXT[status];
+}
+
+// The Repair row's state text, in order of precedence: why it cannot
+// run at all, that it is running right now, or what the last run did.
+// installerAvailable false is the only case the row does not accept a
+// click for; everything else is exactly one click away.
+export function repairRowText(
+  installerAvailable: boolean,
+  running: boolean,
+  lastOutcome: RepairOutcome | null,
+): string {
+  if (!installerAvailable) return "Installer not found";
+  if (running) return "Running…";
+  switch (lastOutcome) {
+    case "ran":
+      return "Repaired";
+    case "timed_out":
+      return "Timed out";
+    case "failed_to_start":
+      return "Failed to start";
+    case null:
+    case undefined:
+      return "Repair";
+  }
+}
+
+// The Reset position row's brief confirmation, shown for a few seconds
+// after a click the same way a row's own Reveal note is (main.ts's
+// NOTE_MS), so the click's effect is visible without requiring the
+// owner to notice the window actually move.
+export function resetPositionText(justReset: boolean): string {
+  return justReset ? "Done" : "Moves the window back to its default spot";
 }
 
 // Reveal always returns a sentence, success or miss. A successful raise

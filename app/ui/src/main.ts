@@ -7,15 +7,29 @@
 // picker and no fixed row count. A click selects the row and raises its
 // window in one motion (ADR-027); a raise that fails explains itself as
 // a brief inline note on that row instead of opening anything.
+//
+// The header's gear button opens the settings panel in place of the
+// session list (docs/DECISIONS.md#adr-033): always on top, start with
+// Windows, reset position, hide unknown (moved here from the header,
+// where ADR-030/031 had it), and a Hooks status row with a Repair
+// action. The panel has no authority of its own either; it only shows
+// what the daemon and the registry already hold and asks the daemon to
+// change them.
 
 import {
   displayName,
   escapeHtml,
+  gearLabel,
   GLYPHS,
-  greyLabel,
+  hideUnknownText,
+  hookStatusText,
   isRevealSuccess,
+  onOffText,
+  repairRowText,
+  resetPositionText,
   revealNote,
   rowLabel,
+  startWithWindowsText,
   STATE_WORDS,
   stateGlyph,
   stateWord,
@@ -24,7 +38,7 @@ import {
 } from "./format.js";
 import { presentSessionIds, staleNoteIds } from "./notes.js";
 import { applyTheme, dark } from "./theme.js";
-import { Snapshot, TileSnapshot, tauri } from "./types.js";
+import { RepairOutcome, RepairResult, Snapshot, SettingsSnapshot, StartWithWindowsState, TileSnapshot, tauri } from "./types.js";
 
 const api = tauri();
 
@@ -33,6 +47,20 @@ let lastActivityAt = Date.now();
 
 const IDLE_DIM_MS = 3 * 60 * 1000;
 const NOTE_MS = 4000;
+
+// ---- Settings panel state ---------------------------------------------
+//
+// Pure navigation and in-flight-action state, never persisted here: the
+// daemon is the source of truth for whether a setting is on, and for
+// whether the panel itself is open (toggle_settings_panel's return
+// value, not an optimistic local guess, is what panelOpen is set from).
+
+let panelOpen = false;
+let settings: SettingsSnapshot | null = null;
+let repairRunning = false;
+let repairOutcome: RepairOutcome | null = null;
+let justResetPosition = false;
+let resetNoteTimer: ReturnType<typeof setTimeout> | undefined;
 
 // A row's inline note (a Reveal miss, shown for a few seconds), keyed by
 // session id (PR review: identity). Indices shift as sessions bind and
@@ -45,7 +73,7 @@ const rowNotes = new Map<string, { text: string; timer: ReturnType<typeof setTim
 const surface = document.getElementById("surface")!;
 const list = document.getElementById("list")!;
 const summary = document.getElementById("summary")!;
-const grey = document.getElementById("grey")!;
+const gear = document.getElementById("gear")!;
 
 // ---- Rows -------------------------------------------------------------
 
@@ -152,25 +180,137 @@ function renderSummary(): void {
   );
 }
 
-// ---- Header grey toggle -----------------------------------------------
+// ---- Header gear / settings panel --------------------------------------
 
-// Hides rows in the unknown state, either road in: not heard yet, or
-// heard from and then silent past T_unknown (docs/ACCESSIBILITY.md: a
-// single click, no hold, no keyboard). The label names what it hides.
-// With nothing unknown and nothing hidden it has no job, so it steps out
-// of the header; Quit, pinned to the right edge, never moves because of
-// it.
-function renderGrey(): void {
-  const n = unknownCount(snapshot.tiles);
-  grey.hidden = n === 0 && !snapshot.hideUnknown;
-  grey.setAttribute("aria-pressed", String(snapshot.hideUnknown));
-  grey.textContent = greyLabel(n, snapshot.hideUnknown);
+// The gear's own visible text carries its pressed/open state (never
+// colour alone, docs/ACCESSIBILITY.md): "Settings" closed, "Close
+// settings" open.
+function renderGear(): void {
+  gear.setAttribute("aria-pressed", String(panelOpen));
+  gear.textContent = gearLabel(panelOpen);
+}
+
+interface PanelRow {
+  label: string;
+  state: string;
+  inactive?: boolean;
+  onClick?: () => void;
+}
+
+function panelRows(): PanelRow[] {
+  const s = settings;
+  if (!s) return [];
+  return [
+    {
+      label: "Always on top",
+      state: onOffText(s.alwaysOnTop),
+      onClick: () => {
+        void api.core.invoke<boolean>("toggle_always_on_top").then((on) => {
+          if (settings) settings.alwaysOnTop = on;
+          render();
+        });
+      },
+    },
+    {
+      label: "Start with Windows",
+      state: startWithWindowsText(s.startWithWindows),
+      onClick: () => {
+        void api.core.invoke<StartWithWindowsState>("toggle_start_with_windows").then((state) => {
+          if (settings) settings.startWithWindows = state;
+          render();
+        });
+      },
+    },
+    {
+      label: "Reset window position",
+      state: resetPositionText(justResetPosition),
+      onClick: () => {
+        void api.core.invoke("reset_window_position").then(() => {
+          justResetPosition = true;
+          clearTimeout(resetNoteTimer);
+          resetNoteTimer = setTimeout(() => {
+            justResetPosition = false;
+            render();
+          }, NOTE_MS);
+          render();
+        });
+      },
+    },
+    {
+      label: "Hide unknown",
+      state: hideUnknownText(snapshot.hideUnknown, unknownCount(snapshot.tiles)),
+      onClick: () => {
+        void api.core.invoke("toggle_hide_unknown");
+      },
+    },
+    {
+      label: "Hooks",
+      state: hookStatusText(s.hookStatus),
+    },
+    {
+      label: "Repair",
+      state: repairRowText(s.installerAvailable, repairRunning, repairOutcome),
+      // Not a native `disabled` button: docs/ACCESSIBILITY.md forbids a
+      // control that clicking does nothing to explain, but this row's
+      // reason is already shown as its permanent state text, with
+      // nothing hidden behind the click, so a click while inactive is
+      // an honest no-op rather than a silent dead one.
+      inactive: !s.installerAvailable || repairRunning,
+      onClick: () => {
+        if (!settings || !settings.installerAvailable || repairRunning) return;
+        repairRunning = true;
+        repairOutcome = null;
+        render();
+        void api.core
+          .invoke<RepairResult>("repair_hooks")
+          .then((result) => {
+            repairRunning = false;
+            repairOutcome = result.outcome;
+            if (settings) settings.hookStatus = result.hookStatus;
+            render();
+          })
+          .catch(() => {
+            repairRunning = false;
+            repairOutcome = "failed_to_start";
+            render();
+          });
+      },
+    },
+  ];
+}
+
+function renderPanelRow(row: PanelRow): HTMLElement {
+  // The Hooks status row (no onClick) is read-only, like the header's
+  // own summary counts, so it renders as a plain div rather than a
+  // button that would imply a click does something.
+  const el = document.createElement(row.onClick ? "button" : "div");
+  el.className = "row panel-row";
+  if (row.inactive) el.classList.add("panel-row-inactive");
+  if (row.onClick) el.setAttribute("aria-disabled", String(!!row.inactive));
+  el.innerHTML = `
+    <div class="panel-row-label">${escapeHtml(row.label)}</div>
+    <div class="panel-row-state">${escapeHtml(row.state)}</div>`;
+  el.setAttribute("aria-label", `${row.label}, ${row.state}`);
+  if (row.onClick) el.addEventListener("click", row.onClick);
+  return el;
+}
+
+function renderPanel(): void {
+  list.replaceChildren(...panelRows().map(renderPanelRow));
 }
 
 function render(): void {
   pruneRowNotes();
   renderSummary();
-  renderGrey();
+  renderGear();
+  // The list container is reused for the panel rather than duplicated
+  // (docs/DECISIONS.md#adr-033: "in-bar, not a separate window"), so its
+  // accessible name has to say which one is actually showing.
+  list.setAttribute("aria-label", panelOpen ? "Settings" : "Sessions");
+  if (panelOpen) {
+    renderPanel();
+    return;
+  }
   if (snapshot.tiles.length === 0) {
     const empty = document.createElement("div");
     empty.className = "row row-empty";
@@ -198,8 +338,16 @@ function wake(): void {
   surface.classList.remove("dimmed");
 }
 
-grey.addEventListener("click", () => {
-  void api.core.invoke("toggle_hide_unknown");
+gear.addEventListener("click", () => {
+  void api.core.invoke<boolean>("toggle_settings_panel").then(async (open) => {
+    panelOpen = open;
+    if (open) {
+      repairOutcome = null;
+      repairRunning = false;
+      settings = await api.core.invoke<SettingsSnapshot>("get_settings_snapshot");
+    }
+    render();
+  });
 });
 
 document.getElementById("quit")!.addEventListener("click", () => {

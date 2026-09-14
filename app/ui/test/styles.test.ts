@@ -99,13 +99,7 @@ test("the empty-list placeholder row is also at least the 44px floor", () => {
   assert.ok(Number(minHeight![1]) >= 44, "row-empty min-height below the 44px floor");
 });
 
-test("the header buttons (Move, Quit) meet the 44px floor", () => {
+test("the header buttons (gear, Quit) meet the 44px floor", () => {
   const block = ruleBlock(".side-btn");
   assert.match(block, /min-height:\s*44px/);
-});
-
-test("a hidden .side-btn (the grey toggle when there is nothing to hide) actually disappears", () => {
-  // .side-btn sets its own `display: flex`, which otherwise beats the UA
-  // [hidden] rule and leaves grey.hidden = true painting an empty button.
-  assert.match(ruleBlock(".side-btn[hidden]"), /display:\s*none/);
 });

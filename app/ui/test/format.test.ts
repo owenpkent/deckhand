@@ -9,18 +9,24 @@ import {
   displayName,
   escapeHtml,
   fmtElapsed,
+  gearLabel,
   GLYPHS,
-  greyLabel,
+  hideUnknownText,
+  hookStatusText,
   isRevealSuccess,
+  onOffText,
+  repairRowText,
+  resetPositionText,
   revealNote,
   rowLabel,
+  startWithWindowsText,
   STATE_WORDS,
   stateGlyph,
   stateWord,
   summaryCounts,
   unknownCount,
 } from "../src/format.js";
-import type { SessionState } from "../src/types.js";
+import type { HookStatus, RepairOutcome, SessionState, StartWithWindowsState } from "../src/types.js";
 
 const STATES: SessionState[] = [
   "idle",
@@ -249,12 +255,66 @@ test("unknownCount treats a null session (defensive-only row) as not unknown", (
   assert.equal(unknownCount([{ session: null }, { session: { state: "unknown" } }]), 1);
 });
 
-// ---- greyLabel ------------------------------------------------------------------
+// ---- Settings panel helpers (docs/DECISIONS.md#adr-033) -------------------------
 
-test("greyLabel names what the toggle acts on and counts what it hid", () => {
-  assert.equal(greyLabel(6, false), "Hide unknown");
-  assert.equal(greyLabel(6, true), "Show 6 unknown");
-  assert.equal(greyLabel(0, true), "Show unknown");
+test("gearLabel names the gear's own pressed/open state, not only its colour", () => {
+  assert.equal(gearLabel(false), "Settings");
+  assert.equal(gearLabel(true), "Close settings");
+});
+
+test("onOffText is a plain On or Off", () => {
+  assert.equal(onOffText(true), "On");
+  assert.equal(onOffText(false), "Off");
+});
+
+test("startWithWindowsText covers off, on for this exe, and on for another copy", () => {
+  const off: StartWithWindowsState = { kind: "off" };
+  const onThisExe: StartWithWindowsState = { kind: "onThisExe" };
+  const onOtherExe: StartWithWindowsState = { kind: "onOtherExe", path: "D:/old/deckhand.exe" };
+  assert.equal(startWithWindowsText(off), "Off");
+  assert.equal(startWithWindowsText(onThisExe), "On");
+  assert.equal(startWithWindowsText(onOtherExe), "On (other copy)");
+});
+
+test("hideUnknownText counts what is hidden and reads Off otherwise", () => {
+  assert.equal(hideUnknownText(false, 6), "Off");
+  assert.equal(hideUnknownText(true, 6), "On, 6 hidden");
+  assert.equal(hideUnknownText(true, 0), "On, 0 hidden");
+});
+
+test("hookStatusText renders every HookStatus as its own capitalised word", () => {
+  const expected: Record<HookStatus, string> = {
+    installed: "Installed",
+    outdated: "Outdated",
+    missing: "Missing",
+    unreadable: "Unreadable",
+  };
+  for (const status of Object.keys(expected) as HookStatus[]) {
+    assert.equal(hookStatusText(status), expected[status]);
+  }
+});
+
+test("repairRowText prioritises unavailable, then running, then the last outcome", () => {
+  assert.equal(repairRowText(false, false, null), "Installer not found");
+  assert.equal(repairRowText(false, true, "ran"), "Installer not found", "unavailable outranks a stale running/outcome state");
+  assert.equal(repairRowText(true, true, null), "Running\u2026");
+  assert.equal(repairRowText(true, false, null), "Repair");
+});
+
+test("repairRowText names every RepairOutcome once it is available and idle", () => {
+  const expected: Record<RepairOutcome, string> = {
+    ran: "Repaired",
+    timed_out: "Timed out",
+    failed_to_start: "Failed to start",
+  };
+  for (const outcome of Object.keys(expected) as RepairOutcome[]) {
+    assert.equal(repairRowText(true, false, outcome), expected[outcome]);
+  }
+});
+
+test("resetPositionText names the action, then confirms it briefly after a click", () => {
+  assert.equal(resetPositionText(false), "Moves the window back to its default spot");
+  assert.equal(resetPositionText(true), "Done");
 });
 
 // ---- revealNote -----------------------------------------------------------------
