@@ -144,7 +144,7 @@ This section is here because leaving it out would be dishonest.
 ## Status and what happens next
 
 Deckhand is at Phase 1: observation. The specification is complete, and
-the first real code exists: a daemon and tile surface in one desktop
+the first real code exists: a daemon and row surface in one desktop
 application plus the small program Claude Code's hooks call, watching
 live sessions and painting their status. Nothing in it can approve,
 deny, or send anything yet; that authority arrives in Phase 2, after
