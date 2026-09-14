@@ -8,6 +8,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::registry::Registry;
 
@@ -16,6 +17,28 @@ pub fn data_dir() -> Option<PathBuf> {
     let dir = PathBuf::from(base).join("deckhand");
     fs::create_dir_all(&dir).ok()?;
     Some(dir)
+}
+
+/// Write `body` to `path` atomically: write to a sibling temp file, then
+/// rename it over `path`. `std::fs::rename` replaces an existing
+/// destination on Windows (as well as POSIX), so a reader -- the shim
+/// parsing `daemon.json`, or this same process on its next cold start --
+/// never observes a half-written file, whichever of the two names it
+/// happens to open partway through.
+///
+/// The temp name is unique per call (the OS process id plus a monotonic
+/// counter), not just per target file: these writes are no longer
+/// serialised by the registry lock (main.rs's `after_change` builds the
+/// body under that lock and writes only after it drops), so two callers
+/// can legitimately target the same path around the same moment, and
+/// must not share, and therefore race, the same temp file.
+fn write_atomic(path: &Path, body: &str) -> std::io::Result<()> {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("deckhand");
+    let tmp = path.with_file_name(format!("{file_name}.{}.{seq}.tmp", std::process::id()));
+    fs::write(&tmp, body)?;
+    fs::rename(&tmp, path)
 }
 
 /// Written at startup so the shim can find the daemon; removed on clean
@@ -67,7 +90,7 @@ pub fn save_hide_unknown(hide_unknown: bool) {
 
 pub fn save_hide_unknown_in(dir: &Path, hide_unknown: bool) {
     if let Ok(body) = serde_json::to_string(&Settings { hide_unknown }) {
-        let _ = fs::write(dir.join("settings.json"), body);
+        let _ = write_atomic(&dir.join("settings.json"), &body);
     }
 }
 
@@ -124,6 +147,19 @@ pub fn save_bindings(reg: &Registry) {
 }
 
 pub fn save_bindings_in(dir: &Path, reg: &Registry) {
+    save_bindings_body_in(dir, bindings_body(reg));
+}
+
+/// The bindings list serialised ready to save, built from a live
+/// Registry. Building this touches only the in-memory registry (a clone
+/// of a few strings and a JSON format), no I/O, so it is safe, and
+/// meant, to call while the registry lock is held. The actual disk write
+/// (`save_bindings_body`/`_in`) is split out so a caller holding that
+/// lock -- main.rs's `after_change`, across every thread that mutates
+/// the registry -- can build the body under the lock and write it only
+/// after the lock has dropped, keeping a (potentially slow) disk write
+/// off it.
+pub fn bindings_body(reg: &Registry) -> Option<String> {
     let list: Vec<SavedBinding> = reg
         .bindings
         .iter()
@@ -136,9 +172,21 @@ pub fn save_bindings_in(dir: &Path, reg: &Registry) {
                 .unwrap_or_default(),
         })
         .collect();
-    if let Ok(body) = serde_json::to_string(&list) {
-        let _ = fs::write(dir.join("bindings.json"), body);
-    }
+    serde_json::to_string(&list).ok()
+}
+
+/// Write an already-built bindings body (see `bindings_body`). `None`
+/// (the registry failed to serialise, which realistically never happens
+/// for these plain string fields) is a no-op rather than a panic or a
+/// write of "null".
+pub fn save_bindings_body(body: Option<String>) {
+    let Some(dir) = data_dir() else { return };
+    save_bindings_body_in(&dir, body);
+}
+
+pub fn save_bindings_body_in(dir: &Path, body: Option<String>) {
+    let Some(body) = body else { return };
+    let _ = write_atomic(&dir.join("bindings.json"), &body);
 }
 
 /// Restore bindings and materialise a placeholder session for any bound
@@ -192,6 +240,60 @@ mod tests {
 
     fn cleanup(dir: &Path) {
         let _ = fs::remove_dir_all(dir);
+    }
+
+    // ---- write_atomic ------------------------------------------------
+
+    #[test]
+    fn write_atomic_writes_a_fresh_file() {
+        let dir = temp_dir();
+        let path = dir.join("thing.json");
+        write_atomic(&path, "first").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "first");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn write_atomic_replaces_rather_than_appends() {
+        let dir = temp_dir();
+        let path = dir.join("thing.json");
+        write_atomic(&path, "first").unwrap();
+        write_atomic(&path, "second").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "second", "a second write must replace the first outright");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn write_atomic_leaves_no_temp_file_behind() {
+        let dir = temp_dir();
+        let path = dir.join("thing.json");
+        write_atomic(&path, "content").unwrap();
+        let names: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name()))
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("thing.json")], "only the final file should remain");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn write_atomic_repeated_calls_do_not_collide_on_the_same_temp_name() {
+        // Regression for the reason the temp name is unique per call, not
+        // just per target path: these writes are no longer serialised by
+        // the registry lock, so two callers can legitimately target the
+        // same file around the same moment.
+        let dir = temp_dir();
+        let path = dir.join("thing.json");
+        for i in 0..5 {
+            write_atomic(&path, &i.to_string()).unwrap();
+        }
+        assert_eq!(fs::read_to_string(&path).unwrap(), "4");
+        let leftover_tmp = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .any(|e| e.file_name().to_string_lossy().ends_with(".tmp"));
+        assert!(!leftover_tmp, "no .tmp file should survive a successful write");
+        cleanup(&dir);
     }
 
     #[test]

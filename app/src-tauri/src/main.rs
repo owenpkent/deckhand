@@ -47,30 +47,54 @@ fn visible_rows(reg: &registry::Registry) -> usize {
     )
 }
 
+/// Everything `after_change` needs from the registry, captured by
+/// `prepare_change` while the registry lock is held. Building it touches
+/// only the in-memory registry (string formatting and a couple of small
+/// clones), never disk or the window, so it is fast and safe under the
+/// lock; the caller drops the lock before passing this to `after_change`,
+/// which is where the (potentially slow) disk write actually happens.
+struct PendingChange {
+    bindings_body: Option<String>,
+    row_count: usize,
+    snapshot: registry::Snapshot,
+}
+
+fn prepare_change(reg: &registry::Registry) -> PendingChange {
+    PendingChange {
+        bindings_body: persist::bindings_body(reg),
+        row_count: visible_rows(reg),
+        snapshot: reg.snapshot(now_ms()),
+    }
+}
+
 /// Everything that follows a registry mutation which may have changed
 /// the visible row count: persist the (now ordered) list, resize the
-/// window to match, and repaint. Selection alone does not need this (the
-/// visible row count is unchanged), so it calls `emit_snapshot` directly
-/// instead.
+/// window to match, and repaint. Takes a `PendingChange` built by
+/// `prepare_change` rather than the registry itself: every call site
+/// builds that snapshot while it still holds the registry lock, then
+/// explicitly drops the lock before calling this, so the disk write
+/// below never runs while the lock is held and blocks every other
+/// thread's access to the registry on it. Selection alone does not need
+/// this (the visible row count is unchanged), so it calls
+/// `emit_snapshot` directly instead.
 ///
-/// Callers hold the registry lock, and sync commands take that same lock
-/// on the main thread, so the window calls must not block this thread on
-/// the main one: the resize is queued to run there later, after the
-/// lock is long gone, with only the row count captured.
-fn after_change(app: &tauri::AppHandle, reg: &registry::Registry) {
-    persist::save_bindings(reg);
-    let row_count = visible_rows(reg);
+/// The window calls must also not block this thread on the main one: the
+/// resize is queued to run there later, with only the row count
+/// captured.
+fn after_change(app: &tauri::AppHandle, change: PendingChange) {
+    persist::save_bindings_body(change.bindings_body);
     // Hook traffic calls this constantly; the window only needs touching
     // when the visible row count actually moved.
-    if LAST_ROW_COUNT.swap(row_count, Ordering::SeqCst) != row_count {
+    if LAST_ROW_COUNT.swap(change.row_count, Ordering::SeqCst) != change.row_count {
         let handle = app.clone();
+        let row_count = change.row_count;
         let _ = app.run_on_main_thread(move || {
             if let Some(win) = handle.get_webview_window("main") {
                 resize_for_rows(&win, row_count);
             }
         });
     }
-    emit_snapshot(app, reg);
+    let _ = app.emit("deckhand://snapshot", change.snapshot);
 }
 
 /// Row count the window was last sized for; `usize::MAX` until the
@@ -194,8 +218,11 @@ fn quit(app: tauri::AppHandle) {
 fn toggle_hide_unknown(shared: State<Shared>, app: tauri::AppHandle) {
     let mut reg = shared.0.lock().unwrap();
     reg.hide_unknown = !reg.hide_unknown;
-    persist::save_hide_unknown(reg.hide_unknown);
-    after_change(&app, &reg);
+    let hide_unknown = reg.hide_unknown;
+    let change = prepare_change(&reg);
+    drop(reg);
+    persist::save_hide_unknown(hide_unknown);
+    after_change(&app, change);
 }
 
 /// Raise the host window of the session bound to a row. Returns a
@@ -286,7 +313,9 @@ fn main() {
                     for payload in rx {
                         let mut reg = apply_reg.lock().unwrap();
                         if reg.apply_hook(&payload, now_ms()) {
-                            after_change(&apply_handle, &reg);
+                            let change = prepare_change(&reg);
+                            drop(reg);
+                            after_change(&apply_handle, change);
                         }
                     }
                 })
@@ -306,7 +335,9 @@ fn main() {
                     std::thread::sleep(Duration::from_secs(2));
                     let mut reg = tick_reg.lock().unwrap();
                     if reg.tick(now_ms()) {
-                        after_change(&tick_handle, &reg);
+                        let change = prepare_change(&reg);
+                        drop(reg);
+                        after_change(&tick_handle, change);
                     }
                 })
                 .expect("spawn tick thread");
@@ -326,7 +357,9 @@ fn main() {
                     if let Some(rows) = enumerate::fetch() {
                         let mut reg = scan_reg.lock().unwrap();
                         if enumerate::register(&mut reg, &rows, now_ms()) {
-                            after_change(&scan_handle, &reg);
+                            let change = prepare_change(&reg);
+                            drop(reg);
+                            after_change(&scan_handle, change);
                         }
                     }
                     std::thread::sleep(RESCAN_INTERVAL);
