@@ -31,7 +31,9 @@ use std::sync::Mutex;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM};
 #[cfg(windows)]
-use windows_sys::Win32::System::Console::{AttachConsole, FreeConsole, GetConsoleWindow};
+use windows_sys::Win32::System::Console::{
+    AttachConsole, FreeConsole, GetConsoleWindow, ATTACH_PARENT_PROCESS,
+};
 #[cfg(windows)]
 use windows_sys::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -257,16 +259,35 @@ static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
 fn console_hwnd_for(pid: u32) -> Option<HWND> {
     let _guard = CONSOLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
+        // Deckhand's own console, if it has one at all: a debug build
+        // runs under the console subsystem (main.rs) and typically
+        // inherits its parent shell's console; a release build usually
+        // has none. Recorded before the attach/free dance below touches
+        // anything, so it can be restored afterward -- FreeConsole is
+        // unconditional and process-global, so without this the first
+        // call below would silently detach Deckhand's own dev console
+        // for the rest of the run, whether or not AttachConsole(pid)
+        // below then succeeds.
+        let had_console = !GetConsoleWindow().is_null();
+
         FreeConsole();
-        if AttachConsole(pid) == 0 {
-            return None;
+        let hwnd = (AttachConsole(pid) != 0).then(|| {
+            let hwnd = GetConsoleWindow();
+            FreeConsole();
+            hwnd
+        });
+
+        // Give Deckhand back its own console now that the borrowed
+        // attach above is done, success or not. ATTACH_PARENT_PROCESS is
+        // the standard way back: what a console-subsystem process has on
+        // entry is ordinarily its parent's console anyway.
+        if had_console {
+            AttachConsole(ATTACH_PARENT_PROCESS);
         }
-        let hwnd = GetConsoleWindow();
-        FreeConsole();
-        if hwnd.is_null() || IsWindowVisible(hwnd) == 0 {
-            None
-        } else {
-            Some(hwnd)
+
+        match hwnd {
+            Some(hwnd) if !hwnd.is_null() && IsWindowVisible(hwnd) != 0 => Some(hwnd),
+            _ => None,
         }
     }
 }
@@ -893,5 +914,41 @@ mod tests {
     #[test]
     fn an_empty_folder_is_not_launchable() {
         assert!(!is_launchable_folder(""));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn console_hwnd_for_restores_deckhands_own_console_on_a_failed_attach() {
+        use windows_sys::Win32::System::Console::AllocConsole;
+
+        // Give this test process a console if whatever launched it did
+        // not already give it one (a piped/non-interactive run has
+        // none): the property under test, that Deckhand's own console
+        // survives a failed AttachConsole, only means anything once
+        // there is a console to lose. A run that already has one (an
+        // interactive terminal, or a normal CI runner) makes this a
+        // harmless no-op.
+        unsafe { AllocConsole() };
+        if unsafe { GetConsoleWindow() }.is_null() {
+            // A context that cannot hold a console at all (no window
+            // station -- some sandboxes run this way): nothing this
+            // test can do about that, so skip rather than fail on an
+            // environment limitation unrelated to the code under test.
+            return;
+        }
+
+        // A pid essentially guaranteed not to name a live process, so
+        // AttachConsole(pid) inside console_hwnd_for fails
+        // deterministically and the function takes its early-return
+        // path: exactly where the original bug left Deckhand's own
+        // console detached for good (FreeConsole is unconditional and
+        // process-global, and the old code returned straight after the
+        // failed attach with no attempt to give the console back).
+        let bogus_pid: u32 = 0x7FFF_FFFE;
+        assert!(console_hwnd_for(bogus_pid).is_none(), "a bogus pid must not resolve to a window");
+        assert!(
+            unsafe { !GetConsoleWindow().is_null() },
+            "Deckhand's own console must still be attached after a failed AttachConsole, not silently freed"
+        );
     }
 }
