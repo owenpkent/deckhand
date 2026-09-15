@@ -9,12 +9,13 @@
 // a brief inline note on that row instead of opening anything.
 //
 // The header's gear button opens the settings panel in place of the
-// session list (docs/DECISIONS.md#adr-033, restyled by adr-034): always
-// on top, start with Windows, and reset position under "Window"; hide
-// unknown under "List"; and a combined Hooks status and Repair row
-// under "Claude Code". The panel has no authority of its own either; it
-// only shows what the daemon and the registry already hold and asks the
-// daemon to change them.
+// session list (docs/DECISIONS.md#adr-033, restyled by adr-034, the
+// List section folded back into the header): always on top, start with
+// Windows, and reset position under "Window"; a combined Hooks status
+// and Repair row under "Claude Code". The panel has no authority of its
+// own either; it only shows what the daemon and the registry already
+// hold and asks the daemon to change them. Hide grey stays a header
+// control, next to the gear, now a switch instead of plain text.
 
 import {
   boolChecked,
@@ -23,7 +24,8 @@ import {
   escapeHtml,
   gearIconKind,
   GLYPHS,
-  hideUnknownText,
+  hideGreyAriaLabel,
+  hideGreyWord,
   hookStatusPillClass,
   hookStatusText,
   isRevealSuccess,
@@ -78,6 +80,7 @@ const rowNotes = new Map<string, { text: string; timer: ReturnType<typeof setTim
 const surface = document.getElementById("surface")!;
 const list = document.getElementById("list")!;
 const summary = document.getElementById("summary")!;
+const hideGrey = document.getElementById("hideGrey")!;
 const gear = document.getElementById("gear")!;
 
 // ---- Rows -------------------------------------------------------------
@@ -185,6 +188,24 @@ function renderSummary(): void {
   );
 }
 
+// ---- Header Hide grey switch -------------------------------------------
+//
+// The header's own switch (docs/DECISIONS.md#adr-033), reusing the same
+// track-and-thumb graphic and role="switch"/aria-checked pattern a panel
+// switch row uses, and the same daemon command, toggle_hide_unknown, the
+// panel's now-removed List row used to call. Hidden with the native
+// `hidden` attribute, never a class, exactly when there is nothing to
+// hide and hiding is already off (ADR-030): a session count of zero and
+// the toggle off means the control has nothing useful to say.
+function renderHideGrey(): void {
+  const count = unknownCount(snapshot.tiles);
+  const on = snapshot.hideUnknown;
+  hideGrey.hidden = count === 0 && !on;
+  hideGrey.setAttribute("aria-checked", boolChecked(on));
+  hideGrey.setAttribute("aria-label", hideGreyAriaLabel(on, count));
+  hideGrey.innerHTML = `<span class="switch" aria-hidden="true"><span class="switch-thumb"></span></span><span class="hide-grey-word">${escapeHtml(hideGreyWord(on, count))}</span>`;
+}
+
 // ---- Header gear / settings panel --------------------------------------
 
 // The gear's own icon carries its pressed/open state (never colour
@@ -202,11 +223,14 @@ function renderGear(): void {
 // Three kinds of row. A switch row is the whole row acting as a
 // role="switch" control (never a button nested inside a button): the
 // track-and-thumb graphic is decorative, aria-hidden, and the On/Off
-// word next to it is the real, always-visible state text. An action row
-// is a plain button that does something once, not a toggle (Reset
-// position). The Hooks row is the one row with no click of its own
-// (like the header's own summary, it is a plain div), but it holds a
-// real nested <button> for Repair, which a div is free to contain.
+// word next to it is the real, always-visible state text, right-aligned
+// to the switch's own left edge so the switch itself, the Reset row's
+// icon, and the Repair button all end flush against the row's one right
+// edge. An action row is a plain button that does something once, not a
+// toggle (Reset position). The Hooks row is the one row with no click
+// of its own (like the header's own summary, it is a plain div), but it
+// holds a real nested <button> for Repair, which a div is free to
+// contain.
 
 interface SwitchRow {
   kind: "switch";
@@ -298,21 +322,6 @@ function panelSections(): PanelSection[] {
       ],
     },
     {
-      title: "List",
-      rows: [
-        {
-          kind: "switch",
-          key: "hide-unknown",
-          label: "Hide unknown",
-          checked: snapshot.hideUnknown,
-          word: hideUnknownText(snapshot.hideUnknown, unknownCount(snapshot.tiles)),
-          onClick: () => {
-            void api.core.invoke("toggle_hide_unknown");
-          },
-        },
-      ],
-    },
-    {
       title: "Claude Code",
       rows: [
         {
@@ -358,8 +367,8 @@ function renderSwitchRow(row: SwitchRow): HTMLElement {
       <div class="panel-row-label">${escapeHtml(row.label)}</div>
     </div>
     <div class="panel-row-control">
-      <span class="switch" aria-hidden="true"><span class="switch-thumb"></span></span>
       <span class="switch-word">${escapeHtml(row.word)}</span>
+      <span class="switch" aria-hidden="true"><span class="switch-thumb"></span></span>
     </div>`;
   el.setAttribute("aria-label", `${row.label}, ${row.word}`);
   el.addEventListener("click", row.onClick);
@@ -436,14 +445,18 @@ function renderPanel(): void {
 function render(): void {
   pruneRowNotes();
   renderSummary();
+  renderHideGrey();
   renderGear();
   // The list container is reused for the panel rather than duplicated
   // (docs/DECISIONS.md#adr-033: "in-bar, not a separate window"), so its
   // accessible name has to say which one is actually showing.
   list.setAttribute("aria-label", panelOpen ? "Settings" : "Sessions");
-  // Panel-only spacing (docs/DECISIONS.md#adr-034); the session list
-  // keeps its own flush layout so its height stays exactly
-  // rows * ROW_H_LOGICAL, matching window.rs.
+  // Panel-only vertical padding (docs/DECISIONS.md#adr-034); the
+  // horizontal inset that insets rows and cards alike from the window's
+  // left and right edges is shared by both modes (#list's own base
+  // rule), and being horizontal-only it never touches the session
+  // list's height, which stays exactly rows * ROW_H_LOGICAL, matching
+  // window.rs.
   list.classList.toggle("panel", panelOpen);
   if (panelOpen) {
     renderPanel();
@@ -475,6 +488,13 @@ function wake(): void {
   lastActivityAt = Date.now();
   surface.classList.remove("dimmed");
 }
+
+// No optimistic local flip: the daemon always decides a toggle's next
+// state (docs/DECISIONS.md#adr-030), and the next snapshot event is what
+// actually updates hideGrey through the normal render() path.
+hideGrey.addEventListener("click", () => {
+  void api.core.invoke("toggle_hide_unknown");
+});
 
 gear.addEventListener("click", () => {
   void api.core.invoke<boolean>("toggle_settings_panel").then(async (open) => {

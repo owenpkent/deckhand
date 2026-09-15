@@ -13,7 +13,8 @@ import {
   fmtElapsed,
   gearIconKind,
   GLYPHS,
-  hideUnknownText,
+  hideGreyAriaLabel,
+  hideGreyWord,
   hookStatusPillClass,
   hookStatusText,
   isRevealSuccess,
@@ -300,10 +301,16 @@ test("startWithWindowsChecked reads checked for both on-shaped kinds, unchecked 
   assert.equal(startWithWindowsChecked({ kind: "onOtherExe", path: "D:/old/deckhand.exe" }), "true");
 });
 
-test("hideUnknownText counts what is hidden and reads Off otherwise", () => {
-  assert.equal(hideUnknownText(false, 6), "Off");
-  assert.equal(hideUnknownText(true, 6), "On, 6 hidden");
-  assert.equal(hideUnknownText(true, 0), "On, 0 hidden");
+test("hideGreyWord names the action off and the count on", () => {
+  assert.equal(hideGreyWord(false, 6), "Hide grey");
+  assert.equal(hideGreyWord(true, 6), "6 hidden");
+  assert.equal(hideGreyWord(true, 0), "0 hidden");
+});
+
+test("hideGreyAriaLabel always names grey rows, with a count once hiding is on", () => {
+  assert.equal(hideGreyAriaLabel(false, 6), "Hide grey rows");
+  assert.equal(hideGreyAriaLabel(true, 6), "Hide grey rows, 6 hidden");
+  assert.equal(hideGreyAriaLabel(true, 0), "Hide grey rows, 0 hidden");
 });
 
 test("hookStatusText renders every HookStatus as its own capitalised word", () => {

@@ -188,12 +188,20 @@ export function startWithWindowsChecked(state: StartWithWindowsState): "true" | 
   return state.kind === "off" ? "false" : "true";
 }
 
-// Naming the hidden count here is the same reasoning the header's own
-// toggle used to carry in its label before ADR-033 moved it into this
-// panel row: a hidden session must always be counted, never simply
-// gone. Doubles as the word shown beside the row's switch.
-export function hideUnknownText(hidden: boolean, unknownCount: number): string {
-  return hidden ? `On, ${unknownCount} hidden` : "Off";
+// The header's Hide grey switch (docs/DECISIONS.md#adr-033). Unlike a
+// panel switch row, there is no room in the header for a fixed label
+// plus a separate state word, so the control's one visible word does
+// both jobs: it names the action when off and names the count when on.
+// A hidden session must still always be counted, never simply gone
+// (the same reasoning ADR-030 first gave this control), so the count
+// carries over into aria-label even though the short word alone
+// (say, "3 hidden") no longer repeats "grey" once it is on.
+export function hideGreyWord(hidden: boolean, count: number): string {
+  return hidden ? `${count} hidden` : "Hide grey";
+}
+
+export function hideGreyAriaLabel(hidden: boolean, count: number): string {
+  return hidden ? `Hide grey rows, ${count} hidden` : "Hide grey rows";
 }
 
 const HOOK_STATUS_TEXT: Record<HookStatus, string> = {

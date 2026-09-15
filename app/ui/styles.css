@@ -150,6 +150,31 @@ body {
   display: block;
 }
 
+/* Hide grey: a header switch (docs/DECISIONS.md#adr-033 amended), sized
+   by its own "Hide grey" / "N hidden" content rather than the icon
+   buttons' fixed 44px square, so both words fit without wrapping. The
+   track-and-thumb graphic and its checked-state colours are the same
+   .switch/.switch-thumb rules a panel switch row uses, below. */
+.hide-grey-btn {
+  gap: 8px;
+  padding: 0 10px 0 8px;
+}
+
+/* .side-btn sets `display: flex`, which as an author rule beats the
+   user-agent `[hidden] { display: none }` rule outright regardless of
+   selector specificity (origin outranks specificity in the cascade), so
+   the native `hidden` attribute main.ts sets needs this to actually
+   take effect. */
+.hide-grey-btn[hidden] {
+  display: none;
+}
+
+.hide-grey-word {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .side-btn:active {
   background: var(--tile-border);
 }
@@ -457,7 +482,11 @@ body {
 /* ---- Toggle switch: role="switch" on the row itself (main.ts), never
    a control nested inside the row's own <button>. The track and thumb
    are decorative (aria-hidden); the word beside them is the real,
-   always-visible state text (docs/ACCESSIBILITY.md). */
+   always-visible state text (docs/ACCESSIBILITY.md). The header's own
+   Hide grey switch (.hide-grey-btn above) reuses this same graphic and
+   the same checked-state rules below, rather than a second copy of
+   them, since it is a role="switch" button carrying its own
+   aria-checked exactly like a panel switch row does. */
 .switch {
   position: relative;
   width: 38px;
@@ -478,11 +507,13 @@ body {
   background: var(--subtext);
   transition: transform 120ms ease, background 120ms ease;
 }
-.panel-row-switch[aria-checked="true"] .switch {
+.panel-row-switch[aria-checked="true"] .switch,
+.hide-grey-btn[aria-checked="true"] .switch {
   background: color-mix(in srgb, var(--c-thinking) 55%, var(--tile));
   border-color: color-mix(in srgb, var(--c-thinking) 70%, var(--tile-border));
 }
-.panel-row-switch[aria-checked="true"] .switch-thumb {
+.panel-row-switch[aria-checked="true"] .switch-thumb,
+.hide-grey-btn[aria-checked="true"] .switch-thumb {
   transform: translateX(16px);
   background: var(--text);
 }
