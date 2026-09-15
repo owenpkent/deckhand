@@ -17,7 +17,10 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
   control throughout, never moving into the panel. Underneath the
   surface, ADR-037 gives the daemon a process lifecycle: single
   instance by a named mutex, and a same-binary watchdog that restarts
-  it after a crash; Start with Windows itself is unchanged. Move, a
+  it after a crash; Start with Windows itself is unchanged. ADR-038
+  hides a session row the VS Code extension has kept alive as a stale
+  duplicate of a newer one in the same window, and gives every row one
+  label rule instead of two. Move, a
   click-to-place alternative to dragging, was removed by
   ADR-031: the window is now repositioned by dragging only, an
   owner-approved exception to the no-required-drag rule in
@@ -75,16 +78,16 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 290 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 665 | Daemon, shim, surface, state machine |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 695 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 352 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 713 | Reference adapter; partial stamp |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 743 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 398 | Approval path; fails to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 281 | Visual and interaction contract |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 285 | Visual and interaction contract |
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 231 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 2080 | ADRs; append only |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 2162 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 151 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 433 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 457 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -116,7 +119,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 038.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 039.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **When to write an ADR:** only for big decisions: the security model,
   the approval path, what Deckhand may do, adapter capabilities, new
@@ -206,8 +209,15 @@ command. ADR-037, the same day again, closed the daemon's last open
 lifecycle question: a named mutex makes the app single instance, and
 a same-binary watchdog, spawned by every launch, relaunches it after
 a crash and rate-limits itself with a local, append-only ledger.
-Start with Windows stays exactly as ADR-033 left it. `app/`
-implements all of these.
+Start with Windows stays exactly as ADR-033 left it. ADR-038, the
+same day again, hid a duplicate the VS Code extension caused: an
+idle, complete, or unknown session is now left off the list while a
+newer bound session shares its window, parent process, and folder,
+and reappears on its own once it needs the owner or the newer one
+ends. The same decision gave every row one label rule, the scan's
+`name` when there is one and the directory name otherwise, tracked by
+a `derived` flag in `bindings.json` rather than guessed from strings.
+`app/` implements all of these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

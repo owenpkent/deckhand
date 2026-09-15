@@ -133,6 +133,40 @@ pub struct Session {
     /// at which point the scan's colour wins and the counter resets.
     #[serde(skip)]
     pub scan_disagreements: u32,
+    /// This session's process's host classification (`host::resolve`),
+    /// resolved once when a pid is first learned or replaced
+    /// (registry.rs `register_enumerated`), never re-walked on a tick.
+    /// `None` until a pid has been seen at all. Feeds
+    /// `supersede::superseded`, nothing else.
+    #[serde(skip)]
+    pub host: Option<crate::host::Host>,
+    /// This session's process's own immediate OS parent pid, resolved in
+    /// the same call as `host` and for the same reason: two sessions
+    /// sharing one VS Code extension host (one per window) share this
+    /// value. `None` until a pid has been seen.
+    #[serde(skip)]
+    pub parent_pid: Option<u32>,
+    /// The scan's own `startedAt` (ms epoch) for the most recent
+    /// enumeration that reported one (`enumerate.rs`, `Registry::
+    /// note_started_at`); `None` on an older CLI, or before any scan has
+    /// listed this session. Feeds `supersede::superseded`'s ordering,
+    /// nothing else.
+    #[serde(skip)]
+    pub started_at_ms: Option<i64>,
+    /// When this session was first heard of at all, by any channel: set
+    /// once by `Session::new` and never touched again. `supersede`'s
+    /// fallback ordering when one side or the other has no `startedAt`.
+    #[serde(skip)]
+    pub first_seen_ms: i64,
+    /// Whether `label` was only ever derived from `cwd` (`dir_name`)
+    /// rather than a real name a hook or a scan reported. Tracked as its
+    /// own flag rather than compared by string, since a session's real
+    /// name can coincidentally equal its directory's: a derived label
+    /// stays open to being replaced by a scan's `name` even after it was
+    /// set (registry.rs `register_enumerated`); a real one, once seen,
+    /// never is again (2026-09-15's inconsistent-label report).
+    #[serde(skip)]
+    pub label_is_derived: bool,
 }
 
 impl Session {
@@ -163,6 +197,11 @@ impl Session {
             unread_since_ms: None,
             pending_complete: false,
             scan_disagreements: 0,
+            host: None,
+            parent_pid: None,
+            started_at_ms: None,
+            first_seen_ms: now_ms,
+            label_is_derived: false,
         }
     }
 
@@ -255,6 +294,7 @@ impl Session {
                 }
                 if self.label.is_empty() {
                     self.label = dir_name(cwd);
+                    self.label_is_derived = true;
                 }
             }
         }
@@ -723,6 +763,7 @@ mod tests {
         ev(&mut x, 1, json!({"hook_event_name": "SessionStart", "source": "startup", "cwd": "C:\\Users\\o\\dev\\undertow"}));
         assert_eq!(x.state, SessionState::Idle);
         assert_eq!(x.label, "undertow");
+        assert!(x.label_is_derived, "a hook-derived label stays open to a later scan name (registry.rs)");
     }
 
     #[test]

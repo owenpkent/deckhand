@@ -207,8 +207,12 @@ shortened to fit by `revealNote()` in `format.ts`
 - Green (complete) clears to white when the row is *selected*, nothing
   else.
 - There is no unbound row. A session Deckhand has not yet seen has no row
-  at all; the list's length is the number of sessions currently bound. See
-  [CONTROL_MAPPING.md](CONTROL_MAPPING.md#binding).
+  at all; the list's length is the number of sessions currently bound, minus
+  any hidden by supersession ([ADR-038](DECISIONS.md#adr-038)): an idle,
+  complete, or unknown session the extension host has kept alive under a
+  newer one in the same VS Code window and folder. A hidden session keeps
+  its binding and reappears on its own once it needs the owner or the newer
+  session ends. See [CONTROL_MAPPING.md](CONTROL_MAPPING.md#binding).
 
 ### The child ledger and COMPLETE
 

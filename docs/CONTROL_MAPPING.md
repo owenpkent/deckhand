@@ -130,9 +130,16 @@ Binding is automatic, not a picker. The first hook event or enumeration hit
 for a session adds its row, at the end of the list.
 [ADR-024](DECISIONS.md#adr-024) still holds: an enumeration alone binds and
 names a row but leaves it `unknown` until an actual hook confirms a live
-state. A row disappears when its session ends, or when it drops out of a
-successful enumeration and has had no hook event for a while; a failed
-enumeration removes nothing. Exact
+state. A row's name is the scan's own `name` when the scan has provided one,
+and the directory name otherwise; a directory-derived name stays open to a
+later scan name, while a real name, once seen, is never replaced
+([ADR-038](DECISIONS.md#adr-038)). A row disappears when its session ends,
+or when it drops out of a successful enumeration and has had no hook event
+for a while; a failed enumeration removes nothing. A bound row can also be
+hidden without disappearing: an idle, complete, or unknown session that the
+VS Code extension has kept alive under a newer session in the same window
+and folder is left off the list until it needs the owner or the newer
+session ends ([ADR-038](DECISIONS.md#adr-038)). Exact
 timing lives in [ARCHITECTURE.md](ARCHITECTURE.md#observation-channels),
 since it is a daemon behaviour, not a control. There is no bind picker and no
 unbind action: nothing here is managed by hand.

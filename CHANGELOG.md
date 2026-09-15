@@ -11,6 +11,26 @@ version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hidden superseded rows and consistent labels**
+  ([ADR-038](docs/DECISIONS.md#adr-038)). The VS Code extension was
+  observed keeping an older session's `claude.exe` alive after a newer
+  session started in the same window, so the board showed what looked
+  like duplicate rows, spelled two different ways: a hook-first row took
+  its label from its directory, a scan-first row took the scan's own
+  `name`. An idle, complete, or unknown session is now left off the list
+  while a newer bound session shares its VS Code window, its parent
+  process, and its folder; the older row keeps its binding and reappears
+  the moment it needs the owner or the newer one ends. A row's label now
+  follows one rule regardless of which channel saw it first: the scan's
+  `name` when there is one, the directory name otherwise, tracked by a
+  `derived` flag persisted in `bindings.json` rather than guessed by
+  comparing strings. `app/src-tauri/src/supersede.rs` holds the rule;
+  `docs/ARCHITECTURE.md`, `docs/CLAUDE_CODE_ADAPTER.md`,
+  `docs/UI_SPEC.md`, `docs/CONTROL_MAPPING.md`, and `TODO.md` are updated
+  to match.
+
 ### Added
 
 - **A technical white paper** ([docs/WHITEPAPER.md](docs/WHITEPAPER.md)).

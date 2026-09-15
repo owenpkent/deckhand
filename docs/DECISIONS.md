@@ -2078,3 +2078,86 @@ dies with the terminal, which is the pre-ADR behaviour, not a regression.
 `TODO.md` closes the lifecycle item and opens the panel follow-up,
 `CHANGELOG.md` and `CLAUDE.md` (next ADR bumped to 038) are updated in the
 same change.
+
+<a id="adr-038"></a>
+## ADR-038: A newer session in the same VS Code window hides an idle older one
+
+Date: 2026-09-15
+
+**Context.** The owner reported duplicate rows. The board showed four:
+`deckhand-e4` idle, `atdev-marketing-12` idle, `deckhand` thinking, and
+`ATDev-Marketing` thinking. They were not duplicates in the daemon's
+terms. `claude agents --json` listed four distinct sessions with four
+`claude.exe` processes, two per VS Code window, and each pair shared a
+working directory and the same direct parent, that window's extension
+host process. In both windows the older session had last written to disk
+about four minutes before the newer one started, and the older process
+was still alive hours after it began (observed on the extension's
+2.1.270 and 2.1.272 binaries). How the older process came to outlive its
+conversation is unconfirmed; the owner could not say how the second chat
+was opened. Since [ADR-035](#adr-035), a live process handle keeps a row
+on the list for as long as the process exists, so these rows would never
+leave.
+
+The labels made it worse. A session first seen by a hook took its label
+from its directory name (`deckhand`); a session first seen by the scan
+took the scan's `name` (`deckhand-e4`). Two sessions in one folder then
+looked like one session shown twice under different spellings.
+
+Pruning by idle time was considered and rejected: an idle row is the
+normal resting state of a live session, and ageing it out would hide
+sessions the owner does come back to.
+
+**Decision.**
+
+1. *Supersession hides, it does not unbind.* A bound session O is hidden
+   from the list while some other bound session N satisfies all of: both
+   have a known pid; both are hosted by the VS Code extension
+   ([ADR-023](#adr-023)); both processes have the same direct parent pid,
+   resolved once when the pid is learned; both have the same working
+   directory, compared case-insensitively with separators normalised; N
+   started after O, by the scan's `startedAt` when every session sharing
+   that window and directory reports one and by first-seen time
+   otherwise, so one clock orders the whole group; O is `idle`,
+   `complete`, or `unknown`; and N is not `ended`. The rule is a pure
+   function recomputed whenever the daemon builds a snapshot or sizes the
+   window. Nothing is remembered, so O returns, in its old position and
+   with its old selection, the moment it stops qualifying: a hook turns
+   it blue, amber, or red, or N ends.
+
+2. *Never hide what needs the owner.* A session that is `thinking`,
+   `needs_input`, or `error` is never superseded, whatever is newer. A
+   session in a console or Windows Terminal is never superseded either;
+   the observed case is specific to the extension, and a terminal's
+   sessions do not share a parent this way.
+
+3. *One label rule, whichever channel is first.* A row's label is the
+   scan's `name` when the scan provides one, and the directory name
+   otherwise. A label derived from the directory stays replaceable by a
+   later `name`; a real name, once seen, is never replaced. Whether a
+   label is derived is tracked as a flag, persisted in `bindings.json`,
+   rather than guessed by comparing strings. An entry written before the
+   flag existed loads as derived, so existing rows take their scan names
+   on the next scan.
+
+**Consequences.** One VS Code window and folder shows one row for the
+conversation the owner is in, plus any older one that is still working,
+waiting, or failed. Hidden rows count toward nothing: not the header
+counts, not the Hide grey count, not the window height. A `complete` row
+can be hidden while still unread, which trades one unread signal for the
+duplicate; the newer session in the same window is where the owner
+already is.
+
+Two sessions genuinely open side by side in one VS Code window on one
+folder are indistinguishable from the observed case, so an idle older one
+will be hidden. It reappears as soon as it does anything. If this proves
+common, the rule needs a better signal than process ancestry, and none is
+known today.
+
+Rows now read `deckhand-91` rather than `deckhand`. The scan's names
+disambiguate two sessions in one folder, which the directory name cannot.
+
+[ARCHITECTURE.md](ARCHITECTURE.md) records the supersession rule and the
+label rule, [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) records the
+observed extension behaviour and `startedAt`, `CHANGELOG.md`, `TODO.md`,
+and `CLAUDE.md` (next ADR bumped to 039) are updated in the same change.

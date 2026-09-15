@@ -141,6 +141,31 @@ pub fn snapshot_processes() -> HashMap<u32, (u32, String)> {
     procs
 }
 
+/// Both facts registry.rs needs about a pid to decide VS Code
+/// supersession (docs/DECISIONS.md, 2026-09-15's four-session bug): its
+/// host classification, and its own *immediate* OS parent pid -- not
+/// walked any further up, unlike `classify` and `vscode_ancestor_pid`,
+/// which both climb to find a Code.exe ancestor however many hops away.
+/// One Toolhelp32 snapshot answers both, taken once when a session's
+/// pid is first learned or replaced (registry.rs `register_enumerated`),
+/// never re-walked on every tick.
+#[cfg(windows)]
+pub fn resolve(pid: u32) -> (Host, Option<u32>) {
+    let procs = snapshot_processes();
+    let host = classify(pid, &procs);
+    let parent_pid = procs.get(&pid).map(|(parent, _)| *parent);
+    (host, parent_pid)
+}
+
+/// The non-Windows stub: no process table exists to classify from, so
+/// every pid reads as a plain console with no known parent, the same
+/// "nothing special observed" default `classify` itself falls back to
+/// for a pid missing from its own table.
+#[cfg(not(windows))]
+pub fn resolve(_pid: u32) -> (Host, Option<u32>) {
+    (Host::Console, None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,5 +290,20 @@ mod tests {
         let procs = table(&[(200, 100, "claude.exe")]);
         assert!(!parent_is_vscode_exe(200, &procs), "parent 100 is missing from the table");
         assert!(!parent_is_vscode_exe(999, &procs), "999 itself is missing from the table");
+    }
+
+    // ---- resolve ---------------------------------------------------------
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_finds_this_processs_own_parent_pid_in_a_real_snapshot() {
+        let (_, parent) = resolve(std::process::id());
+        assert!(parent.is_some(), "this running process must appear in its own process table with a parent");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn resolve_is_a_console_with_no_parent_off_the_non_windows_stub() {
+        assert_eq!(resolve(4242), (Host::Console, None));
     }
 }

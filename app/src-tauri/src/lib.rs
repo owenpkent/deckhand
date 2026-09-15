@@ -15,5 +15,6 @@ pub mod reveal;
 pub mod reveal_queue;
 pub mod runkey;
 pub mod state;
+pub mod supersede;
 pub mod watchdog;
 pub mod window;

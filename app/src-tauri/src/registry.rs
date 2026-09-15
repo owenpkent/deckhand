@@ -28,8 +28,10 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::host;
 use crate::liveness;
 use crate::state::{Session, SessionState};
+use crate::supersede;
 
 /// A session that vanished from a successful enumeration less than this
 /// long ago is kept rather than pruned: enumeration and the hook stream
@@ -202,16 +204,44 @@ impl Registry {
             // enumeration reports the session's own cwd, so it is the
             // one channel that can repair a value a subagent payload
             // latched onto the session before this fix (state.rs
-            // apply_hook). Label follows the same existing-name
-            // precedence as everywhere else: only filled in when blank,
-            // never overwritten.
+            // apply_hook).
+            //
+            // Label precedence is the same regardless of which channel
+            // saw this session first (2026-09-15's inconsistent-label
+            // report: a hook-first session's label came only from cwd,
+            // a scan-first session's from the scan's own `name`, and the
+            // two never agreed). A derived label -- `label_is_derived`,
+            // set wherever a label is ever assigned from cwd, not
+            // compared by string -- stays open to being replaced by a
+            // real `name`; a real one, once seen, never is again.
             if let Some(cwd) = cwd {
                 if existing.cwd.as_deref() != Some(cwd) {
                     existing.cwd = Some(cwd.to_string());
                     changed = true;
                 }
-                if existing.label.is_empty() {
-                    existing.label = crate::state::dir_name(cwd);
+                if existing.label.is_empty() || existing.label_is_derived {
+                    let derived = crate::state::dir_name(cwd);
+                    if existing.label != derived {
+                        existing.label = derived;
+                        changed = true;
+                    }
+                    existing.label_is_derived = true;
+                }
+            }
+            // A real name is accepted for its source, not its text: a
+            // session in `C:/dev/deckhand` genuinely named `deckhand`
+            // clears `label_is_derived` even though the string does not
+            // move, because the flag is what protects the label from
+            // the next cwd-only row, and a scan-first session with the
+            // same name is already protected that way. That flag-only
+            // transition counts as a change so it reaches
+            // `bindings.json` (persist.rs) and survives a restart.
+            if let Some(n) = name {
+                if !n.is_empty() && (existing.label.is_empty() || existing.label_is_derived) {
+                    if existing.label != n {
+                        existing.label = n.to_string();
+                    }
+                    existing.label_is_derived = false;
                     changed = true;
                 }
             }
@@ -221,10 +251,12 @@ impl Registry {
             if let Some(cwd) = cwd {
                 s.cwd = Some(cwd.to_string());
                 s.label = crate::state::dir_name(cwd);
+                s.label_is_derived = true;
             }
             if let Some(n) = name {
                 if !n.is_empty() {
                     s.label = n.to_string();
+                    s.label_is_derived = false;
                 }
             }
             s.note_seen(status, now_ms);
@@ -246,10 +278,82 @@ impl Registry {
                 if let Some(watch) = liveness::open(p) {
                     self.set_watch(id, watch);
                 }
+                // Host and immediate parent pid (supersede.rs) are
+                // resolved here, once per pid change, and stored rather
+                // than re-walked on every tick: the process tree behind
+                // a pid does not change out from under it.
+                let (host, parent_pid) = host::resolve(p);
+                if let Some(s) = self.sessions.get_mut(id) {
+                    s.host = Some(host);
+                    s.parent_pid = parent_pid;
+                }
             }
         }
         changed |= self.auto_bind(id);
         changed
+    }
+
+    /// Record the scan's own `startedAt` for this session
+    /// (`supersede::superseded`'s ordering), called by
+    /// `enumerate::register` right after `register_enumerated` for the
+    /// same row. Reports whether the stored value actually changed,
+    /// and `enumerate::register` folds that into its own change flag:
+    /// a `startedAt` arriving or moving can flip which rows
+    /// `superseded_ids` hides with no other field changing (two idle
+    /// rows tied on first-seen, then a scan naming distinct start
+    /// times), and the scan loop only repaints and resizes when
+    /// registration says something changed. An identical follow-up
+    /// scan is a no-op here as everywhere else. A session
+    /// `register_enumerated` left untouched (already `Ended`) is left
+    /// alone here too, and a scan that reports no `startedAt` this time
+    /// (`None`) leaves whatever is already recorded alone, the same as
+    /// a missing pid does.
+    pub fn note_started_at(&mut self, id: &str, started_at_ms: Option<i64>) -> bool {
+        let Some(ms) = started_at_ms else {
+            return false;
+        };
+        let Some(s) = self.sessions.get_mut(id) else {
+            return false;
+        };
+        if s.state == SessionState::Ended || s.started_at_ms == Some(ms) {
+            return false;
+        }
+        s.started_at_ms = Some(ms);
+        true
+    }
+
+    /// The facts `supersede::superseded` needs about every currently
+    /// bound session, gathered fresh off the registry rather than kept
+    /// as state of its own (`superseded_ids`'s own doc comment has the
+    /// reasoning for why that is safe).
+    fn supersession_candidates(&self) -> Vec<supersede::Candidate<'_>> {
+        self.bindings
+            .iter()
+            .filter_map(|id| self.sessions.get(id))
+            .map(|s| supersede::Candidate {
+                id: &s.id,
+                pid: s.pid,
+                host: s.host,
+                parent_pid: s.parent_pid,
+                cwd: s.cwd.as_deref(),
+                state: s.state,
+                started_at_ms: s.started_at_ms,
+                first_seen_ms: s.first_seen_ms,
+            })
+            .collect()
+    }
+
+    /// Every bound session id a newer one in the same VS Code window and
+    /// folder currently makes safe to hide (`supersede::superseded`;
+    /// the 2026-09-15 four-session report). Pure and recomputed on every
+    /// call rather than cached: `snapshot` calls it to build the tiles
+    /// list the surface actually sees, and `main.rs::visible_rows` calls
+    /// it too, to size the window off the same set. Nothing here unbinds
+    /// anything -- a hidden session keeps its place in `bindings` so it
+    /// resumes exactly where it was the moment it stops qualifying, with
+    /// no bookkeeping of its own to undo.
+    pub fn superseded_ids(&self) -> HashSet<String> {
+        supersede::superseded(&self.supersession_candidates())
     }
 
     /// Give a session a liveness watch, replacing whatever it had.
@@ -412,15 +516,27 @@ impl Registry {
         changed
     }
 
+    /// A superseded session (`superseded_ids`) is left out of the tiles
+    /// list entirely rather than unbound: its place in `bindings`, and
+    /// `self.selected`'s index into it, are both untouched, so if it
+    /// stops qualifying on a later call it reappears, selected or not,
+    /// exactly as it was. `selected` below is therefore compared against
+    /// the *original* binding index (`bound_index`), not the filtered
+    /// row's own position, and `index` renders as the sequential
+    /// position in the filtered list actually shown -- presentation
+    /// only, as everywhere else it is used.
     pub fn snapshot(&self, now_ms: i64) -> Snapshot {
+        let hidden = self.superseded_ids();
         Snapshot {
             tiles: self
                 .bindings
                 .iter()
                 .enumerate()
-                .map(|(i, id)| TileSnapshot {
-                    index: i,
-                    selected: self.selected == Some(i),
+                .filter(|(_, id)| !hidden.contains(id.as_str()))
+                .enumerate()
+                .map(|(index, (bound_index, id))| TileSnapshot {
+                    index,
+                    selected: self.selected == Some(bound_index),
                     session: self.sessions.get(id).cloned(),
                 })
                 .collect(),
@@ -625,13 +741,16 @@ mod tests {
     }
 
     #[test]
-    fn enumerated_sessions_do_not_overwrite_observed_ones() {
+    fn enumerated_sessions_do_not_overwrite_observed_state() {
         let mut r = Registry::default();
         r.apply_hook(
             &json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}),
             1,
         );
-        assert!(!r.register_enumerated("s1", Some("name"), None, None, None, 2));
+        // A name does legitimately fill in s1's still-blank label here
+        // (the 2026-09-15 label fix), so this no longer asserts the call
+        // changed nothing at all; state is the thing it must not touch.
+        r.register_enumerated("s1", Some("name"), None, None, None, 2);
         assert_eq!(
             r.sessions["s1"].state,
             crate::state::SessionState::Thinking,
@@ -740,7 +859,53 @@ mod tests {
         r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s2"}), 1);
         r.sessions.get_mut("s2").unwrap().label = "custom name".to_string();
         r.register_enumerated("s2", None, Some("C:/dev/undertow"), None, None, 2);
-        assert_eq!(r.sessions["s2"].label, "custom name", "an existing label is never overwritten");
+        assert_eq!(r.sessions["s2"].label, "custom name", "a non-derived label is never overwritten");
+
+        // The 2026-09-15 report: a hook-first session's label came only
+        // from cwd (a derived label), while a scan-first session's came
+        // from the scan's own `name`, and the two never agreed even
+        // though they named the same session. A label the hook itself
+        // derived from cwd stays open to a later scan's real name,
+        // tracked by `label_is_derived` rather than by comparing
+        // strings, since a session's real name could coincidentally
+        // equal its directory's.
+        r.apply_hook(
+            &json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s3", "cwd": "C:/dev/deckhand"}),
+            1,
+        );
+        assert_eq!(r.sessions["s3"].label, "deckhand", "the hook derives a label from cwd exactly like enumeration does");
+        r.register_enumerated("s3", Some("deckhand-e4"), None, None, None, 2);
+        assert_eq!(r.sessions["s3"].label, "deckhand-e4", "a scan name replaces a label that was only ever derived from cwd");
+
+        // Once a real name has been seen, it is never overwritten again,
+        // including by a later cwd-only row.
+        r.register_enumerated("s3", None, Some("C:/dev/deckhand-renamed"), None, None, 3);
+        assert_eq!(r.sessions["s3"].label, "deckhand-e4", "a real name outlives a later cwd-only scan row");
+
+        // The equality case (2026-09-15 review): the scan's real name is
+        // the directory name, character for character. The source still
+        // has to win over the string, or a session that was hook-first
+        // stays replaceable while its scan-first twin does not.
+        r.apply_hook(
+            &json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s4", "cwd": "C:/dev/deckhand"}),
+            1,
+        );
+        assert!(r.sessions["s4"].label_is_derived);
+        assert!(
+            r.register_enumerated("s4", Some("deckhand"), Some("C:/dev/deckhand"), None, None, 2),
+            "accepting a real name is a change even when its text already matches"
+        );
+        assert!(!r.sessions["s4"].label_is_derived, "the flag clears on the name's source, not its text");
+        assert!(
+            !r.register_enumerated("s4", Some("deckhand"), Some("C:/dev/deckhand"), None, None, 3),
+            "the same row again is a no-op"
+        );
+        r.register_enumerated("s4", None, Some("C:/dev/deckhand-renamed"), None, None, 4);
+        assert_eq!(
+            r.sessions["s4"].label,
+            "deckhand",
+            "a real name equal to the old directory name still outlives a cwd-only row"
+        );
     }
 
     // ---- register_enumerated: pid replacement policy --------------------
@@ -955,5 +1120,152 @@ mod tests {
         assert!(!r.tick(3), "the stale exited watch must no longer be the one attached to this session");
         assert!(r.is_bound("s1"));
         assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Thinking);
+    }
+
+    // ---- note_started_at -------------------------------------------------
+
+    #[test]
+    fn note_started_at_sets_the_value_only_when_some() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        r.note_started_at("s1", Some(1000));
+        assert_eq!(r.sessions["s1"].started_at_ms, Some(1000));
+        r.note_started_at("s1", None);
+        assert_eq!(r.sessions["s1"].started_at_ms, Some(1000), "a scan reporting no startedAt this time must not clear it");
+    }
+
+    #[test]
+    fn note_started_at_on_an_unknown_id_is_a_harmless_no_op() {
+        let mut r = Registry::default();
+        assert!(!r.note_started_at("nobody", Some(1000)));
+        assert!(r.sessions.is_empty());
+    }
+
+    #[test]
+    fn note_started_at_reports_a_change_only_when_the_stored_value_moves() {
+        // enumerate::register folds this into its change flag, so a
+        // repeated identical scan must not keep the scan loop
+        // repainting.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        assert!(r.note_started_at("s1", Some(1000)), "first sighting of a startedAt is a change");
+        assert!(!r.note_started_at("s1", Some(1000)), "the same value again is not");
+        assert!(!r.note_started_at("s1", None), "a scan without one changes nothing");
+        assert!(r.note_started_at("s1", Some(2000)), "a moved value is a change");
+        assert_eq!(r.sessions["s1"].started_at_ms, Some(2000));
+    }
+
+    #[test]
+    fn note_started_at_leaves_an_ended_session_alone() {
+        // register_enumerated leaves an ended session untouched entirely;
+        // the scan can keep listing its process, and this must not
+        // report a change for a row that will never show.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "session_id": "s1"}), 2);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Ended);
+        assert!(!r.note_started_at("s1", Some(1000)));
+        assert_eq!(r.sessions["s1"].started_at_ms, None);
+    }
+
+    // ---- supersession: snapshot and the row count both hide it ----------
+    //
+    // The pure decision itself (every edge case) is pinned in
+    // supersede.rs; these pin only that the registry actually wires it
+    // in at the two places that matter -- the tiles the surface renders
+    // (snapshot) and the row count the window is sized off
+    // (main.rs::visible_rows, exercised here through superseded_ids
+    // directly since visible_rows itself lives outside this crate's
+    // test reach) -- and that a hidden session keeps its binding.
+
+    /// Bind a session with a hook, then give it a pid, a VS Code host,
+    /// and a parent pid directly (bypassing a real Toolhelp32 walk, the
+    /// same way these tests already fake a liveness watch instead of a
+    /// real process handle).
+    fn bind_vscode_session(r: &mut Registry, id: &str, pid: u32, parent_pid: u32, cwd: &str, now_ms: i64) {
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": id, "cwd": cwd}), now_ms);
+        let s = r.sessions.get_mut(id).unwrap();
+        s.pid = Some(pid);
+        s.host = Some(crate::host::Host::VsCode);
+        s.parent_pid = Some(parent_pid);
+    }
+
+    #[test]
+    fn snapshot_hides_a_superseded_session_but_keeps_its_binding() {
+        let mut r = Registry::default();
+        bind_vscode_session(&mut r, "old", 1, 100, "C:/dev/deckhand", 1);
+        bind_vscode_session(&mut r, "new", 2, 100, "C:/dev/deckhand", 2);
+        // "old" is idle from SessionStart; "new" needs an event of its
+        // own to move off idle and past "old"'s first-seen time.
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "new"}), 3);
+
+        let snap = r.snapshot(4);
+        let ids: Vec<Option<String>> = snap.tiles.iter().map(|t| t.session.as_ref().map(|s| s.id.clone())).collect();
+        assert_eq!(ids, vec![Some("new".to_string())], "old is hidden from the tiles the surface renders");
+        assert!(r.is_bound("old"), "old keeps its place in bindings; it is hidden, not unbound");
+        assert!(
+            r.superseded_ids().contains("old"),
+            "main.rs::visible_rows sizes the window off this same set"
+        );
+    }
+
+    #[test]
+    fn a_superseded_session_reappears_once_it_stops_qualifying() {
+        let mut r = Registry::default();
+        bind_vscode_session(&mut r, "old", 1, 100, "C:/dev/deckhand", 1);
+        bind_vscode_session(&mut r, "new", 2, 100, "C:/dev/deckhand", 2);
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "new"}), 3);
+        assert_eq!(r.snapshot(4).tiles.len(), 1, "old starts hidden");
+
+        // A hook arrives for old: it is no longer idle, so it is no
+        // longer safe to hide, with nothing else needing to change.
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "old"}), 5);
+        let snap = r.snapshot(6);
+        assert_eq!(snap.tiles.len(), 2, "old shows again with no extra bookkeeping");
+    }
+
+    #[test]
+    fn a_selected_row_that_becomes_superseded_disappears_and_returns_selected() {
+        let mut r = Registry::default();
+        bind_vscode_session(&mut r, "old", 1, 100, "C:/dev/deckhand", 1);
+        assert!(r.select(0, 2));
+
+        bind_vscode_session(&mut r, "new", 2, 100, "C:/dev/deckhand", 3);
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "new"}), 4);
+
+        let snap = r.snapshot(5);
+        assert!(snap.tiles.iter().all(|t| !t.selected), "the selected row is hidden along with the session");
+
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "old"}), 6);
+        let snap2 = r.snapshot(7);
+        let old_tile = snap2.tiles.iter().find(|t| t.session.as_ref().map(|s| s.id.as_str()) == Some("old")).unwrap();
+        assert!(old_tile.selected, "the old selection survives the round trip with no extra bookkeeping");
+    }
+
+    #[test]
+    fn a_session_with_no_pid_is_never_superseded_through_the_registry() {
+        // A sanity check that the registry actually passes `pid` through
+        // to the candidate (supersede.rs pins the decision rule itself):
+        // "old" here never got a pid, so it must never be hidden no
+        // matter how good every other match is.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "old", "cwd": "C:/dev/deckhand"}), 1);
+        bind_vscode_session(&mut r, "new", 2, 100, "C:/dev/deckhand", 2);
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "new"}), 3);
+        assert_eq!(r.snapshot(4).tiles.len(), 2, "old has no pid, so it is never a supersession candidate");
+    }
+
+    // ---- register_enumerated: host and parent pid resolution -------------
+
+    #[test]
+    fn a_pid_learned_by_enumeration_gets_a_host_classification() {
+        // host::resolve runs a real (Windows) process snapshot; this
+        // only pins that register_enumerated actually calls it and
+        // stores *something* rather than leaving the fields at their
+        // Session::new default of None. The decision rule itself never
+        // depends on which concrete Host a real process resolves to.
+        let mut r = Registry::default();
+        assert!(r.register_enumerated("s1", None, None, Some(std::process::id()), None, 1));
+        assert!(r.sessions["s1"].host.is_some(), "a learned pid must get a host classification");
     }
 }

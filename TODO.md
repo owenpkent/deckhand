@@ -170,6 +170,19 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 - [ ] Surface the watchdog ledger in the settings panel ("restarted
       after a crash at <time>"), linking to
       [ADR-037](docs/DECISIONS.md#adr-037).
+- [x] Hide a superseded idle session and give every row one label rule.
+      Landed as [ADR-038](docs/DECISIONS.md#adr-038) (2026-09-15):
+      `app/src-tauri/src/supersede.rs` hides an idle, complete, or
+      unknown session while a newer bound session shares its VS Code
+      window, parent process, and folder, and a row's label now follows
+      the scan's `name` when there is one and the directory name
+      otherwise, tracked by a `derived` flag persisted in
+      `bindings.json`.
+- [ ] Confirm how the VS Code extension comes to keep an older session's
+      process alive after a newer one starts in the same window
+      ([ADR-038](docs/DECISIONS.md#adr-038)), and whether two genuinely
+      side-by-side conversations in one window are common enough that
+      process ancestry needs a better signal; none is known today.
 - [x] Implement the hook shim: the small program Claude Code calls, per
       `docs/CLAUDE_CODE_ADAPTER.md`. Done 2026-08-02: `shim/`, std-only,
       reads stdin, POSTs to the daemon's loopback port with the token
