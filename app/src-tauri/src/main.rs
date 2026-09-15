@@ -58,13 +58,21 @@ fn emit_snapshot(app: &tauri::AppHandle, reg: &registry::Registry) {
 }
 
 /// The row count actually on screen right now: every binding, minus the
-/// ones hidden because they are unknown and the grey toggle is on. Every
-/// resize must size off this, not `reg.bindings.len()`, so a toggle or a
-/// session crossing into or out of unknown resizes the window exactly
-/// like a binding appearing or disappearing always has.
+/// ones hidden because they are unknown and the grey toggle is on, and
+/// minus any a newer session in the same VS Code window and folder
+/// currently supersedes (`registry::Registry::superseded_ids`). Every
+/// resize must size off this, not `reg.bindings.len()`, so a toggle, a
+/// session crossing into or out of unknown, or one becoming or ceasing
+/// to be superseded all resize the window exactly like a binding
+/// appearing or disappearing always has.
 fn visible_rows(reg: &registry::Registry) -> usize {
+    let hidden = reg.superseded_ids();
     window::visible_row_count(
-        reg.bindings.iter().filter_map(|id| reg.sessions.get(id)).map(|s| s.state),
+        reg.bindings
+            .iter()
+            .filter(|id| !hidden.contains(id.as_str()))
+            .filter_map(|id| reg.sessions.get(id.as_str()))
+            .map(|s| s.state),
         reg.hide_unknown,
     )
 }

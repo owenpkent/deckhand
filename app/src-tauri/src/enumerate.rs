@@ -42,6 +42,10 @@ pub struct Row {
     /// "idle", or "waiting" on the versions observed so far. `None` when
     /// the key is absent (an older CLI) or not a string.
     pub status: Option<String>,
+    /// `startedAt`, ms epoch (documented, 2.1.220). `None` on an older
+    /// CLI or a non-numeric value; feeds `supersede::superseded`'s
+    /// ordering (`Registry::note_started_at`), nothing else.
+    pub started_at_ms: Option<i64>,
 }
 
 pub fn fetch() -> Option<Vec<Row>> {
@@ -79,6 +83,7 @@ pub fn parse(stdout: &[u8]) -> Option<Vec<Row>> {
                     cwd: row.get("cwd").and_then(Value::as_str).map(String::from),
                     pid: row.get("pid").and_then(Value::as_u64).map(|p| p as u32),
                     status: row.get("status").and_then(Value::as_str).map(String::from),
+                    started_at_ms: row.get("startedAt").and_then(Value::as_i64),
                 })
             })
             .collect(),
@@ -103,6 +108,7 @@ pub fn register(reg: &mut Registry, rows: &[Row], now_ms: i64) -> bool {
             row.status.as_deref(),
             now_ms,
         );
+        reg.note_started_at(&row.id, row.started_at_ms);
     }
     changed |= reg.prune_missing(&present, now_ms);
     changed
@@ -164,6 +170,29 @@ mod tests {
         assert_eq!(rows[0].status.as_deref(), Some("busy"));
         assert_eq!(rows[1].status, None, "an older CLI with no status key must parse fine");
         assert_eq!(rows[2].status, None, "a non-string status must not be coerced");
+    }
+
+    #[test]
+    fn started_at_is_parsed_when_present_as_a_number_and_none_otherwise() {
+        let stdout = json!([
+            {"sessionId": "s1", "startedAt": 1_789_492_719_945i64},
+            {"sessionId": "s2"},
+            {"sessionId": "s3", "startedAt": "not a number"},
+        ])
+        .to_string();
+        let rows = parse(stdout.as_bytes()).unwrap();
+        assert_eq!(rows[0].started_at_ms, Some(1_789_492_719_945));
+        assert_eq!(rows[1].started_at_ms, None, "an older CLI with no startedAt key must parse fine");
+        assert_eq!(rows[2].started_at_ms, None, "a non-numeric startedAt must not be coerced");
+    }
+
+    #[test]
+    fn register_stores_started_at_on_the_session_for_supersede_to_read() {
+        let stdout = json!([{"sessionId": "s1", "startedAt": 1_789_492_719_945i64}]).to_string();
+        let rows = parse(stdout.as_bytes()).unwrap();
+        let mut reg = Registry::default();
+        register(&mut reg, &rows, 10);
+        assert_eq!(reg.sessions["s1"].started_at_ms, Some(1_789_492_719_945));
     }
 
     #[test]

@@ -346,7 +346,10 @@ pub struct IdeLock {
 /// A path in a form fit for comparison: lowercased (Windows paths are
 /// case-insensitive), backslashes turned to forward slashes, and a
 /// trailing separator trimmed, so `C:\Foo\` and `c:/foo` agree.
-fn normalize_path(p: &str) -> String {
+/// `pub(crate)` rather than private: `supersede.rs`'s own cwd match
+/// needs the identical rule and reuses this one rather than a second
+/// copy of it.
+pub(crate) fn normalize_path(p: &str) -> String {
     let s = p.trim().replace('\\', "/").to_lowercase();
     s.trim_end_matches('/').to_string()
 }
