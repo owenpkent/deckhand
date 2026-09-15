@@ -6,10 +6,13 @@
 // and idle seen live). ADR-035 puts that key to use: it can colour a
 // session the hooks have never heard from, or recolour one sitting in
 // `unknown`, but it never overrides a colour a hook has already set
-// (state.rs `Session::apply_scan_state`). Liveness (whether the
-// session's row survives at all) stays a separate question, answered
-// by a held process handle where one exists (liveness.rs,
-// registry.rs), not by this status string.
+// (state.rs `Session::apply_scan_state`), except for ADR-036's
+// tie-break: two consecutive scans in a row that disagree with a
+// hook-set colour, with no hook event landing between them, recolour
+// the session anyway. Liveness (whether the session's row survives at
+// all) stays a separate question, answered by a held process handle
+// where one exists (liveness.rs, registry.rs), not by this status
+// string.
 //
 // Fetching shells out and can take a second, so it is split from
 // registering: fetch without the registry lock, register with it. The

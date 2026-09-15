@@ -59,6 +59,13 @@ pub struct ErrorDetail {
 /// deadline while the scan does not confirm the turn is still busy.
 pub const T_UNKNOWN_MS: i64 = 900_000;
 
+/// The number of consecutive scans that must contradict a hook-set
+/// colour, with no hook event landing between them, before the scan is
+/// allowed to recolour the session anyway (ADR-036, `apply_scan_state`'s
+/// tie-break). Two scans is about thirty seconds at the 15 s rescan
+/// (`RESCAN_INTERVAL`, main.rs).
+pub const SCAN_TIEBREAK_SCANS: u32 = 2;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
@@ -109,12 +116,23 @@ pub struct Session {
     /// is a guess, and neither changes the colour. Also the gate on
     /// `apply_scan_state` (ADR-035): once a hook has coloured a session,
     /// only a hook may recolour it; the scan may still colour one that
-    /// has never been heard from, or one sitting in `unknown`.
+    /// has never been heard from, or one sitting in `unknown`. ADR-036
+    /// carves out one exception: two consecutive scans that contradict
+    /// the hook-set colour, with no hook event landing between them,
+    /// recolour the session anyway (`scan_disagreements`).
     pub heard: bool,
     pub unread_since_ms: Option<i64>,
     /// A turn ended while children were live; green arrives when the
     /// ledger empties (docs/UI_SPEC.md#the-child-ledger-and-complete).
     pub pending_complete: bool,
+    /// Consecutive scans, with no hook event in between, that have
+    /// contradicted a hook-set colour (ADR-036). Reset to 0 by every
+    /// hook event (`apply_hook`) and by `apply_scan_state` whenever a
+    /// scan agrees, or does not count as a disagreement at all; counted
+    /// up by a disagreeing scan until it reaches `SCAN_TIEBREAK_SCANS`,
+    /// at which point the scan's colour wins and the counter resets.
+    #[serde(skip)]
+    pub scan_disagreements: u32,
 }
 
 impl Session {
@@ -144,6 +162,7 @@ impl Session {
             heard: false,
             unread_since_ms: None,
             pending_complete: false,
+            scan_disagreements: 0,
         }
     }
 
@@ -213,6 +232,10 @@ impl Session {
 
         self.last_event_at_ms = now_ms;
         self.heard = true;
+        // Any event, recognised or not, is the hook channel speaking;
+        // ADR-036's tie-break only fires on scans with no hook between
+        // them, so any hook event clears the count.
+        self.scan_disagreements = 0;
 
         if let Some(m) = payload.get("permission_mode").and_then(Value::as_str) {
             self.permission_mode = Some(m.to_string());
@@ -482,30 +505,92 @@ impl Session {
     /// (`Thinking`; the scan does not distinguish a shell command from
     /// any other tool call), "waiting" as `NeedsInput`, "idle" as
     /// `Idle`, and anything else, including no status at all, changes
-    /// nothing. Applied only when a hook has never coloured this session
+    /// nothing. Ended sessions are never touched.
+    ///
+    /// Applied immediately when a hook has never coloured this session
     /// (`!self.heard`) or it is presently `unknown`: a hook carries
     /// detail the scan cannot (which tool, which question, which error)
-    /// and always owns the colour once it has spoken. Ended sessions are
-    /// never touched. Never sets `heard`, `question`, `options`,
-    /// `detail_kind`, `detail_tool`, or `error`; only `set_state`.
-    /// Returns true if the state actually changed.
+    /// and always owns the colour once it has spoken.
+    ///
+    /// ADR-036's tie-break is the one exception, for a heard, coloured
+    /// session: `Thinking` versus a scan that says `Idle`, or `Idle`,
+    /// `Complete` or `Error` versus a scan that says `Thinking` (a lost
+    /// `UserPromptSubmit`), counts as a disagreement. `NeedsInput` in any
+    /// case, a `waiting` status, an absent or unrecognised status, and
+    /// plain agreement never count, and reset the count to 0. Once
+    /// `scan_disagreements` reaches `SCAN_TIEBREAK_SCANS` with no hook
+    /// event landing in between, the scan's coarse colour wins: the
+    /// target `Idle` mirrors the interrupt path of `PostToolUseFailure`
+    /// plus clearing the child ledger (a session the CLI calls idle has
+    /// nothing in flight), and the target `Thinking` mirrors
+    /// `UserPromptSubmit` (a new turn whose own event was lost). This
+    /// path never produces `Complete` or `NeedsInput`.
+    ///
+    /// Never sets `heard`, `question`, `options`, `detail_kind`, or
+    /// `detail_tool`; touches `error` only where the mirrored branch
+    /// above already does. Returns true if the state actually changed.
     pub fn apply_scan_state(&mut self, status: Option<&str>, now_ms: i64) -> bool {
         if self.state == SessionState::Ended {
             return false;
         }
-        if self.state != SessionState::Unknown && self.heard {
-            return false;
-        }
         let mapped = match status {
-            Some("busy") | Some("shell") => SessionState::Thinking,
-            Some("waiting") => SessionState::NeedsInput,
-            Some("idle") => SessionState::Idle,
-            _ => return false,
+            Some("busy") | Some("shell") => Some(SessionState::Thinking),
+            Some("waiting") => Some(SessionState::NeedsInput),
+            Some("idle") => Some(SessionState::Idle),
+            _ => None,
         };
-        if self.state == mapped {
+
+        if !self.heard || self.state == SessionState::Unknown {
+            self.scan_disagreements = 0;
+            let Some(mapped) = mapped else { return false };
+            if self.state == mapped {
+                return false;
+            }
+            self.set_state(mapped, now_ms);
+            return true;
+        }
+
+        // ADR-036 tie-break: a heard, already-coloured session normally
+        // keeps its hook-set colour (ADR-035), but two consecutive scans
+        // that contradict it, with no hook event in between, mean the
+        // scan's coarse colour wins.
+        let disagrees = matches!(
+            (self.state, mapped),
+            (SessionState::Thinking, Some(SessionState::Idle))
+                | (
+                    SessionState::Idle | SessionState::Complete | SessionState::Error,
+                    Some(SessionState::Thinking)
+                )
+        );
+        if !disagrees {
+            self.scan_disagreements = 0;
             return false;
         }
-        self.set_state(mapped, now_ms);
+        self.scan_disagreements += 1;
+        if self.scan_disagreements < SCAN_TIEBREAK_SCANS {
+            return false;
+        }
+        self.scan_disagreements = 0;
+        match mapped {
+            Some(SessionState::Idle) => {
+                // Mirrors the is_interrupt branch of PostToolUseFailure
+                // (apply_hook): a session the CLI calls idle has nothing
+                // in flight.
+                self.open_ops.clear();
+                self.children = 0;
+                self.child_ids.clear();
+                self.pending_complete = false;
+                self.set_state(SessionState::Idle, now_ms);
+            }
+            Some(SessionState::Thinking) => {
+                // Mirrors UserPromptSubmit (apply_hook): a new turn whose
+                // own event was lost.
+                self.pending_complete = false;
+                self.error = None;
+                self.set_state(SessionState::Thinking, now_ms);
+            }
+            _ => unreachable!("disagrees implies mapped is Idle or Thinking"),
+        }
         true
     }
 
@@ -906,6 +991,116 @@ mod tests {
         x.note_seen(Some("idle"), 1 + twenty_min - five_min);
         assert!(!x.tick(1 + twenty_min, false), "the scan saw it only five minutes ago");
         assert_eq!(x.state, SessionState::Idle);
+    }
+
+    // ---- ADR-036: the scan tie-break ---------------------------------
+
+    #[test]
+    fn thinking_survives_a_single_disagreeing_scan() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert!(!x.apply_scan_state(Some("idle"), 2));
+        assert_eq!(x.state, SessionState::Thinking);
+        assert_eq!(x.scan_disagreements, 1);
+    }
+
+    #[test]
+    fn a_second_consecutive_disagreeing_scan_flips_thinking_to_idle() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SubagentStart", "agent_id": "a1"}));
+        ev(&mut x, 2, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        ev(&mut x, 3, json!({"hook_event_name": "Stop"}));
+        assert_eq!(x.state, SessionState::Thinking, "complete is unreachable while the ledger is non-empty");
+        assert!(x.pending_complete);
+        assert!(!x.apply_scan_state(Some("idle"), 4), "one disagreeing scan is not enough");
+        assert_eq!(x.state, SessionState::Thinking);
+        assert!(x.apply_scan_state(Some("idle"), 5), "a second consecutive disagreeing scan flips it");
+        assert_eq!(x.state, SessionState::Idle);
+        assert!(x.open_ops.is_empty(), "a session the CLI calls idle has nothing in flight");
+        assert_eq!(x.children, 0);
+        assert!(!x.pending_complete);
+        assert_eq!(x.scan_disagreements, 0, "the counter resets once it fires");
+    }
+
+    #[test]
+    fn a_hook_event_between_two_disagreeing_scans_resets_the_count() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert!(!x.apply_scan_state(Some("idle"), 2));
+        assert_eq!(x.scan_disagreements, 1);
+        ev(&mut x, 3, json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "t1"}));
+        assert_eq!(x.scan_disagreements, 0, "any hook event resets the count");
+        assert!(!x.apply_scan_state(Some("idle"), 4), "this is only the first disagreement again");
+        assert_eq!(x.state, SessionState::Thinking);
+    }
+
+    #[test]
+    fn complete_flips_to_thinking_after_two_busy_scans() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "Stop"}));
+        assert_eq!(x.state, SessionState::Complete);
+        assert!(!x.apply_scan_state(Some("busy"), 2));
+        assert!(x.apply_scan_state(Some("busy"), 3));
+        assert_eq!(x.state, SessionState::Thinking, "a lost UserPromptSubmit is recovered from the scan");
+    }
+
+    #[test]
+    fn error_flips_to_thinking_after_two_busy_scans() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "StopFailure", "error": {"type": "api_error"}}));
+        assert_eq!(x.state, SessionState::Error);
+        assert!(!x.apply_scan_state(Some("busy"), 2));
+        assert!(x.apply_scan_state(Some("busy"), 3));
+        assert_eq!(x.state, SessionState::Thinking);
+        assert!(x.error.is_none(), "the tie-break mirrors UserPromptSubmit, which clears error");
+    }
+
+    #[test]
+    fn needs_input_never_flips_to_idle() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "Notification", "notification_type": "agent_needs_input"}));
+        assert!(!x.apply_scan_state(Some("idle"), 2));
+        assert!(!x.apply_scan_state(Some("idle"), 3));
+        assert_eq!(x.state, SessionState::NeedsInput, "needs_input never counts as a disagreement, in any case");
+    }
+
+    #[test]
+    fn thinking_never_flips_on_waiting() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert!(!x.apply_scan_state(Some("waiting"), 2));
+        assert!(!x.apply_scan_state(Some("waiting"), 3));
+        assert_eq!(x.state, SessionState::Thinking, "waiting is the scan's own amber, not a disagreement");
+    }
+
+    #[test]
+    fn idle_agreeing_with_idle_is_a_no_op_and_never_counts() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SessionStart", "source": "startup"}));
+        assert_eq!(x.state, SessionState::Idle);
+        assert!(!x.apply_scan_state(Some("idle"), 2));
+        assert!(!x.apply_scan_state(Some("idle"), 3));
+        assert_eq!(x.state, SessionState::Idle);
+        assert_eq!(x.scan_disagreements, 0, "plain agreement is never a disagreement");
+    }
+
+    #[test]
+    fn an_unrecognised_scan_between_two_disagreeing_ones_resets_the_count() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert!(!x.apply_scan_state(Some("idle"), 2));
+        assert!(!x.apply_scan_state(Some("frobnicating"), 3), "an unrecognised status resets the count");
+        assert!(!x.apply_scan_state(Some("idle"), 4), "only the first disagreement again after the reset");
+        assert_eq!(x.state, SessionState::Thinking);
+    }
+
+    #[test]
+    fn the_immediate_path_still_colours_an_unheard_session_on_the_first_scan() {
+        let mut x = s();
+        assert!(!x.heard);
+        assert!(x.apply_scan_state(Some("idle"), 1), "an unheard session is coloured on the first scan, not the second");
+        assert_eq!(x.state, SessionState::Idle);
+        assert_eq!(x.scan_disagreements, 0);
     }
 
     #[test]
