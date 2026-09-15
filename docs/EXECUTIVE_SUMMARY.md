@@ -119,10 +119,13 @@ the process is gone and no clean exit was reported, the row is removed the
 same as if it had exited cleanly, catching a crash or a closed terminal
 without needing a hook for it ([ADR-035](DECISIONS.md#adr-035)).
 
-There is a fallback for reading a session's history directly from the log
-file Claude Code writes to disk, but that log file's internal format is not
-something Claude Code promises to keep stable, so Deckhand treats it as a
-last resort, never as something the core status logic depends on.
+There is no fallback that reads a session's conversation log from disk:
+Deckhand never reads transcripts. The same background service also asks
+Claude Code directly, on a fifteen-second timer, what each session is
+doing. Hooks are trusted first, but if hooks and that periodic check
+disagree twice in a row with no hook heard in between, the periodic check
+wins and the row is corrected within about thirty seconds instead of
+staying wrong until the next hook arrives ([ADR-036](DECISIONS.md#adr-036)).
 
 ## What is uncertain
 

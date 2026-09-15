@@ -207,11 +207,15 @@ handle for:
   process lives. The exception is `THINKING`: a turn in flight produces hook
   events, so a `THINKING` session with no hook for `T_unknown`, whose latest
   scan status is not `busy`, `shell`, or `waiting`, still moves to `UNKNOWN`,
-  because the two channels disagree and the colour cannot be trusted. A
-  session with no handle (no pid known, or the handle could not be opened)
-  keeps the old, unnarrowed rule, except that a successful scan sighting now
-  also counts as an event of any kind, so `T_unknown` runs from the later of
-  the last hook and the last sighting.
+  because the two channels disagree and the colour cannot be trusted. Most
+  of the time this path is moot: the [ADR-036](DECISIONS.md#adr-036)
+  tie-break above resolves a `THINKING`-versus-`IDLE` disagreement in about
+  thirty seconds whenever the scan carries a status at all, so the full
+  fifteen-minute wait is left for the case where the scan reports no status
+  for the session. A session with no handle (no pid known, or the handle
+  could not be opened) keeps the old, unnarrowed rule, except that a
+  successful scan sighting now also counts as an event of any kind, so
+  `T_unknown` runs from the later of the last hook and the last sighting.
 
 The asymmetry is the whole point. A terminal killed mid-tool-call leaves an
 operation open that nothing will ever close, so letting an open operation
@@ -267,10 +271,19 @@ first one or the thousandth:
    this run. `busy` and `shell` map to `THINKING`, `waiting` to
    `NEEDS_INPUT`, `idle` to `IDLE`; any other value, including one absent or
    unrecognised, leaves the state alone. Once a hook has coloured a session
-   this step never recolours it, and it never produces `COMPLETE`: hooks
+   this step does not recolour it on a single contradicting scan: hooks
    carry what the scan cannot (green means finished and unread, amber
    carries the question, red carries the error), and a coarse `idle` must
-   not erase them ([ADR-035](DECISIONS.md#adr-035)).
+   not erase them ([ADR-035](DECISIONS.md#adr-035)). The one exception is
+   the tie-break [ADR-036](DECISIONS.md#adr-036) adds: after two
+   consecutive scans contradict the hook-set colour with no hook event
+   between them, about thirty seconds at the fifteen-second rescan, a
+   `THINKING` session the scan reports `idle` moves to `IDLE`, clearing its
+   open operations and child ledger, and an `IDLE`, `COMPLETE`, or `ERROR`
+   session the scan reports `busy` or `shell` moves to `THINKING`. Any hook
+   event resets the count. This step still never produces `COMPLETE`, still
+   never touches `NEEDS_INPUT`, and `waiting` never triggers the tie-break
+   in either direction.
 
 On 2.1.220 no row carried a status, so step 2 never fired and every freshly
 bound session stayed `UNKNOWN` until a hook arrived. On the installed 2.1.270,
@@ -567,7 +580,7 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 | Start with Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Deckhand` | Not mirrored into `settings.json`; the registry value itself is the only source of truth, read fresh on every panel open and every toggle ([ADR-033](DECISIONS.md#adr-033)) |
 | Session bindings | Local config directory, `bindings.json` | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
-| Session transcripts | Not stored | Deckhand reads them where they already are and copies nothing |
+| Session transcripts | Not stored | Deckhand does not read them ([ADR-036](DECISIONS.md#adr-036)) |
 
 Nothing leaves the machine. There is no telemetry, no account, and no network
 egress other than loopback. The settings panel's Repair action and its

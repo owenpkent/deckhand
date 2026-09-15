@@ -43,6 +43,34 @@ version number is invented and no past release is backfilled.
   `docs/CLAUDE_CODE_ADAPTER.md`, `TODO.md`, and `CLAUDE.md` are updated to
   match, and `app/` implements the change.
 
+- **The scan breaks ties with hooks after two consecutive contradicting
+  scans** ([ADR-036](docs/DECISIONS.md#adr-036)). Once a hook has
+  coloured a session, the scan still does not recolour it on a single
+  disagreement, but after two consecutive scans contradict the hook-set
+  colour with no hook event between them (about thirty seconds at the
+  fifteen-second rescan), a `thinking` session the scan reports `idle`
+  moves to `idle`, clearing its open operations and child ledger, and an
+  `idle`, `complete`, or `error` session the scan reports `busy` or
+  `shell` moves to `thinking`. Any hook event resets the count; the scan
+  still never produces `complete`, still never touches `needs_input`, and
+  `waiting` never triggers the tie-break. `docs/ARCHITECTURE.md` and
+  `docs/CLAUDE_CODE_ADAPTER.md` are updated to match, and `app/`
+  implements the change.
+
+### Removed
+
+- **The transcript JSONL fallback, retired before being built**
+  ([ADR-036](docs/DECISIONS.md#adr-036)). Deckhand does not read session
+  transcripts: hooks and `claude agents --json` are the only observation
+  channels, and the `transcript_path` field hooks carry stays unused. The
+  scan's `status`, observed on 2.1.270, already answers what the fallback
+  would have, from a documented command rather than an undocumented file
+  with no stability promise. `docs/ARCHITECTURE.md`,
+  `docs/CLAUDE_CODE_ADAPTER.md`, `docs/EXECUTIVE_SUMMARY.md`, and
+  `TODO.md` are updated to match.
+
+### Changed
+
 - **A settings panel, opened by a new gear button added beside the
   header's grey toggle** ([ADR-033](docs/DECISIONS.md#adr-033)). The
   panel replaces the session list in place (not a second window),
