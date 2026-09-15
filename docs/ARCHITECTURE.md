@@ -31,11 +31,14 @@ that is still blocked and waiting for it.
 | Hook shim | Small native binary or script | Milliseconds, one per hook fire | Read hook JSON on stdin, POST it to the daemon, write the daemon's answer to stdout |
 | Daemon | Rust | Runs as long as the surface is open | Session registry, state machines, pending-approval queue, adapter host, settings |
 | Surface | TypeScript in a Tauri webview | Same as daemon | Draw tiles, take pointer input, nothing else |
+| Watchdog | Same binary, `deckhand.exe --watchdog <pid>` | Runs as long as the daemon does | Waits on the daemon's exit code and relaunches it after a crash; see [Process lifecycle](#process-lifecycle) |
 
 The daemon and the surface ship in one Tauri application. They are described
 separately because the daemon must keep working while the window is hidden, and
 because a future headless or remote surface should be able to attach to the same
-daemon.
+daemon. The watchdog is a fourth, windowless process spawned by every launch
+([ADR-037](DECISIONS.md#adr-037)); two processes named `deckhand.exe` run
+while the board is up.
 
 ### Why a separate hook shim
 
@@ -46,6 +49,49 @@ Claude Code semantics. All interpretation happens in the daemon.
 
 Process spawn cost is the main performance risk in this design. See
 [open questions](#open-questions).
+
+### Process lifecycle
+
+What a launch of `deckhand.exe` does, in order, before anything else in this
+document applies ([ADR-037](DECISIONS.md#adr-037)):
+
+1. **Claim the instance mutex.** The process creates the named kernel mutex
+   `Local\Deckhand.Instance` and holds it for its lifetime; the kernel drops
+   the handle on any exit, crash included, so the name is always free again
+   for the next launch. If the mutex already exists, this launch is a second
+   copy: it raises the first copy's window to the top without activating it
+   (the no-focus-steal surface, [ADR-025](DECISIONS.md#adr-025)) and exits
+   with code 0. Nothing else is shared between the two copies.
+2. **Spawn the watchdog.** Once the mutex is held, the app spawns
+   `deckhand.exe --watchdog <own pid>` as a detached, windowless child. That
+   mode opens a handle on the parent, waits for it to exit, and reads its
+   exit code: 0 is a clean exit (Quit, or the OS ending the session) and the
+   watchdog simply ends; anything else is a crash, and the watchdog
+   relaunches `deckhand.exe` and ends, the new copy spawning its own
+   watchdog in turn. A watchdog that cannot open its parent or cannot spawn
+   does nothing; the app runs unguarded rather than not at all. This
+   watchdog is unrelated to the `T_unknown` watchdog named later in this
+   document, which times out a session's colour, not the app's own process.
+3. **Start the daemon's own subsystems**: the loopback HTTP ingest endpoint
+   ([Transport](#transport)), the two-second liveness tick, and the
+   fifteen-second scan ([Observation channels](#observation-channels)).
+
+Restarts are rate-limited by an append-only ledger,
+`%LOCALAPPDATA%\deckhand\watchdog.log`, one line per decision: three
+restarts within ten minutes is a crash loop, and the watchdog writes
+"gave-up" and stops rather than flicker the board forever. The watchdog
+holds a handle on the app, not the reverse, so the app never waits on it and
+a dead watchdog costs nothing but the restart guarantee.
+
+Start with Windows ([ADR-033](DECISIONS.md#adr-033)) is unchanged: the Run
+key still launches `deckhand.exe` with no arguments, and the watchdog is a
+consequence of any launch, not a second registration.
+
+The watchdog is spawned with breakaway from any job object it inherits, so a
+copy launched from a terminal survives that terminal closing, where the job
+allows breakaway. Where the job forbids it, the watchdog is spawned inside
+the job and dies with the terminal, which is the pre-ADR-037 behaviour, not
+a regression.
 
 ## The session state machine
 
@@ -579,6 +625,7 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 | Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown` (the header's own Hide grey switch, [ADR-030](DECISIONS.md#adr-030), left there rather than moved by [ADR-033](DECISIONS.md#adr-033)) and `always_on_top` (the settings panel's Always on top row, [ADR-033](DECISIONS.md#adr-033), default `true`); a missing field or a corrupt file loads each at its own default rather than failing |
 | Start with Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Deckhand` | Not mirrored into `settings.json`; the registry value itself is the only source of truth, read fresh on every panel open and every toggle ([ADR-033](DECISIONS.md#adr-033)) |
 | Session bindings | Local config directory, `bindings.json` | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
+| Watchdog ledger | Local config directory, `watchdog.log` | Append-only, one line per restart decision, capped at three restarts in ten minutes before the watchdog gives up. Never leaves the machine ([ADR-037](DECISIONS.md#adr-037)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
 | Session transcripts | Not stored | Deckhand does not read them ([ADR-036](DECISIONS.md#adr-036)) |
 

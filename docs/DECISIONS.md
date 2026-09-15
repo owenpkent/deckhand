@@ -1994,3 +1994,87 @@ second point and stands on the rest. [ARCHITECTURE.md](ARCHITECTURE.md),
 [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md),
 [EXECUTIVE_SUMMARY.md](EXECUTIVE_SUMMARY.md), `TODO.md`, `CHANGELOG.md`,
 and `CLAUDE.md` (next ADR bumped to 037) are updated in the same change.
+
+<a id="adr-037"></a>
+## ADR-037: One instance, and a watchdog that restarts a crash
+
+Date: 2026-09-15
+
+**Context.** TODO.md has carried "design the daemon's process lifecycle"
+since Phase 1 opened, with three parts named: start on login, restart on
+crash, single instance. [ADR-033](#adr-033) answered the first as an opt-in
+HKCU Run key, the Start with Windows row in the settings panel. The other
+two stayed undesigned, and both cost the owner directly. A second launch
+(from the Run key at logon while a copy from the previous session is still
+up, or a second click on the shortcut) opens a second window, and both
+copies write `daemon.json`, so the shim's hooks land on whichever wrote
+last while the other sits grey. A crash leaves no board at all until the
+owner finds the shortcut again with the pointer, which is exactly the
+motion Deckhand exists to save. The daemon has already had one
+thread-level panic in the reveal worker (fixed in PR #10); a process-level
+one is a matter of time.
+
+The Windows-native answers were considered. A Task Scheduler logon task
+carries a restart-on-failure setting, but only through an XML task
+definition, and adopting it would replace the Run key ADR-033 just shipped
+and rework its three-way state. The Tauri single-instance plugin would do
+the mutex for us at the price of a new dependency for one kernel call.
+Neither earns its weight.
+
+**Decision.**
+
+1. *One instance, by a named mutex.* At startup, before anything else,
+   the process creates the kernel mutex `Local\Deckhand.Instance` and holds
+   it for its lifetime. If the mutex already exists, this launch is the
+   second copy: it raises the first copy's window to the top without
+   activating it (the window is a no-focus-steal surface, ADR-025) and
+   exits with code 0. The handle is never closed by code; the kernel drops
+   it on any exit, crash included, so a relaunch after a crash always finds
+   the name free. Nothing else is shared between the two copies, and no
+   message passes between them.
+
+2. *A watchdog, which is this same binary.* Once the mutex is held, the
+   app spawns `deckhand.exe --watchdog <own pid>` as a detached, windowless
+   child. That mode opens a handle on the parent, waits for it to exit,
+   reads its exit code, and decides: code 0 is a clean exit (Quit, or the
+   OS ending the session) and the watchdog simply ends; any other code is
+   a crash, and the watchdog relaunches `deckhand.exe` and ends, the new
+   copy spawning its own watchdog in turn. Restarts are rate-limited by an
+   append-only ledger, `%LOCALAPPDATA%\deckhand\watchdog.log`, one line
+   per decision: three restarts within ten minutes is a crash loop, and
+   the watchdog writes "gave-up" and stops rather than flicker the board
+   forever. A watchdog that cannot open its parent, or cannot spawn, does
+   nothing; the app runs unguarded rather than not at all.
+
+3. *Start on login is unchanged.* The Run key still launches
+   `deckhand.exe` with no arguments; the watchdog is a consequence of any
+   launch, not a second registration. No new dependency, no scheduled
+   task, no service.
+
+**Consequences.** Two launches show one board, and the second launch
+becomes a pointer gesture for "bring Deckhand to the top", which costs the
+owner nothing to learn. A crash is followed by a fresh board within about
+a second, with sessions recoloured by the next scan
+([ADR-035](#adr-035)). Quit still means quit: the watchdog reads exit code
+0 and goes away with the app. A crash loop stops itself after three tries
+and leaves its evidence in the ledger, which is the only place a crash is
+recorded; nothing leaves the machine, per
+[SECURITY_MODEL.md](SECURITY_MODEL.md). The ledger is not yet surfaced in
+the settings panel; a "restarted after a crash" line there is a follow-up
+in TODO.md, not part of this change.
+
+Two processes named `deckhand.exe` now run while the board is up, one of
+them windowless. Anything that counts Deckhand processes, including the
+screenshot helpers used for dogfooding, must pick the one with a window.
+The watchdog holds a handle on the app, not the reverse, so the app never
+waits on it and a dead watchdog costs nothing but the restart guarantee.
+Since the watchdog is spawned with breakaway from any job object it
+inherits, a copy launched from a terminal survives that terminal closing;
+if the job forbids breakaway, the watchdog is still spawned inside it and
+dies with the terminal, which is the pre-ADR behaviour, not a regression.
+
+[ARCHITECTURE.md](ARCHITECTURE.md) gains a process lifecycle section,
+[SECURITY_MODEL.md](SECURITY_MODEL.md) records the mutex and the ledger,
+`TODO.md` closes the lifecycle item and opens the panel follow-up,
+`CHANGELOG.md` and `CLAUDE.md` (next ADR bumped to 038) are updated in the
+same change.

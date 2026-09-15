@@ -14,7 +14,10 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
   The gear opens an in-bar settings panel in place of the session list
   (ADR-033): always on top, start with Windows, reset position, and a
   hooks-installed status with a Repair action; Hide grey stays a header
-  control throughout, never moving into the panel. Move, a
+  control throughout, never moving into the panel. Underneath the
+  surface, ADR-037 gives the daemon a process lifecycle: single
+  instance by a named mutex, and a same-binary watchdog that restarts
+  it after a crash; Start with Windows itself is unchanged. Move, a
   click-to-place alternative to dragging, was removed by
   ADR-031: the window is now repositioned by dragging only, an
   owner-approved exception to the no-required-drag rule in
@@ -113,7 +116,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 037.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 038.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **When to write an ADR:** only for big decisions: the security model,
   the approval path, what Deckhand may do, adapter capabilities, new
@@ -162,9 +165,9 @@ Phase 1: make observation trustworthy. The skeleton builds, passes its
 state machine tests, and paints real tiles from synthetic events through
 the real shim; `scripts/build-app.ps1` builds it, and gitignored
 `.claude/settings.local.json` wires this repo's sessions into the shim
-for dogfooding. The open Phase 1 work is in [TODO.md](TODO.md): daemon
-lifecycle, installable hook registration, and the six-session colour
-test. ADR-023 added the host axis, ADR-024
+for dogfooding. The open Phase 1 work is in [TODO.md](TODO.md):
+installable hook registration and the six-session colour test.
+ADR-023 added the host axis, ADR-024
 corrected the enumeration to bindings-not-state, and ADR-025 recorded
 the window spike pass that Phase 1's window builds on. ADR-027 folded
 the raise into the tile click: selecting a session brings its window
@@ -199,7 +202,12 @@ hook-set colour with no hook between them, about thirty seconds, the
 scan breaks the tie instead of waiting on `T_unknown`. The planned
 transcript fallback is retired with it, not built; the scan's
 `status` already answers what it would have, from a documented
-command. `app/` implements all of these.
+command. ADR-037, the day after that, closed the daemon's last open
+lifecycle question: a named mutex makes the app single instance, and
+a same-binary watchdog, spawned by every launch, relaunches it after
+a crash and rate-limits itself with a local, append-only ledger.
+Start with Windows stays exactly as ADR-033 left it. `app/`
+implements all of these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on
