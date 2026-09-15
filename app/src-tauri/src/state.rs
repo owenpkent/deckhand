@@ -50,8 +50,13 @@ pub struct ErrorDetail {
     pub message: Option<String>,
 }
 
-/// `T_unknown`: one deadline, measured from the last event of any kind,
-/// suspended by nothing (docs/ARCHITECTURE.md#liveness-by-open-operation).
+/// `T_unknown`: one deadline, suspended by nothing
+/// (docs/ARCHITECTURE.md#liveness-by-open-operation). What it is measured
+/// from depends on whether the registry holds a live process handle for
+/// the session (ADR-035, `Session::tick`): without one, the last event of
+/// any kind, a hook or a scan sighting alike; with one, only the one case
+/// a live process cannot itself vouch for, hooks silent past this
+/// deadline while the scan does not confirm the turn is still busy.
 pub const T_UNKNOWN_MS: i64 = 900_000;
 
 #[derive(Debug, Clone, Serialize)]
@@ -84,11 +89,27 @@ pub struct Session {
     child_ids: Vec<String>,
     pub open_ops: Vec<OpenOp>,
     pub last_event_at_ms: i64,
+    /// The last time a successful scan (`claude agents --json`) listed
+    /// this session, set by `note_seen`. A scan sighting counts as an
+    /// event of any kind for the not-alive half of `tick` (ADR-035),
+    /// even though it is not a hook and never touches `heard`.
+    #[serde(skip)]
+    pub last_seen_ms: i64,
+    /// The raw `status` string from the latest scan that listed this
+    /// session ("busy", "shell", "idle", "waiting", or unrecognised),
+    /// set by `note_seen`. What `tick` checks, while the process is
+    /// alive, before greying a `Thinking` session the hooks have gone
+    /// quiet on (ADR-035).
+    #[serde(skip)]
+    pub scan_status: Option<String>,
     /// True once any hook event has arrived for this session in this
     /// run. Separates the two roads to unknown for the surface's state
     /// word: bound by enumeration or restored from disk and never heard
     /// from, versus heard from and then silent past `T_unknown`. Neither
-    /// is a guess, and neither changes the colour.
+    /// is a guess, and neither changes the colour. Also the gate on
+    /// `apply_scan_state` (ADR-035): once a hook has coloured a session,
+    /// only a hook may recolour it; the scan may still colour one that
+    /// has never been heard from, or one sitting in `unknown`.
     pub heard: bool,
     pub unread_since_ms: Option<i64>,
     /// A turn ended while children were live; green arrives when the
@@ -118,6 +139,8 @@ impl Session {
             child_ids: Vec::new(),
             open_ops: Vec::new(),
             last_event_at_ms: now_ms,
+            last_seen_ms: 0,
+            scan_status: None,
             heard: false,
             unread_since_ms: None,
             pending_complete: false,
@@ -399,20 +422,28 @@ impl Session {
                     // session that never stopped.
                     return false;
                 }
-                self.children = 0;
-                self.child_ids.clear();
-                self.open_ops.clear();
-                self.pending_complete = false;
-                // Lifecycle invalidation: the OS is free to reuse this
-                // pid for an unrelated process the moment this one
-                // exits, so it must not survive to name Reveal's target
-                // for whatever comes next under the same session id.
-                self.pid = None;
-                self.set_state(SessionState::Ended, now_ms);
+                self.end_session(now_ms);
                 true
             }
             _ => false,
         }
+    }
+
+    /// The lifecycle-ending move shared by `SessionEnd` (above) and
+    /// `process_exited` (below): clears the child ledger and every open
+    /// operation, and the pid (the OS is free to reuse it for an
+    /// unrelated process the moment this one exits, so it must not
+    /// survive to name Reveal's target for whatever comes next under the
+    /// same session id), then sets `Ended`. Callers decide whether the
+    /// move is legal (SessionEnd's own `clear`/`resume` guard;
+    /// `process_exited`'s already-ended no-op).
+    fn end_session(&mut self, now_ms: i64) {
+        self.children = 0;
+        self.child_ids.clear();
+        self.open_ops.clear();
+        self.pending_complete = false;
+        self.pid = None;
+        self.set_state(SessionState::Ended, now_ms);
     }
 
     /// The surface selected this tile. Green clears to idle; an error is
@@ -429,14 +460,103 @@ impl Session {
         }
     }
 
-    /// The `T_unknown` deadline. Returns true if the session moved.
-    pub fn tick(&mut self, now_ms: i64) -> bool {
+    /// True for the scan status values that mean a turn is in progress
+    /// well enough that hook silence should not be read as trouble
+    /// (ADR-035): "busy" and "shell" are both mid-turn, and "waiting" is
+    /// the scan's own amber, not silence at all.
+    fn scan_says_in_flight(&self) -> bool {
+        matches!(self.scan_status.as_deref(), Some("busy") | Some("shell") | Some("waiting"))
+    }
+
+    /// Record that a successful scan listed this session, independent of
+    /// whether its status maps to a colour change. Never touches `heard`
+    /// or the state machine itself; `apply_scan_state` is the half that
+    /// can (ADR-035).
+    pub fn note_seen(&mut self, status: Option<&str>, now_ms: i64) {
+        self.last_seen_ms = now_ms;
+        self.scan_status = status.map(String::from);
+    }
+
+    /// Colour a session from the scan's own status, the other half of
+    /// ADR-035: "busy" and "shell" both read as a turn in flight
+    /// (`Thinking`; the scan does not distinguish a shell command from
+    /// any other tool call), "waiting" as `NeedsInput`, "idle" as
+    /// `Idle`, and anything else, including no status at all, changes
+    /// nothing. Applied only when a hook has never coloured this session
+    /// (`!self.heard`) or it is presently `unknown`: a hook carries
+    /// detail the scan cannot (which tool, which question, which error)
+    /// and always owns the colour once it has spoken. Ended sessions are
+    /// never touched. Never sets `heard`, `question`, `options`,
+    /// `detail_kind`, `detail_tool`, or `error`; only `set_state`.
+    /// Returns true if the state actually changed.
+    pub fn apply_scan_state(&mut self, status: Option<&str>, now_ms: i64) -> bool {
+        if self.state == SessionState::Ended {
+            return false;
+        }
+        if self.state != SessionState::Unknown && self.heard {
+            return false;
+        }
+        let mapped = match status {
+            Some("busy") | Some("shell") => SessionState::Thinking,
+            Some("waiting") => SessionState::NeedsInput,
+            Some("idle") => SessionState::Idle,
+            _ => return false,
+        };
+        if self.state == mapped {
+            return false;
+        }
+        self.set_state(mapped, now_ms);
+        true
+    }
+
+    /// The session's OS process is confirmed gone without a `SessionEnd`
+    /// ever arriving (ADR-035, `liveness.rs`): moves it to `Ended` the
+    /// same way a real `SessionEnd` does. A no-op, returning false, on a
+    /// session already `Ended`.
+    pub fn process_exited(&mut self, now_ms: i64) -> bool {
+        if self.state == SessionState::Ended {
+            return false;
+        }
+        self.end_session(now_ms);
+        true
+    }
+
+    /// The `T_unknown` deadline (ADR-035). `alive` is whether the
+    /// registry holds a live OS process handle for this session right
+    /// now. Ended and already-`unknown` sessions never move here.
+    ///
+    /// Without a live handle, silence past `T_unknown` from the more
+    /// recent of the last hook event or the last scan sighting greys the
+    /// session, exactly as before the scan carried a status.
+    ///
+    /// With a live handle, the process itself stands in for every colour
+    /// except `Thinking`: idle, complete, error and needs-input never
+    /// grey while it is alive, since none of them claims work is
+    /// happening that only a hook could report finishing. A `Thinking`
+    /// session is the one case the process cannot vouch for on its own
+    /// (a live process says nothing about whether it is still doing the
+    /// thing hooks last said it was doing), so it still greys once hooks
+    /// have been silent past `T_unknown` and the scan does not say the
+    /// turn is still busy or in a shell.
+    ///
+    /// Never to error either way: a long tool call is normal, and a
+    /// wrong red costs more than an honest grey.
+    pub fn tick(&mut self, now_ms: i64, alive: bool) -> bool {
         if self.state == SessionState::Ended || self.state == SessionState::Unknown {
             return false;
         }
-        if now_ms - self.last_event_at_ms > T_UNKNOWN_MS {
-            // Never to error: a long tool call is normal, and a wrong red
-            // costs more than an honest grey.
+        if !alive {
+            let last_seen = self.last_event_at_ms.max(self.last_seen_ms);
+            if now_ms - last_seen > T_UNKNOWN_MS {
+                self.set_state(SessionState::Unknown, now_ms);
+                return true;
+            }
+            return false;
+        }
+        if self.state == SessionState::Thinking
+            && now_ms - self.last_event_at_ms > T_UNKNOWN_MS
+            && !self.scan_says_in_flight()
+        {
             self.set_state(SessionState::Unknown, now_ms);
             return true;
         }
@@ -682,13 +802,124 @@ mod tests {
     fn t_unknown_greys_and_never_reds() {
         let mut x = s();
         ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
-        assert!(!x.tick(T_UNKNOWN_MS));
-        assert!(x.tick(T_UNKNOWN_MS + 2));
+        assert!(!x.tick(T_UNKNOWN_MS, false));
+        assert!(x.tick(T_UNKNOWN_MS + 2, false));
         assert_eq!(x.state, SessionState::Unknown);
         assert!(x.heard, "a timed-out session was heard from; the surface words it apart from never-heard");
         // Any authoritative event leaves unknown.
         ev(&mut x, T_UNKNOWN_MS + 3, json!({"hook_event_name": "UserPromptSubmit"}));
         assert_eq!(x.state, SessionState::Thinking);
+    }
+
+    // ---- ADR-035: liveness from the process, state from the scan ------
+
+    #[test]
+    fn scan_colours_an_unheard_session_for_each_recognised_status() {
+        for (status, want) in [
+            ("busy", SessionState::Thinking),
+            ("shell", SessionState::Thinking),
+            ("waiting", SessionState::NeedsInput),
+            ("idle", SessionState::Idle),
+        ] {
+            let mut x = s();
+            assert!(!x.heard);
+            assert!(x.apply_scan_state(Some(status), 1), "status {status} must colour an unheard session");
+            assert_eq!(x.state, want, "status {status}");
+            assert!(!x.heard, "the scan must never set heard");
+        }
+    }
+
+    #[test]
+    fn scan_with_an_unrecognised_status_leaves_the_session_unknown() {
+        let mut x = s();
+        assert!(!x.apply_scan_state(Some("frobnicating"), 1));
+        assert_eq!(x.state, SessionState::Unknown);
+        assert!(!x.apply_scan_state(None, 2));
+        assert_eq!(x.state, SessionState::Unknown);
+    }
+
+    #[test]
+    fn a_heard_complete_session_stays_complete_when_the_scan_says_idle() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "Stop"}));
+        assert_eq!(x.state, SessionState::Complete);
+        assert!(!x.apply_scan_state(Some("idle"), 2), "a hook has already coloured this session");
+        assert_eq!(x.state, SessionState::Complete);
+    }
+
+    #[test]
+    fn a_heard_then_unknown_session_is_recoloured_by_the_scan() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert!(x.tick(1 + T_UNKNOWN_MS + 1, false));
+        assert_eq!(x.state, SessionState::Unknown);
+        assert!(x.heard);
+        assert!(x.apply_scan_state(Some("busy"), 1 + T_UNKNOWN_MS + 2));
+        assert_eq!(x.state, SessionState::Thinking, "unknown is recolourable even once heard");
+    }
+
+    #[test]
+    fn alive_idle_survives_twenty_minutes_of_silence() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SessionStart", "source": "startup"}));
+        assert_eq!(x.state, SessionState::Idle);
+        let twenty_min = 20 * 60 * 1000;
+        assert!(!x.tick(1 + twenty_min, true));
+        assert_eq!(x.state, SessionState::Idle, "an idle session must not grey while its process is alive");
+    }
+
+    #[test]
+    fn alive_thinking_with_scan_busy_stays_thinking_after_twenty_minutes() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        x.note_seen(Some("busy"), 2);
+        let twenty_min = 20 * 60 * 1000;
+        assert!(!x.tick(1 + twenty_min, true));
+        assert_eq!(x.state, SessionState::Thinking, "the scan still confirms the turn is in flight");
+    }
+
+    #[test]
+    fn alive_thinking_with_scan_idle_greys_after_fifteen_minutes() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        x.note_seen(Some("idle"), 2);
+        assert!(x.tick(1 + T_UNKNOWN_MS + 1, true), "the two channels disagree, so the colour is no longer trustworthy");
+        assert_eq!(x.state, SessionState::Unknown);
+    }
+
+    #[test]
+    fn alive_needs_input_never_greys() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "Notification", "notification_type": "agent_needs_input"}));
+        assert_eq!(x.state, SessionState::NeedsInput);
+        let one_hour = 60 * 60 * 1000;
+        assert!(!x.tick(1 + one_hour, true));
+        assert_eq!(x.state, SessionState::NeedsInput);
+    }
+
+    #[test]
+    fn not_alive_idle_stays_idle_when_the_scan_is_more_recent_than_the_hooks() {
+        let mut x = s();
+        ev(&mut x, 1, json!({"hook_event_name": "SessionStart", "source": "startup"}));
+        let twenty_min = 20 * 60 * 1000;
+        let five_min = 5 * 60 * 1000;
+        x.note_seen(Some("idle"), 1 + twenty_min - five_min);
+        assert!(!x.tick(1 + twenty_min, false), "the scan saw it only five minutes ago");
+        assert_eq!(x.state, SessionState::Idle);
+    }
+
+    #[test]
+    fn process_exited_ends_the_session_and_session_start_revives_it() {
+        let mut x = s();
+        x.pid = Some(4242);
+        ev(&mut x, 1, json!({"hook_event_name": "UserPromptSubmit"}));
+        assert!(x.process_exited(2));
+        assert_eq!(x.state, SessionState::Ended);
+        assert_eq!(x.pid, None);
+        assert!(!x.process_exited(3), "an already-ended session is a no-op");
+
+        assert!(ev(&mut x, 4, json!({"hook_event_name": "SessionStart", "source": "resume"})));
+        assert_eq!(x.state, SessionState::Idle, "a resume after process_exited revives the session exactly like after SessionEnd");
     }
 
     #[test]

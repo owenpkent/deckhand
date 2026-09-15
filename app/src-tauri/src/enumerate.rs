@@ -1,9 +1,15 @@
 // Cold start and the periodic rescan: `claude agents --json`.
 // Documented, keys observed 2.1.220: pid, cwd, kind, startedAt,
-// sessionId, name. No status key exists on 2.1.220 (ADR-024), so this
-// channel recovers bindings and labels, never state: every session it
-// registers lands in unknown and stays there until a hook event colours
-// it.
+// sessionId, name. ADR-024 recorded no status key on 2.1.220; a `status`
+// key has since been observed on the installed 2.1.270, with values
+// validated by the CLI itself: "busy", "shell", "idle", "waiting" (busy
+// and idle seen live). ADR-035 puts that key to use: it can colour a
+// session the hooks have never heard from, or recolour one sitting in
+// `unknown`, but it never overrides a colour a hook has already set
+// (state.rs `Session::apply_scan_state`). Liveness (whether the
+// session's row survives at all) stays a separate question, answered
+// by a held process handle where one exists (liveness.rs,
+// registry.rs), not by this status string.
 //
 // Fetching shells out and can take a second, so it is split from
 // registering: fetch without the registry lock, register with it. The
@@ -12,10 +18,11 @@
 //
 // `register` also prunes: a session bound from a previous run that this
 // run does not report is dropped from the list (unless a hook has heard
-// from it inside the grace window; see registry::prune_missing). That
-// pruning is only sound because `fetch` failing returns `None` rather
-// than `Some(vec![])`, so a dead or unparseable `claude` can never be
-// mistaken for "nobody is running" and empty the whole list.
+// from it inside the grace window, or a held process handle proves it
+// is still alive; see registry::prune_missing). That pruning is only
+// sound because `fetch` failing returns `None` rather than `Some(vec![])`,
+// so a dead or unparseable `claude` can never be mistaken for "nobody is
+// running" and empty the whole list.
 
 use std::collections::HashSet;
 
@@ -28,6 +35,10 @@ pub struct Row {
     pub name: Option<String>,
     pub cwd: Option<String>,
     pub pid: Option<u32>,
+    /// The scan's own idea of liveness (ADR-035): "busy", "shell",
+    /// "idle", or "waiting" on the versions observed so far. `None` when
+    /// the key is absent (an older CLI) or not a string.
+    pub status: Option<String>,
 }
 
 pub fn fetch() -> Option<Vec<Row>> {
@@ -64,6 +75,7 @@ pub fn parse(stdout: &[u8]) -> Option<Vec<Row>> {
                     name: row.get("name").and_then(Value::as_str).map(String::from),
                     cwd: row.get("cwd").and_then(Value::as_str).map(String::from),
                     pid: row.get("pid").and_then(Value::as_u64).map(|p| p as u32),
+                    status: row.get("status").and_then(Value::as_str).map(String::from),
                 })
             })
             .collect(),
@@ -85,6 +97,7 @@ pub fn register(reg: &mut Registry, rows: &[Row], now_ms: i64) -> bool {
             row.name.as_deref(),
             row.cwd.as_deref(),
             row.pid,
+            row.status.as_deref(),
             now_ms,
         );
     }
@@ -134,6 +147,20 @@ mod tests {
         let stdout = json!([{"sessionId": "s1", "pid": 4242}]).to_string();
         let rows = parse(stdout.as_bytes()).unwrap();
         assert_eq!(rows[0].pid, Some(4242u32));
+    }
+
+    #[test]
+    fn status_is_parsed_when_present_as_a_string_and_none_otherwise() {
+        let stdout = json!([
+            {"sessionId": "s1", "status": "busy"},
+            {"sessionId": "s2"},
+            {"sessionId": "s3", "status": 5},
+        ])
+        .to_string();
+        let rows = parse(stdout.as_bytes()).unwrap();
+        assert_eq!(rows[0].status.as_deref(), Some("busy"));
+        assert_eq!(rows[1].status, None, "an older CLI with no status key must parse fine");
+        assert_eq!(rows[2].status, None, "a non-string status must not be coerced");
     }
 
     #[test]

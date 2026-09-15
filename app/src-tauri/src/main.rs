@@ -594,12 +594,17 @@ fn main() {
                 })
                 .expect("spawn apply thread");
 
-            // T_unknown watchdog. Never changes who is bound, but can
-            // change who is visible: a session tipping into unknown
-            // while the grey toggle is on must shrink the window the
-            // same as a binding disappearing would, so this goes through
-            // after_change like any other registry mutation rather than
-            // emitting a snapshot on its own.
+            // T_unknown watchdog, and, since ADR-035, the liveness
+            // watchdog alongside it: `Registry::tick` also checks each
+            // bound session's process handle (liveness.rs) and, when one
+            // reports its process gone with no SessionEnd ever having
+            // arrived, ends and unbinds that row right here. Either way
+            // this can change who is visible, not just who is coloured:
+            // a session tipping into unknown, or a row an exited watch
+            // just dropped, must shrink the window the same as a binding
+            // disappearing always has, so this goes through after_change
+            // like any other registry mutation rather than emitting a
+            // snapshot on its own.
             let tick_handle = app.handle().clone();
             let tick_reg = shared.clone();
             std::thread::Builder::new()
@@ -617,10 +622,14 @@ fn main() {
 
             // Cold start, then a periodic rescan every RESCAN_INTERVAL:
             // `claude agents` shells out, so it always runs outside the
-            // registry lock; only applying the result takes it. States
-            // stay unknown until events arrive (ADR-024); a failed run
-            // (claude missing, unparseable output) changes nothing,
-            // including pruning nothing, since fetch's `None` carries no
+            // registry lock; only applying the result takes it. ADR-024
+            // held that states stay unknown until a hook event arrives;
+            // ADR-035 lifted that once a `status` key was observed on
+            // the scan itself, so a session with no hook wired up at all
+            // can now be coloured too, though a hook always outranks the
+            // scan once it has spoken (state.rs). A failed run (claude
+            // missing, unparseable output) changes nothing, including
+            // pruning nothing, since fetch's `None` carries no
             // information about who is still alive.
             let scan_handle = app.handle().clone();
             let scan_reg = shared.clone();
