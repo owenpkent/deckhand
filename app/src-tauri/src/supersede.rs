@@ -1,7 +1,8 @@
-// Supersession (docs/DECISIONS.md, 2026-09-15): the VS Code extension
-// keeps a session's `claude.exe` alive for a few minutes after the next
-// one starts in the same window, so `claude agents --json` lists both
-// and the board shows what looks like a duplicate row. The older
+// Supersession (docs/DECISIONS.md, ADR-038): the VS Code extension was
+// seen keeping an earlier session's `claude.exe` alive, for hours, after
+// the next one started in the same window, so `claude agents --json`
+// lists both and the board shows what looks like a duplicate row. Why
+// the older process outlives its conversation is unconfirmed. The older
 // session is not wrong to list on its own; it is only wrong to show
 // once a newer one has plainly taken over the same window and folder.
 //

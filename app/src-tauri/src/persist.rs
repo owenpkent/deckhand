@@ -71,6 +71,14 @@ pub fn remove_daemon_contact_in(dir: &Path) {
 struct SavedBinding {
     id: String,
     label: String,
+    /// `Session::label_is_derived`, so a restored cwd-derived label stays
+    /// open to the scan's real `name` after a restart. A file written
+    /// before this field existed loads as derived: every label such a
+    /// build saved came from either cwd or the scan's own name, and
+    /// letting the scan's name replace it once is exactly the consistent
+    /// outcome (ADR-038).
+    #[serde(default = "default_true")]
+    derived: bool,
 }
 
 /// The header's grey-hiding toggle, and the settings panel's
@@ -211,13 +219,13 @@ pub fn bindings_body(reg: &Registry) -> Option<String> {
     let list: Vec<SavedBinding> = reg
         .bindings
         .iter()
-        .map(|id| SavedBinding {
-            id: id.clone(),
-            label: reg
-                .sessions
-                .get(id)
-                .map(|s| s.label.clone())
-                .unwrap_or_default(),
+        .map(|id| {
+            let session = reg.sessions.get(id);
+            SavedBinding {
+                id: id.clone(),
+                label: session.map(|s| s.label.clone()).unwrap_or_default(),
+                derived: session.map_or(true, |s| s.label_is_derived),
+            }
         })
         .collect();
     serde_json::to_string(&list).ok()
@@ -262,7 +270,12 @@ pub fn load_bindings_in(dir: &Path, reg: &mut Registry, now_ms: i64) {
         return;
     };
     for saved in list.into_iter().flatten() {
-        reg.ensure_session(&saved.id, &saved.label, now_ms);
+        if !reg.sessions.contains_key(&saved.id) {
+            reg.ensure_session(&saved.id, &saved.label, now_ms);
+            if let Some(s) = reg.sessions.get_mut(&saved.id) {
+                s.label_is_derived = saved.derived;
+            }
+        }
         if !reg.bindings.contains(&saved.id) {
             reg.bindings.push(saved.id);
         }
@@ -389,6 +402,30 @@ mod tests {
         load_bindings_in(&dir, &mut reg2, 5);
         assert_eq!(reg2.bindings, vec!["s1".to_string()]);
         assert_eq!(reg2.sessions["s1"].label, "My Label");
+        assert!(!reg2.sessions["s1"].label_is_derived, "a real name stays real across a restart");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn a_derived_label_stays_replaceable_across_a_restart_and_a_legacy_entry_loads_as_derived() {
+        let dir = temp_dir();
+        let mut reg = Registry::default();
+        reg.ensure_session("s1", "deckhand", 1);
+        reg.sessions.get_mut("s1").unwrap().label_is_derived = true;
+        reg.bindings.push("s1".to_string());
+        save_bindings_in(&dir, &reg);
+        let mut reg2 = Registry::default();
+        load_bindings_in(&dir, &mut reg2, 5);
+        assert!(reg2.sessions["s1"].label_is_derived);
+        cleanup(&dir);
+
+        let dir = temp_dir();
+        fs::write(dir.join("bindings.json"), r#"[{"id":"old","label":"ATDev-Marketing"}]"#).unwrap();
+        let mut reg3 = Registry::default();
+        load_bindings_in(&dir, &mut reg3, 5);
+        assert!(reg3.sessions["old"].label_is_derived, "a file from before the flag lets the scan's name replace its label once");
+        reg3.register_enumerated("old", Some("atdev-marketing-73"), None, None, None, 6);
+        assert_eq!(reg3.sessions["old"].label, "atdev-marketing-73");
         cleanup(&dir);
     }
 
@@ -398,7 +435,7 @@ mod tests {
         // The legacy shape: a fixed six-element array with null gaps.
         let saved: Vec<Option<SavedBinding>> = vec![
             None,
-            Some(SavedBinding { id: "ghost".into(), label: "Ghost Session".into() }),
+            Some(SavedBinding { id: "ghost".into(), label: "Ghost Session".into(), derived: false }),
             None,
             None,
             None,
@@ -421,7 +458,7 @@ mod tests {
         // truncate against any more.
         let dir = temp_dir();
         let saved: Vec<Option<SavedBinding>> = (0..9)
-            .map(|i| Some(SavedBinding { id: format!("s{i}"), label: format!("L{i}") }))
+            .map(|i| Some(SavedBinding { id: format!("s{i}"), label: format!("L{i}"), derived: false }))
             .collect();
         fs::write(dir.join("bindings.json"), serde_json::to_string(&saved).unwrap()).unwrap();
 
@@ -437,9 +474,9 @@ mod tests {
     fn legacy_null_slots_are_dropped_and_the_remaining_order_is_kept() {
         let dir = temp_dir();
         let saved: Vec<Option<SavedBinding>> = vec![
-            Some(SavedBinding { id: "s1".into(), label: "L1".into() }),
+            Some(SavedBinding { id: "s1".into(), label: "L1".into(), derived: false }),
             None,
-            Some(SavedBinding { id: "s2".into(), label: "L2".into() }),
+            Some(SavedBinding { id: "s2".into(), label: "L2".into(), derived: false }),
             None,
             None,
             None,
