@@ -16,13 +16,15 @@ removed Move (the window is now repositioned by dragging only), made the
 whole header its own drag region, shrank it to 52 px, relabelled and
 restyled the grey toggle, and dropped the dashed outline unknown and
 ended rows used to share. [ADR-033](DECISIONS.md#adr-033) (2026-09-14)
-then replaced the grey toggle with a gear button that opens a settings
-panel in place of the session list, described in its own section below.
-[ADR-034](DECISIONS.md#adr-034), the next day, redrew the header, the
-panel, and the session rows: icon buttons in place of text, toggle
-switches beside their On/Off words, a combined Hooks and Repair row,
-three titled sections grouping the panel, and rounded rows with a left
-accent bar, plus a window-sizing fix so the open panel no longer shows
+then added a gear button beside the grey toggle that opens a settings
+panel in place of the session list, described in its own section
+below. [ADR-034](DECISIONS.md#adr-034), the next day, redrew the
+header, the panel, and the session rows: icon buttons in place of
+text, toggle switches beside their On/Off words (the header's own grey
+toggle included, relabelled "Hide grey" / "N hidden"), a combined
+Hooks and Repair row, two titled sections grouping the panel, rounded
+rows with a left accent bar, a shared horizontal inset for rows and
+panel cards, and a window-sizing fix so the open panel no longer shows
 a scrollbar. Nothing it changed touches a frozen colour, a hit target,
 or the row height floor; see that entry for what carries forward
 unchanged.
@@ -39,7 +41,7 @@ as a single vertical list:
 
 ```
  ┌───────────────────────────────┐
- │  ◆1 ✕1 ◐1           ⚙    ✕   │  header, 52 px, 44 px+ targets
+ │  ◆1 ✕1 ◐1      ⏻ Hide grey ⚙ ✕ │  header, 52 px, 44 px+ targets
  ├───────────────────────────────┤
  │ ○  undertow                   │  row, 64 px, two lines
  │    IDLE                       │
@@ -79,11 +81,13 @@ before it). The whole bar is the drag region, `data-tauri-drag-region`
 on `#header` itself; there is no separate grip, and the count pills sit
 on top of it with pointer events passed through, so a drag started on a
 pill still drags the window. In order: a read-only summary of session
-counts, the gear, and Quit, pinned to the header's right edge:
+counts, Hide grey, the gear, and Quit, pinned to the header's right
+edge:
 
 | Control | Width | Does |
 | --- | --- | --- |
-| Gear | 44 px | Opens or closes the settings panel in place of the session list, `aria-label="Settings"`, `aria-pressed` tracking whether it is open. Icon only: a cog closed, an arrow back to the session list open, on a raised, tinted background while open, so its pressed state is a shape and a background change, not only a colour ([ADR-034](DECISIONS.md#adr-034); ADR-033 first added the control and read its state as a text change instead). Always present, unlike the grey toggle it replaced, which used to hide itself when there was nothing to hide. |
+| Hide grey | Content-sized, 44 px floor | Filters `unknown` rows out of the session list ([ADR-030](DECISIONS.md#adr-030)). A `role="switch"` button, `aria-checked` tracking whether hiding is on, reusing the same track-and-thumb graphic a panel switch row draws. Reads "Hide grey" while unknown rows show and "N hidden" while they are hidden ([ADR-034](DECISIONS.md#adr-034); "Hide unknown" / "Show N unknown" before it, under [ADR-031](DECISIONS.md#adr-031)). Hidden entirely, via the native `hidden` attribute, when there are no unknown rows and hiding is already off. |
+| Gear | 44 px | Opens or closes the settings panel in place of the session list, `aria-label="Settings"`, `aria-pressed` tracking whether it is open. Icon only: a cog closed, an arrow back to the session list open, on a raised, tinted background while open, so its pressed state is a shape and a background change, not only a colour ([ADR-034](DECISIONS.md#adr-034); ADR-033 first added the control and read its state as a text change instead). Added beside Hide grey, not in place of it ([ADR-033](DECISIONS.md#adr-033)). |
 | Quit | 44 px | Closes the daemon and the surface together. Icon only: an inline svg cross, `aria-label="Quit Deckhand"`, no visible text. |
 
 The summary is a row of pills, one per state that currently has at least
@@ -105,27 +109,28 @@ unaffected by anything the panel does.
 
 ```
  ┌───────────────────────────────┐
- │  ◆1 ✕1 ◐1                ⬅  ✕ │  header, unchanged
+ │  ◆1 ✕1 ◐1      ⏻ Hide grey ⬅ ✕ │  header, unchanged
  ├───────────────────────────────┤
  │ WINDOW                        │  section title
- │ Always on top          ⏻  On  │  panel row, 64 px, switch + word
- │ Start with Windows     ⏻  Off │
+ │ Always on top          On  ⏻  │  panel row, 64 px, word + switch
+ │ Start with Windows    Off  ⏻  │
  │ Reset position              ↺ │  action row, two lines
  │ Moves the window back...      │
- │ LIST                          │  section title
- │ Hide unknown    ⏻  On, 3 hid. │
  │ CLAUDE CODE                   │  section title
  │ Hooks  [Installed]    Repair  │  status pill + button
  └───────────────────────────────┘
 ```
 
-Five rows across three titled sections (Window, List, Claude Code),
-each row still the same 64 px height as a session row, but a
-different layout from a session row's: a text label, plus a switch, a
-short description, or a status pill and a button, depending on the
-row, never colour alone for any of them
-([ADR-034](DECISIONS.md#adr-034); six flat rows before it, under
-[ADR-033](DECISIONS.md#adr-033)). See
+Four rows across two titled sections (Window, Claude Code), each row
+still the same 64 px height as a session row, but a different layout
+from a session row's: a text label, plus a switch, a short
+description, or a status pill and a button, depending on the row,
+never colour alone for any of them ([ADR-034](DECISIONS.md#adr-034);
+five flat rows before it, under [ADR-033](DECISIONS.md#adr-033)).
+Every switch row's word sits to the left of its switch, right-aligned
+to the switch's own left edge, so the switch, the Reset row's icon,
+and the Repair button all end flush against the same right edge
+([ADR-034](DECISIONS.md#adr-034)). See
 [CONTROL_MAPPING.md](CONTROL_MAPPING.md#settings-panel) for what each
 row does. The Hooks row is the one row with no click of its own; it
 renders as a plain row rather than a button, the same way the header's
@@ -138,14 +143,13 @@ text already reads "Installer not found," so a click while inactive is
 an already-explained no-op, not a silent dead one
 ([ACCESSIBILITY.md](ACCESSIBILITY.md)).
 
-Hide unknown is the header's former grey toggle, unchanged except for
-where it lives: still the daemon's own `Registry.hide_unknown`, still
-persisted, and a hidden session still reappears on its own, shifting
-every target below it, the moment its state moves off `unknown`. Its
-state text now names the hidden count directly, "On, 3 hidden" or
-"Off," rather than folding it into a header button's own label. See
-[CONTROL_MAPPING.md](CONTROL_MAPPING.md#settings-panel) for the
-trade-off that carries over unchanged from [ADR-030](DECISIONS.md#adr-030).
+Hide grey, the header's own toggle, is not one of these rows; it stays
+in the header, restyled to the same switch above
+([ADR-034](DECISIONS.md#adr-034)). See
+[Header](#header) above and
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#header-hide-grey-the-gear-and-quit)
+for what it does and the trade-off that carries over unchanged from
+[ADR-030](DECISIONS.md#adr-030).
 
 Move, the click-to-place alternative to dragging the window that used
 to sit in the header, is removed ([ADR-031](DECISIONS.md#adr-031)); the
@@ -172,6 +176,11 @@ shortened to fit by `revealNote()` in `format.ts`
 
 - Row height: 64 px, fixed, above the
   [accessibility floor](ACCESSIBILITY.md#targets-and-sizing).
+- An 8 px horizontal inset sits between every row and the window's left
+  and right edges, the same inset the settings panel's own cards use
+  ([ADR-034](DECISIONS.md#adr-034)). Horizontal only: the list stays
+  flush top and bottom, so the window's height is still exactly
+  rows * 64 px.
 - Status is triple-coded on every row: colour, glyph, and the state word.
   See the state table in
   [ACCESSIBILITY.md](ACCESSIBILITY.md#status-without-colour).

@@ -1475,7 +1475,7 @@ host's window is found and what counts as finding it.
 ---
 
 <a id="adr-033"></a>
-## ADR-033: A settings panel replaces the header's grey toggle
+## ADR-033: A gear-triggered settings panel joins the header
 
 Date: 2026-09-14
 
@@ -1484,27 +1484,32 @@ Date: 2026-09-14
 should hold before Phase 1 closes, the owner asked for a small, fixed
 set of settings reachable from the board itself rather than a config
 file: whether the window stays always on top, whether Deckhand starts
-with Windows, a way to put the window back where it started, the grey
-toggle itself, and whether the Claude Code hook wiring this machine
-depends on is actually installed and current. Three lettered options
-were put to the owner for where this should live; option A, an in-bar
-panel that replaces the session list rather than opening a second
-window, was approved.
+with Windows, a way to put the window back where it started, and
+whether the Claude Code hook wiring this machine depends on is
+actually installed and current. Three lettered options were put to the
+owner for where this should live; option A, an in-bar panel that
+replaces the session list rather than opening a second window, was
+approved. The grey toggle was reviewed alongside these and left where
+it was, a one-click header control: burying a row the owner checks
+often behind an extra click to open the panel first would trade away
+exactly the quick access [ADR-030](#adr-030) added it for.
 
-**Decision.** The header's grey toggle is replaced by a gear button, 44
-by 44 px minimum, reading "Settings" closed and "Close settings" open
+**Decision.** The header gains a fourth control, a gear button, 44 by
+44 px minimum, reading "Settings" closed and "Close settings" open
 (`gearLabel` in `app/ui/src/format.ts`), so its pressed state reads as a
 different word, not only a different background colour
-([ACCESSIBILITY.md](ACCESSIBILITY.md)). A click calls a new
-`toggle_settings_panel` command, which flips a daemon-side flag
-(`PANEL_OPEN` in `main.rs`; not persisted, the panel always starts
-closed) and resizes the window through the same path every row-count
-change already used, `resize_for_rows` via `queue_resize`, sized to the
-panel's own row count instead of the session list's. Counts and Quit
+([ACCESSIBILITY.md](ACCESSIBILITY.md)), sitting beside the header's
+existing grey toggle rather than replacing it: counts, grey toggle,
+gear, Quit, left to right. A click calls a new `toggle_settings_panel`
+command, which flips a daemon-side flag (`PANEL_OPEN` in `main.rs`; not
+persisted, the panel always starts closed) and resizes the window
+through the same path every row-count change already used,
+`resize_for_rows` via `queue_resize`, sized to the panel's own row
+count instead of the session list's. Counts, the grey toggle, and Quit
 stay exactly where they were; only the area under the header swaps
 content, in the same window, in place.
 
-The panel holds six rows, each a full-width, 64 px row like a session
+The panel holds five rows, each a full-width, 64 px row like a session
 row's (`.panel-row` in `styles.css` reuses `.row`'s height with a
 different two-column layout: a text label and a text state, no glyph
 column, since nothing here may rely on colour alone):
@@ -1543,16 +1548,7 @@ column, since nothing here may rely on colour alone):
    for a first run or a stale saved position (`window::default_rect`,
    near the top-left margin of the current monitor), and persists the
    result.
-4. **Hide unknown**, On or Off, moved here from the header
-   ([ADR-030](#adr-030), [ADR-031](#adr-031)). Still the daemon's own
-   `Registry.hide_unknown`, still `toggle_hide_unknown`, unchanged;
-   only where the surface shows it moves. Its state text now carries
-   the hidden count directly, "On, 3 hidden" or "Off"
-   (`hideUnknownText`), since the header's old wording ("Hide unknown" /
-   "Show N unknown") existed to double as a self-describing button
-   label and no longer needs to; `greyLabel` is removed as dead code
-   along with it.
-5. **Hooks**, a read-only status row: "Installed," "Outdated,"
+4. **Hooks**, a read-only status row: "Installed," "Outdated,"
    "Missing," or "Unreadable," from a pure parse of
    `~/.claude/settings.json` against the twelve events
    `scripts/install-hooks.ps1` installs (`parse_hook_status` in
@@ -1564,7 +1560,7 @@ column, since nothing here may rely on colour alone):
    current shim path, single-quoted, no timeout. Anything short of that
    with at least one Deckhand group present is "Outdated"; nothing
    present is "Missing"; a parse failure is "Unreadable."
-6. **Repair**, a button beside it: reruns `scripts\install-hooks.ps1`
+5. **Repair**, a button beside it: reruns `scripts\install-hooks.ps1`
    from this install's own checkout, found by walking up from the
    running exe looking for that one file (`find_repo_root` in
    `app/src-tauri/src/installer.rs`, capped at eight ancestors), via
@@ -1615,13 +1611,13 @@ Start with Windows is unverified against an actual Windows startup;
 both are added to `TODO.md` as manual verification items rather than
 claimed proven here.
 
-This supersedes only the header-placement parts of
-[ADR-030](#adr-030) and [ADR-031](#adr-031): the grey toggle as a
-header control, its header wording and geometry, and Quit's neighbour
-in the header being that toggle. `Registry.hide_unknown`,
-`toggle_hide_unknown`, and the daemon owning and persisting the setting
-all stand unchanged; only where the surface shows it, and how its label
-reads, moves. Everything else either entry decided (auto-binding,
+This adds a fourth header control, the gear, alongside the counts, the
+grey toggle, and Quit that [ADR-030](#adr-030) and [ADR-031](#adr-031)
+already put there; it does not supersede either entry's header
+placement, wording, or geometry for the grey toggle, which this entry
+leaves exactly as [ADR-031](#adr-031) drew it. [ADR-034](#adr-034)
+restyles the grey toggle itself; this entry only makes room for the
+gear beside it. Everything else either entry decided (auto-binding,
 click-to-select-and-raise, drag-only repositioning, the state-count
 summary, Quit itself) is unaffected.
 
@@ -1642,15 +1638,17 @@ Date: 2026-09-14
 shipped named several problems at once: the gear opened with a text
 button reading "Close settings" and Quit was a literal `&#10005;`
 entity rather than a drawn icon; every setting showed its value as
-plain top-aligned "On"/"Off" text instead of a recognisable control;
-the window did not size itself to the panel's real content, so a
-native grey scrollbar appeared on a panel that should have fit
-exactly; "Reset window position" wrapped across three lines with its
-description crowding the label; Hooks and Repair sat as two separate,
-visually redundant rows; and the panel read as one flat list with no
-grouping. The owner approved scope B for the fix: the header, the
-settings panel, and the session list rows, recorded here as one
-entry since the row and panel restyle share the same design tokens.
+plain top-aligned "On"/"Off" text instead of a recognisable control,
+next to which the header's own grey toggle, still [ADR-031](#adr-031)'s
+plain text button, now read like a leftover; the window did not size
+itself to the panel's real content, so a native grey scrollbar appeared
+on a panel that should have fit exactly; "Reset window position"
+wrapped across three lines with its description crowding the label;
+Hooks and Repair sat as two separate, visually redundant rows; and the
+panel read as one flat list with no grouping. The owner approved scope
+B for the fix: the header, the settings panel, and the session list
+rows, recorded here as one entry since the row and panel restyle share
+the same design tokens.
 
 **Decision.** Four things change together.
 
@@ -1666,16 +1664,24 @@ colour change ([ACCESSIBILITY.md](ACCESSIBILITY.md)). `gearLabel`, the
 text-based version of this signal, is removed as dead code along with
 it.
 
-*Toggle switches.* Always on top, Start with Windows, and Hide unknown
+*Toggle switches.* In the panel, Always on top and Start with Windows
 render as a track-and-thumb switch beside their existing On/Off (or
 tri-state) word, never replacing it
 ([ACCESSIBILITY.md](ACCESSIBILITY.md): colour, and now shape, is
-never the only channel). The switch is not a control nested inside
-the row's own `<button>`; the row itself carries `role="switch"` and
-`aria-checked`, and the track and thumb are purely decorative,
-`aria-hidden`. `startWithWindowsChecked` in `format.ts` maps the
-tri-state value to a boolean check (both "on" shapes read checked;
-the word beside the switch is what still tells them apart).
+never the only channel). The header's own grey toggle gets the same
+switch, reusing the identical `.switch`/`.switch-thumb` graphic and
+`role="switch"`/`aria-checked` pattern rather than a second copy of it,
+and its wording shortens to match: "Hide grey" while unknown rows show,
+"N hidden" while they are hidden (`hideGreyWord` in `format.ts`,
+replacing [ADR-031](#adr-031)'s "Hide unknown" / "Show N unknown"),
+since a switch already carries the on/off distinction the longer
+wording existed to spell out. In every case the switch is not a
+control nested inside the row's own `<button>`; the row (or, in the
+header, the button itself) carries `role="switch"` and `aria-checked`,
+and the track and thumb are purely decorative, `aria-hidden`.
+`startWithWindowsChecked` in `format.ts` maps the tri-state value to a
+boolean check (both "on" shapes read checked; the word beside the
+switch is what still tells them apart).
 
 *Reset position and the combined Hooks row.* "Reset window position"
 becomes a two-line action row labelled "Reset position," with the
@@ -1696,21 +1702,22 @@ is valid; `repairButtonInactive` carries forward ADR-033's rule
 unchanged, styled inactive rather than natively disabled, and still
 clickable with its reason already visible.
 
-*Grouped sections.* The panel's rows sort into three titled cards:
-Window (Always on top, Start with Windows, Reset position), List
-(Hide unknown), and Claude Code (the combined Hooks row). Five rows
-across three sections, down from six flat rows, each still the
+*Grouped sections.* The panel's rows sort into two titled cards: Window
+(Always on top, Start with Windows, Reset position) and Claude Code
+(the combined Hooks row); the header's own grey toggle, restyled above,
+never enters the panel, so there is no third, List, card. Four rows
+across two sections, down from five flat rows, each still the
 64 px floor [ADR-029](#adr-029) set and
 [ACCESSIBILITY.md](ACCESSIBILITY.md) requires, never shrunk.
 
 *Window sizing.* The scrollbar bug was a real mismatch: the daemon
-sized the open panel at a flat `PANEL_ROW_COUNT` (6) times
+sized the open panel at a flat `PANEL_ROW_COUNT` (5) times
 `ROW_H_LOGICAL`, a formula built for the session list's one-row-per-
-session shape, and the panel's fixed content, now three section
-titles and their gaps on top of five rows, no longer fit it. Rather
+session shape, and the panel's fixed content, now two section
+titles and their gap on top of four rows, no longer fit it. Rather
 than hand-tune that constant again, `window.rs` gains a dedicated,
-fixed formula for the panel: `PANEL_ROW_COUNT` (5), `PANEL_SECTION_COUNT`
-(3), `SECTION_TITLE_H_LOGICAL` (32), `SECTION_GAP_LOGICAL` (12), and
+fixed formula for the panel: `PANEL_ROW_COUNT` (4), `PANEL_SECTION_COUNT`
+(2), `SECTION_TITLE_H_LOGICAL` (32), `SECTION_GAP_LOGICAL` (12), and
 `PANEL_PADDING_LOGICAL` (8) sum in `panel_content_height_logical()`,
 and `panel_window_height()` adds the header and clamps to the monitor's
 work area exactly as `window_height()` already does for the session
@@ -1742,8 +1749,21 @@ carries part of the signal: idle 5% (was 6%), thinking and complete
 stay untinted as ADR-031 left them. The "cards with a small gap" look
 on the session list is drawn entirely with each row's own 6 px
 ground-coloured bottom border (was 2 px) inside its existing
-border-box 64 px height, never a gap or padding on `#list`, so the
-window-sizing formula above is untouched. Header count pills gain a
+border-box 64 px height, never a vertical gap or padding on `#list`,
+so the window-sizing formula above is untouched. Both rows and panel
+cards do gain a small horizontal inset from the window's left and
+right edges, 8 px, the same figure `PANEL_PADDING_LOGICAL` already
+uses for the panel's own outer padding: a base rule on `#list` gives
+the session list this inset in list mode, and `#list.panel`'s own
+padding already carries the identical 8 px horizontally, so the two
+agree without either overriding the other; horizontal only, so it
+still never touches the session list's height. In the panel, a switch
+row's state word sits to the left of its switch, right-aligned to the
+switch's own left edge (`.switch-word`'s existing min-width and
+right-aligned text, `renderSwitchRow` in `main.ts` ordering word before
+switch), so every row's trailing control, a switch, the Reset row's
+icon, or Repair, ends flush against the row's own right edge. Header
+count pills gain a
 1 px tinted border. Header buttons and rows gain a 120 ms background
 transition, `:focus-visible` gets an explicit outline (the surface has
 never removed the browser default, but never styled it either), and

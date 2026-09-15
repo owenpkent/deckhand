@@ -79,15 +79,15 @@ pub fn window_height(row_count: usize, max_h: i32) -> i32 {
     h.min(max_h.max(HEADER_H_LOGICAL as i32 + ROW_H_LOGICAL as i32))
 }
 
-/// Settings panel layout (docs/DECISIONS.md#adr-034). Unlike the session
-/// list, the panel's content is fixed, not data-driven by a row count:
-/// three titled sections (Window, List, Claude Code) holding five rows
-/// between them (Always on top, Start with Windows, Reset position,
-/// Hide unknown, Hooks, the last combining what used to be two separate
-/// rows). `styles.test.ts` pins these constants against the matching
-/// values in `app/ui/styles.css`.
-pub const PANEL_ROW_COUNT: usize = 5;
-pub const PANEL_SECTION_COUNT: usize = 3;
+/// Settings panel layout (docs/DECISIONS.md#adr-034, amended: Hide grey
+/// moved back to the header). Unlike the session list, the panel's
+/// content is fixed, not data-driven by a row count: two titled sections
+/// (Window, Claude Code) holding four rows between them (Always on top,
+/// Start with Windows, Reset position, Hooks, the last combining what
+/// used to be two separate rows). `styles.test.ts` pins these constants
+/// against the matching values in `app/ui/styles.css`.
+pub const PANEL_ROW_COUNT: usize = 4;
+pub const PANEL_SECTION_COUNT: usize = 2;
 
 /// One section's title strip, including the gap down to its card below
 /// it. Must match `.settings-section-title` in app/ui/styles.css.

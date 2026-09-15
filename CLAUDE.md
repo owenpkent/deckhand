@@ -9,12 +9,13 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
 - **What:** A software reimplementation of the Codex Micro macropad as an
   always-on-top, mouse-only control surface for Claude Code sessions. An
   ordered list of session rows (colour, glyph, name, state word), click
-  to select and raise, plus a gear button and Quit in the header, the
-  whole bar itself the drag region (ADR-030, ADR-031). The gear opens an
-  in-bar settings panel in place of the session list (ADR-033): always
-  on top, start with Windows, reset position, hide unknown (moved here
-  from the header), and a hooks-installed status with a Repair action.
-  Move, a click-to-place alternative to dragging, was removed by
+  to select and raise, plus a Hide grey switch, a gear button, and Quit
+  in the header, the whole bar itself the drag region (ADR-030, ADR-031).
+  The gear opens an in-bar settings panel in place of the session list
+  (ADR-033): always on top, start with Windows, reset position, and a
+  hooks-installed status with a Repair action; Hide grey stays a header
+  control throughout, never moving into the panel. Move, a
+  click-to-place alternative to dragging, was removed by
   ADR-031: the window is now repositioned by dragging only, an
   owner-approved exception to the no-required-drag rule in
   [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md), not a compliant
@@ -176,19 +177,22 @@ region, relabelled and restyled the grey toggle, and dropped the dashed
 outline unknown and ended rows used to share. ADR-029 had already
 restyled the list (64 px two-line rows, header counts, a bundled
 typeface), and ADR-032 made Reveal host-aware (VS Code, Windows
-Terminal, console). ADR-033 then moved the grey toggle off the header
-into a gear-triggered settings panel alongside four new settings
+Terminal, console). ADR-033 then added a gear-triggered settings panel
+beside the header's existing grey toggle, holding four new settings
 (always on top, start with Windows, reset position, and a hooks
-status with Repair). ADR-034 redrew that panel the next day: icon
-buttons for the gear and Quit, toggle switches, a combined Hooks and
-Repair row, three titled panel sections, rounded rows with a left
-accent bar, and a window-sizing fix for the panel's own scrollbar.
-ADR-035, the day after that, gave the daemon a second liveness channel:
-a process handle held per session, polled on the existing two-second
-tick, so exit without a `SessionEnd` moves a session straight to
-`ended` instead of leaving a red or grey row behind. Where a hook has
-not yet coloured a session, the periodic scan now does, from `status`
-on the installed 2.1.270; `T_unknown` narrows so a session with a live
+status with Repair); the grey toggle itself stayed in the header.
+ADR-034 redrew the header and that panel the next day: icon buttons
+for the gear and Quit, toggle switches (the header's grey toggle
+included, relabelled "Hide grey" / "N hidden"), a combined Hooks and
+Repair row, two titled panel sections, rounded rows with a left
+accent bar, a shared inset for rows and panel cards, and a
+window-sizing fix for the panel's own scrollbar. ADR-035, the day
+after that, gave the daemon a second liveness channel: a process
+handle held per session, polled on the existing two-second tick, so
+exit without a `SessionEnd` moves a session straight to `ended`
+instead of leaving a red or grey row behind. Where a hook has not yet
+coloured a session, the periodic scan now does, from `status` on the
+installed 2.1.270; `T_unknown` narrows so a session with a live
 handle stops greying from silence alone. `app/` implements all of
 these.
 

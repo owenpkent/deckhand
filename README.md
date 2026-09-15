@@ -44,20 +44,22 @@ removed Move (the window is now repositioned by dragging only, an
 owner-approved exception recorded in
 [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md)) and left the header
 holding a grey toggle and Quit. [ADR-033](docs/DECISIONS.md#adr-033)
-(2026-09-14) then replaced the grey toggle with a gear button that
-opens an in-bar settings panel in place of the session list: always on
-top, start with Windows, reset window position, hide unknown (moved
-off the header into this panel), and a hooks-installed status with a
-Repair action. The code implements all of these, and on its first run
-bound ten live sessions across four repos. [ADR-034](docs/DECISIONS.md#adr-034)
+(2026-09-14) then added a gear button, beside the existing grey
+toggle, that opens an in-bar settings panel in place of the session
+list: always on top, start with Windows, reset window position, and a
+hooks-installed status with a Repair action. The code implements all
+of these, and on its first run bound ten live sessions across four
+repos. [ADR-034](docs/DECISIONS.md#adr-034)
 (2026-09-14) then redrew the header, panel, and session rows: icon
 buttons for the gear and Quit, toggle switches beside their On/Off
-words, a combined Hooks and Repair row, the panel grouped into three
-titled sections, rounded rows with a left accent bar, and a
-window-sizing fix for a scrollbar that used to appear on the open
-panel. One Phase 0 item also stays open alongside it: hook payload
-validation against a live install has ten of the twelve documented
-events observed, with `Notification` and `StopFailure` still unseen.
+words (the header's own grey toggle included, relabelled "Hide grey" /
+"N hidden"), a combined Hooks and Repair row, the panel grouped into
+two titled sections, rounded rows with a left accent bar, a shared
+horizontal inset for rows and panel cards, and a window-sizing fix for
+a scrollbar that used to appear on the open panel. One Phase 0 item
+also stays open alongside it: hook payload validation against a live
+install has ten of the twelve documented events observed, with
+`Notification` and `StopFailure` still unseen.
 
 | Piece | State |
 | --- | --- |
@@ -70,7 +72,7 @@ events observed, with `Notification` and `StopFailure` still unseen.
 | Hook payload validation spike | ⏳ Ten of twelve events observed live; two remain |
 | Daemon, shim, state machine | ✅ Phase 1 skeleton; live sessions paint real status |
 | Session-list surface, auto-binding | ✅ Built (ADR-028); binds every enumerated session, prunes ended ones |
-| Settings panel (always on top, start with Windows, reset position, hide unknown, hooks status, Repair) | ✅ Built (ADR-033), regrouped and restyled (ADR-034); Start with Windows and Repair unverified against a real login and a real settings.json |
+| Settings panel (always on top, start with Windows, reset position, hooks status, Repair) | ✅ Built (ADR-033), regrouped and restyled (ADR-034); Start with Windows and Repair unverified against a real login and a real settings.json |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet, and not currently planned on the surface |
 
 Build and run it with `python run.py`, which checks the toolchain,
@@ -143,10 +145,10 @@ target to a vertical session list with Move and Quit in the header,
 header control, Hide grey, [ADR-031](docs/DECISIONS.md#adr-031), also
 the same day, which removed Move and left the header holding a grey
 toggle and Quit, [ADR-033](docs/DECISIONS.md#adr-033) (2026-09-14),
-which replaced the grey toggle with a gear button that opens a settings
+which added a gear button beside the grey toggle that opens a settings
 panel, and [ADR-034](docs/DECISIONS.md#adr-034), the next day, which
-redrew that gear as an icon, restyled the panel and the session rows,
-and fixed the panel's window sizing. The mockups below still show the
+redrew that gear as an icon, restyled the header, panel, and session
+rows, and fixed the panel's window sizing. The mockups below still show the
 wider control set from before all five changes: six tiles in a
 horizontal strip, command keys, a stick, a dial, talk and send. None
 of that is the current design. Where

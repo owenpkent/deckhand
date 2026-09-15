@@ -281,9 +281,10 @@ fn toggle_settings_panel(shared: State<Shared>, app: tauri::AppHandle) -> bool {
     open
 }
 
-/// Everything the settings panel needs to render its rows besides
-/// `hide_unknown` (already on every session snapshot, so the panel's
-/// Hide grey row reuses that rather than duplicating it here).
+/// Everything the settings panel needs to render its rows. Hide grey is
+/// not among them: it lives in the header now, not the panel
+/// (docs/DECISIONS.md#adr-033 amended), and reads `hide_unknown` off the
+/// header's own session snapshot instead of this one.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SettingsSnapshot {

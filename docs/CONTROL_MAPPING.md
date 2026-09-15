@@ -8,11 +8,13 @@ corner badges that earlier versions of this file described.
 control, Hide grey, back on top of that narrower surface.
 [ADR-031](DECISIONS.md#adr-031), also 2026-09-13, then removed Move,
 leaving the header with a grey toggle and Quit, and relabelled the
-toggle. [ADR-033](DECISIONS.md#adr-033) (2026-09-14) then replaced the
-grey toggle with a gear button that opens a settings panel in place of
+toggle. [ADR-033](DECISIONS.md#adr-033) (2026-09-14) then added a
+fourth header control, a gear, that opens a settings panel in place of
 the session list, holding always on top, start with Windows, reset
-position, hide unknown (moved off the header into this panel), and a
-hooks status with a Repair action. What follows describes the current
+position, and a hooks status with a Repair action; the grey toggle
+stayed a header control throughout. [ADR-034](DECISIONS.md#adr-034),
+the next day, restyled the grey toggle as a switch and shortened its
+wording to "Hide grey" / "N hidden". What follows describes the current
 design. The retabling and the usage measurements that shaped the
 removed controls are preserved in the ADRs that ADR-028 names as
 superseded, not restated here.
@@ -135,16 +137,41 @@ timing lives in [ARCHITECTURE.md](ARCHITECTURE.md#observation-channels),
 since it is a daemon behaviour, not a control. There is no bind picker and no
 unbind action: nothing here is managed by hand.
 
-### Header: the gear and Quit
+### Header: Hide grey, the gear, and Quit
 
-The header carries two controls: a gear and Quit, pinned to the
-header's right edge ([ADR-033](DECISIONS.md#adr-033); before it, a grey
-toggle and Quit under [ADR-031](DECISIONS.md#adr-031), and before that
-three, Hide grey, Move, and Quit, added by
-[ADR-030](DECISIONS.md#adr-030) on top of
+The header carries three controls: Hide grey, a gear, and Quit, in
+that order, pinned to the header's right edge
+([ADR-033](DECISIONS.md#adr-033) added the gear beside the existing
+Hide grey and Quit; before it, a grey toggle and Quit under
+[ADR-031](DECISIONS.md#adr-031), and before that three, Hide grey,
+Move, and Quit, added by [ADR-030](DECISIONS.md#adr-030) on top of
 [ADR-028](DECISIONS.md#adr-028)'s original two). The whole header is
 still the drag region: there is no separate grip, and dragging from any
 empty part of the bar, including the count pills, moves the window.
+
+Hide grey filters `unknown` rows out of the session list, not out of
+the daemon: a single click flips `Registry.hide_unknown`
+([ADR-030](DECISIONS.md#adr-030)), the daemon's own setting, persisted
+and unchanged by anything in [ADR-033](DECISIONS.md#adr-033) or
+[ADR-034](DECISIONS.md#adr-034). It renders as a track-and-thumb
+switch, `role="switch"` and `aria-checked` on the button itself,
+reading "Hide grey" while unknown rows show and "N hidden" while they
+are hidden (`hideGreyWord`/`hideGreyAriaLabel` in
+`app/ui/src/format.ts`, [ADR-034](DECISIONS.md#adr-034); "Hide
+unknown" / "Show N unknown" before it, under
+[ADR-031](DECISIONS.md#adr-031)). A hidden session is always counted,
+never silently gone, and a session leaving `unknown` while hidden
+still reappears on its own, moving every target below it without a
+click. Because `heard` ([ADR-029](DECISIONS.md#adr-029)) resets on
+every daemon restart, a session that genuinely needed the owner before
+the restart also renders `unknown` until a hook fires for it again, so
+hiding it can hide a row that needs a human; the hidden count is the
+accepted mitigation for that, not a fix for it. See
+[ADR-030](DECISIONS.md#adr-030) for the full trade-off. The control
+disappears entirely, via the native `hidden` attribute, when there are
+no unknown rows and hiding is already off, so it never sits there with
+nothing to do; Quit's position at the header's right edge does not
+move when it does.
 
 The gear opens the settings panel in place of the session list. A
 single click toggles it; the gear is an icon button,
@@ -154,9 +181,9 @@ a raised, tinted background, so its pressed state is a shape and a
 background change, not only a colour
 ([ADR-034](DECISIONS.md#adr-034); ADR-033 first added the gear and
 read its pressed state from a text change, "Settings" to "Close
-settings," instead). The header's state-count summary and Quit stay
-visible and unchanged while the panel is open; only the list area
-swaps content, in the same window. See
+settings," instead). The header's state-count summary, Hide grey, and
+Quit stay visible and unchanged while the panel is open; only the list
+area swaps content, in the same window. See
 [Settings panel](#settings-panel) below for what each row does.
 
 Move, the click-to-place alternative to dragging the window that
@@ -175,10 +202,10 @@ the surface together; it is icon-only, a cross glyph with
 
 ### Settings panel
 
-Five rows across three titled sections, Window, List, and Claude Code,
-opened by the gear and closed by clicking it again
+Four rows across two titled sections, Window and Claude Code, opened
+by the gear and closed by clicking it again
 ([ADR-033](DECISIONS.md#adr-033); grouped into sections and cut from
-six rows to five by [ADR-034](DECISIONS.md#adr-034), which combined
+five rows to four by [ADR-034](DECISIONS.md#adr-034), which combined
 Hooks and Repair). Every row is a text label plus a text state, never
 colour alone, whether that state reads through a toggle switch, a
 status pill, or plain text:
@@ -188,19 +215,16 @@ status pill, or plain text:
 | Window | Always on top | Toggles whether the window stays above every other window. Default on. Persists across restarts. A switch beside the word, not only the word. |
 | Window | Start with Windows | Toggles a registry entry that launches Deckhand at login. Reads "On (other copy)" when some other Deckhand exe already owns the entry; clicking repoints it at this one rather than turning it off. A switch beside the word. |
 | Window | Reset position | A button, not a toggle: moves the window to its default spot near the top-left of the current monitor and remembers that as the new saved position. Labelled "Reset position" on screen since [ADR-034](DECISIONS.md#adr-034) ("Reset window position" before it); a short description sits under the label, replaced by "Done" for a few seconds after a click. |
-| List | Hide unknown | The same setting the header's grey toggle used to hold ([ADR-030](DECISIONS.md#adr-030), [ADR-031](DECISIONS.md#adr-031)): filters `unknown` rows out of the session list, not out of the daemon. The word beside its switch names the hidden count, "On, 3 hidden" or "Off," so a hidden session is always counted and never simply disappears. |
 | Claude Code | Hooks | A status pill, tint plus text, shows whether the Claude Code hook wiring `scripts/install-hooks.ps1` installs is "Installed," "Outdated," "Missing," or "Unreadable" in `~/.claude/settings.json`. A separate Repair button beside it reruns the installer against this install's own checkout; its result shows as a short second line under the label. Styled inactive rather than natively disabled when no checkout is found nearby; the second line already reads "Installer not found" without requiring a click. Combined from two rows into one by [ADR-034](DECISIONS.md#adr-034). |
 
-Hide unknown is unchanged in every way except where the surface shows
-it: the daemon still owns `Registry.hide_unknown`, still persists it,
-and a session leaving the `unknown` state while hidden still reappears
-on its own, moving every target below it without the owner having
-clicked anything. Because `heard` ([ADR-029](DECISIONS.md#adr-029))
-resets on every daemon restart, a session that genuinely needed the
-owner before the restart also renders `unknown` until a hook fires for
-it again, so hiding it can hide a row that needs a human; the hidden
-count is the accepted mitigation for that, not a fix for it. See
-[ADR-030](DECISIONS.md#adr-030) for the full trade-off.
+Hide grey, the header's own toggle, is not among these rows; see
+[Header: Hide grey, the gear, and Quit](#header-hide-grey-the-gear-and-quit)
+above for what it does.
+
+Every switch row's state word sits to the left of its switch,
+right-aligned to the switch's own left edge, so the switch itself, the
+Reset row's icon, and the Repair button all end flush against the same
+right edge ([ADR-034](DECISIONS.md#adr-034)).
 
 Every command the panel calls takes no argument from the webview but
 the click itself; the daemon always decides a toggle's next state,
@@ -255,12 +279,12 @@ decision with a reason, recorded here so it is not silently re-litigated.
 
 The device calls them Agent Keys, Command Keys, the Dial, the Stick, the Mic
 Key, and the Codex Key. Deckhand uses **rows** for the session list,
-**the gear** (labelled "Settings" or "Close settings") for the settings
-panel's own control, and **Quit** for the two header controls. The
-panel's own rows are named for what they do: Always on top, Start with
-Windows, Reset window position, Hide unknown (the header's former grey
-toggle, labelled "Hide unknown" or "Show N unknown" before
-[ADR-033](DECISIONS.md#adr-033) moved it here), Hooks, and Repair. Move
-had no device equivalent; it existed only in Deckhand and was removed by
+**Hide grey** for the header's own toggle (labelled "Hide unknown" or
+"Show N unknown" before [ADR-034](DECISIONS.md#adr-034) shortened its
+wording), **the gear** (labelled "Settings" or "Close settings") for
+the settings panel's own control, and **Quit** for closing the app.
+The panel's own rows are named for what they do: Always on top, Start
+with Windows, Reset window position, Hooks, and Repair. Move had no
+device equivalent; it existed only in Deckhand and was removed by
 [ADR-031](DECISIONS.md#adr-031). None of the device's other names apply
 to anything on the current surface.
