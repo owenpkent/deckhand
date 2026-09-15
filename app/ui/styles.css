@@ -87,6 +87,7 @@ body {
   height: 30px;
   padding: 0 6px 0 5px;
   border-radius: 15px;
+  border: 1px solid color-mix(in srgb, var(--ring) 35%, transparent);
   background: color-mix(in srgb, var(--ring) 18%, transparent);
   color: color-mix(in srgb, var(--ring) 70%, var(--text));
   font-size: 14px;
@@ -119,7 +120,7 @@ body {
   min-height: 44px;
   padding: 0 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--text) 7%, var(--bg));
   color: var(--subtext);
   font-family: inherit;
@@ -130,21 +131,39 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 120ms ease, color 120ms ease;
 }
 
-#quit {
+/* Gear and Quit: icon-only, square, the svg centred and sized down from
+   the 44px button box. */
+.icon-btn {
   width: 44px;
   padding: 0;
-  font-size: 18px;
+}
+
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
 .side-btn:active {
   background: var(--tile-border);
 }
 
+/* The gear's pressed (panel open) state: a raised, tinted background on
+   top of the icon swap in main.ts (gearIconKind), so open reads as more
+   than one channel (docs/ACCESSIBILITY.md, docs/DECISIONS.md#adr-034). */
 .side-btn[aria-pressed="true"] {
-  background: var(--tile-border);
+  background: color-mix(in srgb, var(--c-thinking) 30%, var(--tile-border));
   color: var(--text);
+}
+
+.row:focus-visible,
+.side-btn:focus-visible,
+.repair-btn:focus-visible {
+  outline: 2px solid var(--c-thinking);
+  outline-offset: 2px;
 }
 
 /* ---- Session list ---------------------------------------------------- */
