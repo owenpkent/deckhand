@@ -123,7 +123,7 @@ Deckhand is in Phase 1, observation only, which began on 2026-08-02 after
 a Phase 0 of specification and two feasibility spikes. The daemon, surface,
 and shim exist and have watched the author's live sessions daily. Nothing
 in the system can approve, deny, or send anything. The decision record runs
-to 37 entries, and this paper cites them by number.
+to 38 entries, and this paper cites them by number.
 
 ---
 
@@ -139,7 +139,9 @@ retired because automatic binding never filled them reliably across
 repositories ([ADR-028](DECISIONS.md#adr-028)).
 
 Each row carries a 30 px glyph, the session's name, a state word beneath
-it, and a 4 px accent bar in the state colour down its left edge. Colour is
+it, and a 4 px accent bar in the state colour down its left edge. The name
+is the one Claude Code reports for the session, or its folder name until
+one is reported ([ADR-038](DECISIONS.md#adr-038)). Colour is
 never the only channel: every state has a distinct glyph and label, so the
 board reads correctly for a colour-blind user and in greyscale.
 
@@ -406,11 +408,20 @@ On 2026-09-15 the author's board showed what looked like duplicate rows:
 in each of two VS Code windows, an older idle session and a newer busy one
 shared a working directory and the same extension host process, and the
 older one had gone quiet a few minutes before the newer one started. The
-extension had kept the older `claude` process alive, so its handle kept its
-row. How the older process came to outlive its conversation is not
-confirmed. The fix in progress hides an older session superseded in this
-way when it is idle, done, or grey, and never one that is working, waiting,
-or failed. It will be recorded as ADR-038 when it lands.
+extension had kept the older `claude` process alive for hours, so its
+handle kept its row. How the older process came to outlive its
+conversation is not confirmed.
+
+[ADR-038](DECISIONS.md#adr-038) hides such a session. An older session is
+superseded when a newer one shares its VS Code extension host process and
+its working directory, and the older one is idle, done, or grey. A session
+that is working, waiting, or failed is never hidden, and terminal-hosted
+sessions are never superseded. The rule is recomputed from the registry
+every time it is needed and remembers nothing, so a hidden session returns
+to its old place the moment it does anything. Its cost is stated in the
+decision: two conversations genuinely open side by side in one window and
+folder look identical to the observed case, and the idle older one is
+hidden until it acts.
 
 ### 4.7 Why there is no transcript fallback
 
@@ -643,15 +654,16 @@ as the success signal.
 
 ### 8.4 Tests
 
-The Rust workspace holds 265 unit and integration tests, concentrated in
-the state machine (53), registry (38), window placement (24), persistence
-(23), reveal (26), and ingest (16). The surface has 70 TypeScript tests.
+The Rust workspace runs 293 unit and integration tests on Windows,
+concentrated in the state machine (53), registry (45), reveal (26), window
+placement (24), persistence (24), supersession (17), and ingest (16). The
+surface has 70 TypeScript tests.
 An integration test drives six synthetic sessions through the real shim
 and daemon pipeline, headless. A screenshot-level version of the
 six-session colour test, run against live sessions, remains open Phase 1
 work. One ingest test is known to fail intermittently and is tracked.
 
-The code is small: about 7,300 lines of daemon Rust across 17 modules, a
+The code is small: about 8,000 lines of daemon Rust across 18 modules, a
 101-line shim, and about 1,000 lines of surface TypeScript. The daemon
 depends on `tauri`, `serde`, `tiny_http`, `getrandom`, and `windows-sys`.
 The shim depends on nothing.
@@ -696,6 +708,9 @@ is implemented.
   Claude Code versions. The VS Code lock files Reveal reads are an
   internal format that ADR-023 warns against building on, and ADR-032
   depends on them anyway, with a miss as the failure mode.
+- **Supersession rests on process ancestry.** Hiding an older VS Code
+  session relies on a shared parent process and folder, not on any signal
+  that a conversation was closed, because none is known (section 4.6).
 - **Partial Reveal.** Reveal cannot pick a tab inside Windows Terminal or a
   conversation inside the VS Code extension. It raises the window, or
   declines.
@@ -789,6 +804,7 @@ changed by a later entry, never by editing.
 | 035 | Liveness from the process, state from the scan |
 | 036 | The scan breaks ties when hooks fall silent; no transcript fallback |
 | 037 | One instance, and a watchdog that restarts a crash |
+| 038 | A newer session in the same VS Code window hides an idle older one |
 
 ## Appendix B: Glossary
 

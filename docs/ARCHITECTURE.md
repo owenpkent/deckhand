@@ -311,7 +311,15 @@ first one or the thousandth:
    the end of the list, by any enumeration hit or hook event, whichever
    happens first; an already-bound session is only relabelled, never
    restated. A pid the daemon holds no handle for yet gets one opened now,
-   per the liveness rule above ([ADR-035](DECISIONS.md#adr-035)).
+   per the liveness rule above ([ADR-035](DECISIONS.md#adr-035)). Relabelling
+   follows one rule regardless of which channel saw the session first
+   ([ADR-038](DECISIONS.md#adr-038)): a label is the scan's own `name` when
+   the scan provides one, and the directory name otherwise. Whether the
+   current label came from a directory is tracked as its own flag,
+   `label_is_derived`, rather than guessed by comparing strings, since a
+   session's real name could coincidentally match its directory. A derived
+   label stays open to a later `name`; a real name, once seen, is never
+   overwritten again.
 2. Map the reported `status`, but only for a session hooks have not
    coloured: one that is `UNKNOWN`, or has never been heard from by a hook
    this run. `busy` and `shell` map to `THINKING`, `waiting` to
@@ -360,6 +368,28 @@ case, or output that does not parse) prunes nothing: missing information is
 never grounds for removing a row. This replaces the earlier six fixed,
 manually filled slots with an unbounded list that a session can join or
 leave entirely on its own ([ADR-028](DECISIONS.md#adr-028)).
+
+A bound session can also be left out of the list without being unbound at
+all: supersession ([ADR-038](DECISIONS.md#adr-038)). The VS Code extension
+was observed keeping an older session's `claude.exe` alive, for hours, after
+a newer session started in the same window, so enumeration lists both and
+the board would otherwise show what looks like a duplicate row. Session O is
+hidden while some other bound session N satisfies all of: both have a known
+pid; both are hosted by the VS Code extension
+([ADR-023](DECISIONS.md#adr-023)); both processes share the same direct
+parent pid, resolved once when the pid is learned; both share a working
+directory, compared case-insensitively with separators normalised; N
+started after O, by the scan's `startedAt` when both have one and by
+first-seen time otherwise; O is `IDLE`, `COMPLETE`, or `UNKNOWN`; and N is
+not `ENDED`. A session that is `THINKING`, `NEEDS_INPUT`, or `ERROR` is
+never hidden this way, whatever is newer, and a console or Windows Terminal
+session is never hidden either, since the observed case is specific to the
+extension host. `app/src-tauri/src/supersede.rs` holds the rule as a pure
+function, recomputed by `Registry::snapshot` and by the window-sizing path
+on every call rather than cached: nothing is remembered, so O reappears, in
+its old position and selection, the moment it stops qualifying. A hidden row
+counts toward nothing: not the header counts, not the Hide grey count, not
+the window height.
 
 `IDLE` from the scan is a read, not a guess, which is worth stating plainly
 since the rule used to be stricter. A white tile says "nothing here needs
@@ -624,7 +654,7 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 | --- | --- | --- |
 | Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown` (the header's own Hide grey switch, [ADR-030](DECISIONS.md#adr-030), left there rather than moved by [ADR-033](DECISIONS.md#adr-033)) and `always_on_top` (the settings panel's Always on top row, [ADR-033](DECISIONS.md#adr-033), default `true`); a missing field or a corrupt file loads each at its own default rather than failing |
 | Start with Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Deckhand` | Not mirrored into `settings.json`; the registry value itself is the only source of truth, read fresh on every panel open and every toggle ([ADR-033](DECISIONS.md#adr-033)) |
-| Session bindings | Local config directory, `bindings.json` | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
+| Session bindings | Local config directory, `bindings.json` | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)). Each entry also carries `derived`, whether its label came from a directory name rather than the scan's own `name`; an entry written before the flag existed loads as derived, so it takes the scan's name on the next scan ([ADR-038](DECISIONS.md#adr-038)) |
 | Watchdog ledger | Local config directory, `watchdog.log` | Append-only, one line per restart decision, capped at three restarts in ten minutes before the watchdog gives up. Never leaves the machine ([ADR-037](DECISIONS.md#adr-037)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
 | Session transcripts | Not stored | Deckhand does not read them ([ADR-036](DECISIONS.md#adr-036)) |

@@ -5,8 +5,8 @@ exists. It implements the contract in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md)
 against Claude Code.
 
 > **Verification stamp: partial, against Claude Code 2.1.220, extended
-> 2026-09-13 and 2026-09-15 against 2.1.270 for the items marked with that
-> version.**
+> 2026-09-13 and 2026-09-15 against 2.1.270, and 2026-09-15 against the
+> extension's 2.1.272 binary, for the items marked with those versions.**
 > Checked on 2026-07-30 and extended on 2026-08-02, on Windows 11, against
 > both the native single-binary build at
 > `C:/Users/owenp/.local/bin/claude.exe` and the copy the VS Code extension
@@ -26,6 +26,17 @@ against Claude Code.
 >   beside them in the CLI's own validator list, unobserved. This reopens
 >   [ADR-024](DECISIONS.md#adr-024), which found no `status` key on
 >   2.1.220's 2026-08-02 re-run. See [ADR-035](DECISIONS.md#adr-035).
+> - **The VS Code extension was seen keeping an older session's
+>   `claude.exe` alive under the same extension host after a newer session
+>   started in that window**, observed on the extension's 2.1.270 and
+>   2.1.272 binaries on 2026-09-15: two sessions per window, sharing a
+>   working directory and the same direct parent pid, with the older
+>   process started hours earlier, idle for minutes before the newer one
+>   started, and still running beside it. What causes
+>   the older process to outlive its conversation is unconfirmed. The same
+>   capture reconfirmed that a scan row carries `startedAt` (ms epoch, not
+>   a string) and `name`, on both binaries. See
+>   [ADR-038](DECISIONS.md#adr-038).
 > - The status line payload keys, from a captured invocation.
 > - The `~/.claude/projects/` directory mangling: the drive colon is
 >   dropped and path separators collapse to single dashes. 41 project
@@ -126,6 +137,8 @@ Named here so that nothing cites them by accident, these stay unverified:
 - Whether `permissions.defaultMode` accepts a value spelled `default`. The
   CLI flag does not, and the owner's own setting is `auto`, so neither
   answer has been tested.
+- Why the extension keeps an older session's `claude.exe` alive after a
+  newer one starts in the same window ([ADR-038](DECISIONS.md#adr-038)).
 
 ## The three hosts, concretely
 
@@ -224,6 +237,18 @@ degrades Reveal to the pre-existing title match rather than failing it.
 JSON is parsed into `pid` and `workspaceFolders` and nothing else survives
 that step; the token is dropped before Reveal does anything with the rest,
 and it never reaches the reveal log or any other file Deckhand writes.
+
+**One extension host can outlive the session it started for.** Observed on
+the extension's 2.1.270 and 2.1.272 binaries on 2026-09-15: `claude agents
+--json` listed two sessions per VS Code window, each with its own
+`claude.exe`, sharing one working directory and the same direct parent pid
+(that window's extension host process). In both cases the older process,
+started hours earlier, had gone quiet a few minutes before a newer session
+started in the same window, and was still alive beside it. What causes the
+older process to survive is unconfirmed; the owner could not say how the second
+chat was opened. Deckhand hides the older, idle row rather than treating it
+as a second live session ([ADR-038](DECISIONS.md#adr-038)); it is a
+presentation decision, not a claim that the process actually exited.
 
 ## Interfaces used, and what they rest on
 
@@ -562,7 +587,10 @@ narrowed what depended on it. Every row carries `status` on the installed
 `waiting` sit beside them in the CLI's own validator list, unobserved
 ([ADR-035](DECISIONS.md#adr-035)). `startedAt` arrives as epoch
 milliseconds, not as a string, so the adapter converts it to the ISO 8601
-that [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types) requires.
+that [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types) requires. The daemon
+itself also keeps `startedAt` in its raw millisecond form, alongside `name`,
+to order and label two sessions the extension host keeps alive in one
+window ([ADR-038](DECISIONS.md#adr-038)).
 
 Cold start, in order:
 

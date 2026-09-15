@@ -74,6 +74,10 @@ built. [ADR-037](docs/DECISIONS.md#adr-037), also that day, closed the
 daemon's process lifecycle: a named mutex makes it single instance,
 and a same-binary watchdog relaunches it after a crash, rate-limited
 by a local, append-only ledger; Start with Windows is unchanged.
+[ADR-038](docs/DECISIONS.md#adr-038) (2026-09-15) then hid a duplicate
+row the VS Code extension had caused, an older idle session kept alive
+under a newer one in the same window, and gave every row one label rule
+instead of two.
 
 | Piece | State |
 | --- | --- |
