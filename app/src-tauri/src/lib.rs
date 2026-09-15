@@ -7,6 +7,7 @@ pub mod hook_status;
 pub mod host;
 pub mod http;
 pub mod installer;
+pub mod liveness;
 pub mod persist;
 pub mod registry;
 pub mod reveal;

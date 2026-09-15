@@ -113,11 +113,16 @@ permission answer back the other way, but that direction is Phase 2 or
 later work and is not wired up yet, nor currently planned on the surface
 (ADR-028); today the channel only reports.
 
-That is the whole mechanism. There is a fallback for reading a session's
-history directly from the log file Claude Code writes to disk, but that log
-file's internal format is not something Claude Code promises to keep
-stable, so Deckhand treats it as a last resort, never as something the core
-status logic depends on.
+That is the whole mechanism for hooks. Separately, the daemon also holds a
+handle on each session's own process and checks it every two seconds; if
+the process is gone and no clean exit was reported, the row is removed the
+same as if it had exited cleanly, catching a crash or a closed terminal
+without needing a hook for it ([ADR-035](DECISIONS.md#adr-035)).
+
+There is a fallback for reading a session's history directly from the log
+file Claude Code writes to disk, but that log file's internal format is not
+something Claude Code promises to keep stable, so Deckhand treats it as a
+last resort, never as something the core status logic depends on.
 
 ## What is uncertain
 
@@ -135,9 +140,10 @@ This section is here because leaving it out would be dishonest.
   attached mode is mostly a status board with limited action, and hosted
   mode is where the real control lives, in which case the documentation
   should say that plainly rather than imply parity between the two modes.
-- Whether an error state (a crashed process, a session Claude Code itself
-  has lost track of) can be detected through hooks at all, as opposed to
-  needing a separate supervisory check, is not yet confirmed.
+- Whether a genuinely failed turn (as opposed to a crashed process, which
+  the daemon now detects without hooks, see "How it works") surfaces as a
+  distinct hook event at all is not yet confirmed; a documented event
+  exists but has not been seen firing.
 - macOS and Linux support is intended but unproven. Windows 11 is the only
   platform anything here has been reasoned through concretely.
 

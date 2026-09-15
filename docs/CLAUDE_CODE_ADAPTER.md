@@ -5,7 +5,8 @@ exists. It implements the contract in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md)
 against Claude Code.
 
 > **Verification stamp: partial, against Claude Code 2.1.220, extended
-> 2026-09-13 against 2.1.270 for the items marked with that version.**
+> 2026-09-13 and 2026-09-15 against 2.1.270 for the items marked with that
+> version.**
 > Checked on 2026-07-30 and extended on 2026-08-02, on Windows 11, against
 > both the native single-binary build at
 > `C:/Users/owenp/.local/bin/claude.exe` and the copy the VS Code extension
@@ -20,6 +21,11 @@ against Claude Code.
 >   `cwd`, `kind`, `startedAt`, `sessionId`, and `name`. The 2026-07-30
 >   note also listed a `status` key; on the 2026-08-02 re-run no row
 >   carried one, so nothing may depend on it.
+> - **`claude agents --json` carries a `status` key on 2.1.270**, observed
+>   2026-09-15: `busy` and `idle` fired live, and `shell` and `waiting` sit
+>   beside them in the CLI's own validator list, unobserved. This reopens
+>   [ADR-024](DECISIONS.md#adr-024), which found no `status` key on
+>   2.1.220's 2026-08-02 re-run. See [ADR-035](DECISIONS.md#adr-035).
 > - The status line payload keys, from a captured invocation.
 > - The `~/.claude/projects/` directory mangling: the drive colon is
 >   dropped and path separators collapse to single dashes. 41 project
@@ -227,7 +233,7 @@ and it never reaches the reveal log or any other file Deckhand writes.
 | `PreToolUse` permission decision output | Approve and deny | Documented; `deny` observed honoured 2.1.220 |
 | Hook payload fields `session_id`, `cwd`, `transcript_path`, and where present `prompt_id`, `permission_mode`, `effort.level`, `tool_use_id` | Session identity, mode badge | Observed 2.1.220 on `PreToolUse`; documented on other events |
 | `--permission-mode` accepted value set | The mode badge's vocabulary | Documented, set observed 2.1.220 |
-| `claude agents --json` | Cold-start enumeration, host `pid` for Reveal | Documented, keys observed 2.1.220 |
+| `claude agents --json` | Cold-start and periodic enumeration, host `pid` for Reveal and for the liveness handle, `status` when hooks are silent | Documented, keys observed 2.1.220, `status` observed 2.1.270 |
 | Status line JSON | Tile extras | Documented, keys observed 2.1.220, schema may grow |
 | Agent SDK (`@anthropic-ai/claude-agent-sdk`) | Hosted mode | Documented |
 | Enumerating `~/.claude/projects/` | Populating the bind picker | **Internal**, mangling observed 2.1.220 |
@@ -279,8 +285,9 @@ The daemon owns the state machine; this adapter feeds it observations.
 | `SubagentStart`, `SubagentStop` | no change | Children never move the parent's colour. They feed the child ledger and the liveness bracket, and nothing else |
 | `SessionEnd`, `reason` of `clear` or `resume` | no change | Each is followed by a new `SessionStart` for the same terminal |
 | `SessionEnd`, any other `reason` | `ended` | |
-| No events past `T_unknown` | `unknown` | Never guessed into `idle` or `error` |
-| Process confirmed dead without `SessionEnd` | `error` | A crash; detection method on Windows still open |
+| No events past `T_unknown`, no process handle held | `unknown` | Never guessed into `idle` or `error` |
+| No hook past `T_unknown` while `thinking`, handle held, scan status not `busy`/`shell`/`waiting` | `unknown` | The two channels disagree; see [ADR-035](DECISIONS.md#adr-035) |
+| Process confirmed dead without `SessionEnd` | `ended` | A crash, detected by a held process handle; never `error` ([ADR-035](DECISIONS.md#adr-035)) |
 
 The "no change" rows earn their place. A `SessionStart` whose source is
 `compact`, and a `SessionEnd` whose reason is `clear`, both fire in the
@@ -294,9 +301,10 @@ field, and it is fire-and-forget. That is the signal this file previously
 said did not exist. It is `documented`, not `observed`: nobody here has seen
 it fire, and the local corpus is a warning against a naive mapping, since 66
 of 71 transcript `api_error` records are retries that recover. So red still
-means "the turn failed or the session died", the spec promises no more than
-that, and the open question and the TODO spike both stay open. A string in a
-binary is not an observation.
+means "the turn failed", not "the session died" ([ADR-035](DECISIONS.md#adr-035)
+moved process death to `ended`), the spec promises no more than that, and
+the open question and the TODO spike both stay open. A string in a binary
+is not an observation.
 
 **`PermissionDenied` says less than its name suggests.** Since 2.1.208 it
 carries `reason` (not `denial_reason`), and that reason is usually the fixed
@@ -548,8 +556,11 @@ case.
 TTY, and on this machine it returned the live sessions with `pid`, `cwd`,
 `kind`, `startedAt`, `sessionId`, and `name` (`observed`, 2.1.220). The
 2026-07-30 note also listed a `status` key; no row carried one on the
-2026-08-02 re-run, so nothing here may depend on it
-([ADR-024](DECISIONS.md#adr-024)). `startedAt` arrives as epoch
+2026-08-02 re-run against 2.1.220, so [ADR-024](DECISIONS.md#adr-024)
+narrowed what depended on it. Every row carries `status` on the installed
+2.1.270: `busy` and `idle` were observed live on 2026-09-15, and `shell` and
+`waiting` sit beside them in the CLI's own validator list, unobserved
+([ADR-035](DECISIONS.md#adr-035)). `startedAt` arrives as epoch
 milliseconds, not as a string, so the adapter converts it to the ISO 8601
 that [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types) requires.
 
@@ -557,11 +568,13 @@ Cold start, in order:
 
 1. Enumerate live sessions with `claude agents --json` and rebind tiles by
    `session_id`.
-2. Map the reported `status`, where one is reported. `busy` becomes
-   `thinking`. **Everything else, including a status that is missing or a
-   value this adapter does not recognise, becomes `unknown`.** Never guess
-   `idle`: white is a claim that a session is sitting waiting for you, and
-   this channel does not support that claim.
+2. Map the reported `status`, where hooks have not already coloured the
+   session: `busy` and `shell` become `thinking`, `waiting` becomes
+   `needs_input`, `idle` becomes `idle`. **Everything else, including a
+   status that is missing or a value this adapter does not recognise,
+   leaves the state alone.** Once a hook has coloured a session this step
+   never recolours it, and it never produces `complete`
+   ([ADR-035](DECISIONS.md#adr-035)).
 3. A tile whose binding no enumeration explains stays `unknown` until an
    event arrives for it. That is the correct answer, not a failure. The
    surface's row for that case reads "not heard yet" rather than "unknown",
@@ -572,21 +585,28 @@ Cold start, in order:
    state, and if the mangling changes tomorrow the only casualty is a
    convenience list.
 
-On 2.1.220 the missing-status branch of step 2 is the only one that runs, so
-cold start recovers bindings and labels but no state. The board is still grey
-after a restart; what changes is that the right tiles are on it, bound to the
-right sessions, under the right names. The `busy` mapping stays because it
-costs nothing if the key returns, not because it fires today.
+On 2.1.270 step 2 runs its full mapping instead of only the fallback branch
+2.1.220 left it, so a fresh restart colours every live session's row on the
+next scan instead of leaving it grey until a hook arrives. The `idle`
+mapping is still never a guess: it is read off `status`, backed by the
+session registry's own `procStart` check, not assumed, and it never
+overrides a colour a hook already set.
 
 The `pid` from the same call is what Reveal should match a host window on,
 in preference to window-title heuristics, since a title is a guess and a
 `pid` is not.
 
 This supersedes part of [ADR-005](DECISIONS.md#adr-005), which took hooks to
-be the only status source. Hooks remain the only source of state *changes*.
-Enumeration is an inventory: it tells you a session exists and, for one
-value, that it is busy. The superseding ADR records the split. ADR-005 itself
-is unedited, as ADRs always are.
+be the only status source. Hooks remain the only source of state *changes*
+for a session they have already spoken to; the scan only colours a session
+they have not. Enumeration is an inventory that also reports a coarse
+status: a session exists, and, from `busy`, `shell`, `waiting`, or `idle`,
+roughly what it is doing. The superseding ADRs record the split:
+[ADR-017](DECISIONS.md#adr-017) promoted enumeration to that inventory,
+[ADR-024](DECISIONS.md#adr-024) narrowed it when no row carried a status on
+2.1.220, and [ADR-035](DECISIONS.md#adr-035) widens it again now that
+`status` is observed on 2.1.270. ADR-005 itself is unedited, as ADRs always
+are.
 
 ## Hosted mode sketch
 
@@ -611,7 +631,7 @@ session.
 | Capability | Attached, `pty` | Attached, `vscode-extension` | Hosted, `sdk` |
 | --- | --- | --- | --- |
 | `observe_status` | `documented` | `documented` | `documented` |
-| `list_sessions` | `documented` (observed 2.1.220) | `documented` (observed 2.1.220) | `documented` |
+| `list_sessions` | `documented` (observed 2.1.220, 2.1.270) | `documented` (observed 2.1.220, 2.1.270) | `documented` |
 | `focus_session` | `synthetic` | `synthetic` (lock-file workspace match plus title, since [ADR-032](DECISIONS.md#adr-032); title alone when no lock file fits) | `false` (no window to raise) |
 | `decide_permission` | `documented` | `documented` (observed 2.1.220) | `documented` |
 | `answer_question` | `false` (optional, and unproven) | `false` (optional, and unproven) | `false` (unproven) |
@@ -627,7 +647,13 @@ an observation on 2026-08-02, and it is the row the product rests on: a
 
 `list_sessions` is the one promotion here, and it is earned. The command
 `claude agents --json` was run on this machine and returned live sessions,
-which makes it the only row in the table carrying an observation at all.
+which makes it the only row in the table carrying an observation at all, on
+2.1.220 and again, re-run, on 2.1.270. Its `status` key, absent on 2.1.220,
+is now observed too: `busy` and `idle` fired on 2.1.270 on 2026-09-15, and
+`shell` and `waiting` remain unobserved beside them in the CLI's own
+validator list ([ADR-035](DECISIONS.md#adr-035)). The overall file stamp
+stays partial against 2.1.220; only this row and the `status` observation
+carry the later version.
 
 `answer_question` is optional and unproven, and it is declared so that the
 surface has a real thing to disable an Answer target against rather than

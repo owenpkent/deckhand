@@ -5,17 +5,27 @@
 //
 // The list auto-binds: any session heard from, by a hook event or by
 // enumeration, appends to it the first time it is seen, in the order it
-// was seen. There is no picker and no fixed slot count. A session drops
-// out of the list once it reaches `ended`, and enumeration prunes a
-// bound session that has gone missing from a successful run, so long as
-// it has not heard from a hook recently (enumeration can lag a live
-// event by a beat or two).
+// was seen. There is no picker and no fixed slot count.
+//
+// ADR-035 split who is *listed* from who is *coloured*. A row leaves the
+// list for one of three reasons: its `SessionEnd` arrives; its process
+// handle (`liveness.rs`, held in `watches` below) reports the process
+// gone, which unbinds it exactly like a `SessionEnd` would even though
+// none arrived; or, only for a session with no handle at all, a
+// successful enumeration omits it for `ENUM_GRACE_MS` with no recent
+// hook (`prune_missing`). A session with a live handle survives any
+// number of scans that omit it: the handle is the more trustworthy
+// signal, and prune_missing checks it before dropping anything. What
+// colour a listed row shows is a separate question, answered by
+// `state.rs` (`apply_hook` and, now, `apply_scan_state`) and by
+// `Session::tick`, not by list membership.
 
 use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::liveness;
 use crate::state::{Session, SessionState};
 
 /// A session that vanished from a successful enumeration less than this
@@ -24,7 +34,7 @@ use crate::state::{Session, SessionState};
 /// of the two when they briefly disagree.
 pub const ENUM_GRACE_MS: i64 = 60_000;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Registry {
     pub sessions: HashMap<String, Session>,
     /// The ordered, unbounded list of bound session ids. Index into this
@@ -38,6 +48,26 @@ pub struct Registry {
     /// and so a resize can be sized off the visible row count; persisted
     /// by persist.rs, not here.
     pub hide_unknown: bool,
+    /// One process handle per session that has ever had a pid, keyed by
+    /// session id (ADR-035, `liveness.rs`). Not `Session` state and not
+    /// part of `Snapshot`: it is an OS resource, not a fact about the
+    /// session worth showing, and `Registry` itself is never serialised.
+    watches: HashMap<String, liveness::Watch>,
+}
+
+/// A manual `Debug` impl because `liveness::Watch` (`Box<dyn Liveness>`)
+/// does not implement it and need not: the handles themselves carry
+/// nothing worth printing beyond which sessions currently have one.
+impl std::fmt::Debug for Registry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Registry")
+            .field("sessions", &self.sessions)
+            .field("bindings", &self.bindings)
+            .field("selected", &self.selected)
+            .field("hide_unknown", &self.hide_unknown)
+            .field("watches", &self.watches.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,25 +132,38 @@ impl Registry {
         // A session heard from for the first time joins the list, even
         // on an event that left its own state unchanged: liveness alone
         // is enough to prove it exists. An ended session leaves the list
-        // outright rather than lingering as a dead row.
-        let list_changed = if ended { self.unbind_id(id) } else { self.auto_bind(id) };
+        // outright rather than lingering as a dead row, and its process
+        // handle, if it had one, is dropped along with it (ADR-035): a
+        // `SessionEnd` is as authoritative an ending as a handle
+        // reporting the process gone, and holding the handle open past
+        // it serves nothing.
+        let list_changed = if ended {
+            self.drop_watch(id);
+            self.unbind_id(id)
+        } else {
+            self.auto_bind(id)
+        };
         changed || list_changed
     }
 
     /// Register a session found by enumeration (`claude agents --json`).
-    /// State is unknown by rule: the enumeration carries no status on
-    /// 2.1.220 and idle is never guessed (ADR-024, adapter rule 1). Also
-    /// auto-binds: enumeration is the only channel that ever sees a
-    /// session in another repo, one with no hook wired up at all.
+    /// ADR-035: state is no longer left unknown by rule. A `status` key
+    /// has been observed since ADR-024 and colours the session
+    /// (`Session::apply_scan_state`) precisely when no hook has already
+    /// coloured it; a hook still always wins. Also auto-binds:
+    /// enumeration is the only channel that ever sees a session in
+    /// another repo, one with no hook wired up at all.
     pub fn register_enumerated(
         &mut self,
         id: &str,
         name: Option<&str>,
         cwd: Option<&str>,
         pid: Option<u32>,
+        status: Option<&str>,
         now_ms: i64,
     ) -> bool {
         let mut changed = false;
+        let mut pid_changed = false;
         if let Some(existing) = self.sessions.get_mut(id) {
             // A session the hooks already saw end stays off the list and
             // untouched by enumeration entirely, checked before anything
@@ -132,18 +175,21 @@ impl Registry {
             if existing.state == SessionState::Ended {
                 return false;
             }
-            // State is never taken from the enumeration. A pid is:
-            // hooks cannot carry one and Reveal wants it. Unlike a blank
-            // field, a pid already present is replaced rather than left
-            // alone when the scan reports a different one: a resumed
-            // session runs under a new OS process, and holding onto the
-            // stale pid would point Reveal at whatever that pid now
-            // names. A scan that saw no pid this time (`pid: None`)
-            // leaves whatever is recorded alone rather than clearing it.
+            existing.note_seen(status, now_ms);
+            changed |= existing.apply_scan_state(status, now_ms);
+            // A pid is never in a hook payload and Reveal wants one.
+            // Unlike a blank field, a pid already present is replaced
+            // rather than left alone when the scan reports a different
+            // one: a resumed session runs under a new OS process, and
+            // holding onto the stale pid would point Reveal (and the
+            // liveness watch below) at whatever that pid now names. A
+            // scan that saw no pid this time (`pid: None`) leaves
+            // whatever is recorded alone rather than clearing it.
             if let Some(new_pid) = pid {
                 if existing.pid != Some(new_pid) {
                     existing.pid = Some(new_pid);
                     changed = true;
+                    pid_changed = true;
                 }
             }
             // Unlike pid, cwd is corrected rather than only filled in:
@@ -175,11 +221,46 @@ impl Registry {
                     s.label = n.to_string();
                 }
             }
+            s.note_seen(status, now_ms);
+            s.apply_scan_state(status, now_ms);
             self.sessions.insert(id.to_string(), s);
             changed = true;
+            pid_changed = pid.is_some();
+        }
+        // A pid recorded for the first time or replaced gets a fresh
+        // liveness watch (ADR-035): the old handle, if any, is dropped
+        // first since it names a pid this session no longer runs under,
+        // then a new one is opened when possible. `liveness::open`
+        // returning `None` (the platform stub, or a pid that could not
+        // be opened) simply leaves the session with no watch, the same
+        // as before any pid was ever seen.
+        if pid_changed {
+            self.drop_watch(id);
+            if let Some(p) = pid {
+                if let Some(watch) = liveness::open(p) {
+                    self.set_watch(id, watch);
+                }
+            }
         }
         changed |= self.auto_bind(id);
         changed
+    }
+
+    /// Give a session a liveness watch, replacing whatever it had.
+    pub fn set_watch(&mut self, id: &str, watch: liveness::Watch) {
+        self.watches.insert(id.to_string(), watch);
+    }
+
+    /// Drop a session's liveness watch, if it has one. A no-op otherwise.
+    fn drop_watch(&mut self, id: &str) {
+        self.watches.remove(id);
+    }
+
+    /// Whether the registry holds a watch for `id` whose process has not
+    /// reported exiting. False for a session with no watch at all, the
+    /// same as one whose watch has fired: neither is proof of life.
+    fn is_alive(&self, id: &str) -> bool {
+        self.watches.get(id).map(|w| !w.exited()).unwrap_or(false)
     }
 
     /// Insert a placeholder for a session known only by id and label,
@@ -227,10 +308,13 @@ impl Registry {
     }
 
     /// Drop bound sessions absent from a successful enumeration, unless
-    /// they received a hook event within `ENUM_GRACE_MS`. Must only be
-    /// called after an enumeration run that actually succeeded: a failed
-    /// run (claude missing, unparseable output) carries no information
-    /// about who is still alive and must prune nothing.
+    /// they received a hook event within `ENUM_GRACE_MS` or a held
+    /// process handle says the session is still alive (ADR-035): a scan
+    /// that omits a session it should have listed is exactly the case a
+    /// handle exists to catch. Must only be called after an enumeration
+    /// run that actually succeeded: a failed run (claude missing,
+    /// unparseable output) carries no information about who is still
+    /// alive and must prune nothing.
     pub fn prune_missing(&mut self, present: &HashSet<String>, now_ms: i64) -> bool {
         let stale: Vec<String> = self
             .bindings
@@ -244,6 +328,7 @@ impl Registry {
                     .unwrap_or(false);
                 !recent_hook
             })
+            .filter(|id| !self.is_alive(id))
             .cloned()
             .collect();
         let mut changed = false;
@@ -289,10 +374,34 @@ impl Registry {
         })
     }
 
+    /// Runs every 2 seconds under the registry lock (main.rs's tick
+    /// thread); `WaitForSingleObject(h, 0)` per watch is microseconds,
+    /// so that cadence is fine even with many watches open. For each
+    /// bound session (ADR-035), a watch that reports the process exited
+    /// ends it outright (`process_exited`, then the watch is dropped
+    /// and the row unbound, exactly like a `SessionEnd` (only a fresh
+    /// `SessionStart` revives it), and every other session ticks
+    /// against `T_unknown` with `alive` reflecting whether it still has
+    /// a live watch. Unbound sessions are not visited: nothing on screen
+    /// depends on their colour, and a session pruned from the list but
+    /// still alive is caught by `prune_missing` instead of here.
     pub fn tick(&mut self, now_ms: i64) -> bool {
         let mut changed = false;
-        for s in self.sessions.values_mut() {
-            changed |= s.tick(now_ms);
+        let ids: Vec<String> = self.bindings.clone();
+        for id in ids {
+            let exited = self.watches.get(&id).map(|w| w.exited()).unwrap_or(false);
+            if exited {
+                self.drop_watch(&id);
+                if let Some(s) = self.sessions.get_mut(&id) {
+                    changed |= s.process_exited(now_ms);
+                }
+                changed |= self.unbind_id(&id);
+                continue;
+            }
+            let alive = self.watches.contains_key(&id);
+            if let Some(s) = self.sessions.get_mut(&id) {
+                changed |= s.tick(now_ms, alive);
+            }
         }
         changed
     }
@@ -466,7 +575,7 @@ mod tests {
         // A pid the scan reports here could already belong to an
         // unrelated process; an ended session must be left untouched,
         // not merely unbound.
-        assert!(!r.register_enumerated("s1", None, None, Some(7), 3));
+        assert!(!r.register_enumerated("s1", None, None, Some(7), None, 3));
         assert!(!r.is_bound("s1"), "hooks saw it end; the enumeration is stale");
         assert_eq!(r.sessions["s1"].pid, None, "a stale scan must not repopulate the pid either");
     }
@@ -516,7 +625,7 @@ mod tests {
             &json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}),
             1,
         );
-        assert!(!r.register_enumerated("s1", Some("name"), None, None, 2));
+        assert!(!r.register_enumerated("s1", Some("name"), None, None, None, 2));
         assert_eq!(
             r.sessions["s1"].state,
             crate::state::SessionState::Thinking,
@@ -529,7 +638,7 @@ mod tests {
         // Enumeration is the only channel that ever sees a session in a
         // repo with no hook wired up.
         let mut r = Registry::default();
-        assert!(r.register_enumerated("other-repo", Some("undertow"), Some("C:/dev/undertow"), Some(1), 1));
+        assert!(r.register_enumerated("other-repo", Some("undertow"), Some("C:/dev/undertow"), Some(1), None, 1));
         assert!(r.is_bound("other-repo"));
         assert_eq!(r.sessions["other-repo"].state, crate::state::SessionState::Unknown);
     }
@@ -610,7 +719,7 @@ mod tests {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
         r.sessions.get_mut("s1").unwrap().cwd = Some("C:/dev/wrong-subagent-dir".to_string());
-        assert!(r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, 2));
+        assert!(r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, None, 2));
         assert_eq!(r.sessions["s1"].cwd.as_deref(), Some("C:/dev/undertow"));
     }
 
@@ -619,12 +728,12 @@ mod tests {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
         assert_eq!(r.sessions["s1"].label, "");
-        r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, 2);
+        r.register_enumerated("s1", None, Some("C:/dev/undertow"), None, None, 2);
         assert_eq!(r.sessions["s1"].label, "undertow", "a blank label is filled in from the corrected cwd");
 
         r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s2"}), 1);
         r.sessions.get_mut("s2").unwrap().label = "custom name".to_string();
-        r.register_enumerated("s2", None, Some("C:/dev/undertow"), None, 2);
+        r.register_enumerated("s2", None, Some("C:/dev/undertow"), None, None, 2);
         assert_eq!(r.sessions["s2"].label, "custom name", "an existing label is never overwritten");
     }
 
@@ -640,7 +749,7 @@ mod tests {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "cwd": "C:/dev/a"}), 1);
         r.sessions.get_mut("s1").unwrap().pid = Some(111);
-        assert!(r.register_enumerated("s1", None, None, Some(222), 2));
+        assert!(r.register_enumerated("s1", None, None, Some(222), None, 2));
         assert_eq!(r.sessions["s1"].pid, Some(222), "a different enumerated pid replaces the stored one");
         assert_eq!(r.sessions["s1"].label, "a", "replacing the pid must not disturb the label");
         assert_eq!(
@@ -655,7 +764,7 @@ mod tests {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
         r.sessions.get_mut("s1").unwrap().pid = Some(111);
-        assert!(!r.register_enumerated("s1", None, None, Some(111), 2), "the same pid must report no change");
+        assert!(!r.register_enumerated("s1", None, None, Some(111), None, 2), "the same pid must report no change");
         assert_eq!(r.sessions["s1"].pid, Some(111));
     }
 
@@ -664,7 +773,7 @@ mod tests {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
         r.sessions.get_mut("s1").unwrap().pid = Some(111);
-        assert!(!r.register_enumerated("s1", None, None, None, 2), "a scan that saw no pid must not clear it");
+        assert!(!r.register_enumerated("s1", None, None, None, None, 2), "a scan that saw no pid must not clear it");
         assert_eq!(r.sessions["s1"].pid, Some(111));
     }
 
@@ -672,7 +781,7 @@ mod tests {
     fn a_resumed_session_gets_the_new_enumerated_pid_after_end_and_resume() {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
-        r.register_enumerated("s1", None, None, Some(111), 2);
+        r.register_enumerated("s1", None, None, Some(111), None, 2);
         assert_eq!(r.sessions["s1"].pid, Some(111));
 
         r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 3);
@@ -681,7 +790,7 @@ mod tests {
         r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "resume", "session_id": "s1"}), 4);
         assert!(r.is_bound("s1"), "the revived session rejoins the list");
 
-        assert!(r.register_enumerated("s1", None, None, Some(222), 5));
+        assert!(r.register_enumerated("s1", None, None, Some(222), None, 5));
         assert_eq!(r.sessions["s1"].pid, Some(222), "the new OS process's pid replaces the stale one");
     }
 
@@ -689,14 +798,14 @@ mod tests {
     fn an_ended_session_listed_by_a_later_scan_stays_unbound_with_no_pid() {
         let mut r = Registry::default();
         r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
-        r.register_enumerated("s1", None, None, Some(111), 2);
+        r.register_enumerated("s1", None, None, Some(111), None, 2);
         r.apply_hook(&json!({"hook_event_name": "SessionEnd", "reason": "exit", "session_id": "s1"}), 3);
         assert_eq!(r.sessions["s1"].pid, None);
 
         // The OS could have reused pid 111 for an unrelated process by
         // the time the next scan runs; enumeration must not hand a pid
         // back to a session that has already ended.
-        assert!(!r.register_enumerated("s1", None, None, Some(999), 4));
+        assert!(!r.register_enumerated("s1", None, None, Some(999), None, 4));
         assert!(!r.is_bound("s1"));
         assert_eq!(r.sessions["s1"].pid, None, "an ended session's pid must not be repopulated by a later scan");
     }
@@ -746,5 +855,99 @@ mod tests {
         let empty_present = HashSet::new();
         assert!(r.prune_missing(&empty_present, 1 + ENUM_GRACE_MS + 1));
         assert!(!r.is_bound("s1"), "an empty present-set does prune, which is why callers must gate on success");
+    }
+
+    // ---- ADR-035: liveness watches ---------------------------------
+    //
+    // `liveness::Fake` stands in for a real OS process handle so these
+    // stay deterministic and platform-independent (the two real-handle
+    // tests live in liveness.rs itself, Windows-only).
+
+    fn fake_watch(exited: bool) -> (liveness::Watch, std::sync::Arc<std::sync::atomic::AtomicBool>) {
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(exited));
+        let watch: liveness::Watch = Box::new(liveness::Fake(flag.clone()));
+        (watch, flag)
+    }
+
+    #[test]
+    fn a_session_with_a_live_watch_survives_a_scan_that_omits_it() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        let (watch, _flag) = fake_watch(false);
+        r.set_watch("s1", watch);
+        let present = HashSet::new();
+        assert!(!r.prune_missing(&present, 1 + ENUM_GRACE_MS + 1), "a live handle beats a scan that omits the session");
+        assert!(r.is_bound("s1"));
+    }
+
+    #[test]
+    fn a_session_with_no_watch_is_pruned_as_before() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        let present = HashSet::new();
+        assert!(r.prune_missing(&present, 1 + ENUM_GRACE_MS + 1));
+        assert!(!r.is_bound("s1"), "a session with no held handle is pruned exactly as before ADR-035");
+    }
+
+    #[test]
+    fn an_exited_watch_ends_and_unbinds_the_session_on_tick() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        let (watch, flag) = fake_watch(false);
+        r.set_watch("s1", watch);
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        assert!(r.tick(2));
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Ended);
+        assert!(!r.is_bound("s1"), "a process-exit tick unbinds the row exactly like SessionEnd does");
+        let snap = r.snapshot(3);
+        assert!(snap.tiles.is_empty(), "the snapshot must no longer list the ended session");
+    }
+
+    #[test]
+    fn a_session_start_after_an_exited_watch_revives_it() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        let (watch, _flag) = fake_watch(true);
+        r.set_watch("s1", watch);
+        assert!(r.tick(2));
+        assert!(!r.is_bound("s1"));
+
+        let changed = r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "resume", "session_id": "s1"}), 3);
+        assert!(changed);
+        assert!(r.is_bound("s1"), "only a fresh SessionStart revives a row an exited watch ended");
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Idle);
+    }
+
+    #[test]
+    fn alive_idle_survives_a_twenty_minute_quiet_tick() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        let (watch, _flag) = fake_watch(false);
+        r.set_watch("s1", watch);
+        let twenty_min = 20 * 60 * 1000;
+        assert!(!r.tick(1 + twenty_min));
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Idle, "idle must not grey while the process is alive");
+        assert!(r.is_bound("s1"));
+    }
+
+    #[test]
+    fn a_changed_pid_replaces_the_watch() {
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        let (old_watch, _old_flag) = fake_watch(true);
+        r.set_watch("s1", old_watch);
+
+        // A bogus pid: liveness::open on Windows returns None for one it
+        // cannot open (u32::MAX is never a real process id, and the stub
+        // on other platforms always returns None), so the session simply
+        // ends up with no watch at all rather than a second fake one.
+        // What this pins is that the *old* watch is gone: if it were
+        // still attached, the tick below would see its exited flag and
+        // unbind the session.
+        assert!(r.register_enumerated("s1", None, None, Some(u32::MAX), None, 2));
+        assert!(r.is_bound("s1"), "replacing the pid must not itself unbind the session");
+        assert!(!r.tick(3), "the stale exited watch must no longer be the one attached to this session");
+        assert!(r.is_bound("s1"));
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Thinking);
     }
 }

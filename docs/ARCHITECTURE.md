@@ -69,8 +69,8 @@ decided.
 | `THINKING` | Blue | A turn begins, or an operation opens | The turn ends with nothing open, or input is required |
 | `NEEDS_INPUT` | Amber | A permission decision is pending, or the session asked a question | The decision is made, or the question is answered |
 | `COMPLETE` | Green | A turn finished, the child ledger is empty, and you have not selected the tile since | You select the tile, or a new turn begins |
-| `ERROR` | Red | The turn failed, or the process died without a clean exit | You select the tile (a crashed session then shows `ENDED`), or the session recovers |
-| `ENDED` | Off | The session exited for good, or you acknowledged a crashed `ERROR` tile | Rebound |
+| `ERROR` | Red | The turn failed | You select the tile, or the session recovers |
+| `ENDED` | Off | A clean `SessionEnd`, or the process exiting without one, confirmed by a held process handle ([ADR-035](DECISIONS.md#adr-035)) | Rebound |
 | `UNKNOWN` | Grey | The daemon cannot currently tell | Any authoritative event arrives |
 
 Amber carries a kind, `permission` or `question`, on the update that raises it.
@@ -186,24 +186,47 @@ three cases:
   still run once the runtime's own prompt is answered. It closes on the
   post-tool event, on an observed denial, or on `T_unknown`.
 
-One deadline, not two:
+Liveness now has a second, independent channel: a held process handle
+([ADR-035](DECISIONS.md#adr-035)). When a scan reports a pid for a session,
+the daemon opens it with `OpenProcess(SYNCHRONIZE)` and keeps the handle for
+the session's life, opened only from a scan sighting and never from a pid
+restored from disk, since a restored pid may already name another process.
+The two-second tick polls the handle with a zero-timeout wait. A held handle
+also blocks Windows from reusing the pid, so no start-time check is needed.
+
+One deadline, not two, and now narrower for a session the daemon holds a
+handle for:
 
 - **`T_unknown`, default 900 s**, measured from the last event of any kind.
   On expiry the session moves to `UNKNOWN`, never to `ERROR`, because a long
   tool call is normal and a wrong red costs more than an honest grey.
 - The stale clock, meaning "nothing has been heard for a while", is suspended
   while an operation is open. `T_unknown` is not suspended by anything.
+- For a session with a live handle, silence stops meaning degradation:
+  `IDLE`, `COMPLETE`, `ERROR`, and `NEEDS_INPUT` hold for as long as the
+  process lives. The exception is `THINKING`: a turn in flight produces hook
+  events, so a `THINKING` session with no hook for `T_unknown`, whose latest
+  scan status is not `busy`, `shell`, or `waiting`, still moves to `UNKNOWN`,
+  because the two channels disagree and the colour cannot be trusted. A
+  session with no handle (no pid known, or the handle could not be opened)
+  keeps the old, unnarrowed rule, except that a successful scan sighting now
+  also counts as an event of any kind, so `T_unknown` runs from the later of
+  the last hook and the last sighting.
 
 The asymmetry is the whole point. A terminal killed mid-tool-call leaves an
 operation open that nothing will ever close, so letting an open operation
 suspend `T_unknown` as well would pin that tile blue until the daemon
 restarted. There is no second stale tier and no stale badge: one deadline, one
-grey. Recorded in [DECISIONS.md](DECISIONS.md#adr-016).
+grey. Recorded in [DECISIONS.md](DECISIONS.md#adr-016), narrowed by
+[ADR-035](DECISIONS.md#adr-035).
 
-A clean exit moves the session to `ENDED`; confirmed process death without one
-is a crash and moves it to `ERROR`. How process death is confirmed on Windows,
-cheaply enough to poll, is still unresolved. See
-[open questions](#open-questions).
+A clean exit moves the session to `ENDED`. Process death confirmed by the
+held handle, without a `SessionEnd`, moves it to `ENDED` too, exactly as
+`SessionEnd` would, and not to `ERROR`: a red tile with no exit path would
+sit on the list until the daemon restarted, and a crash is already visible
+in the host window the row points at. This resolves the open question below
+on confirming process death cheaply enough to poll: a held handle and a
+zero-timeout wait cost microseconds per session per tick.
 
 ## Observation channels
 
@@ -217,58 +240,81 @@ enumeration, `claude agents --json`. `observed` on this machine on 2026-07-30
 and re-run on 2026-08-02, both against version 2.1.220: it needs no TTY, and
 it returned the live sessions with `pid`, `cwd`, `kind`, `startedAt`,
 `sessionId`, and `name`. The 2026-07-30 note also listed a `status` key; no
-row carried one on the re-run, so nothing may depend on it
-([ADR-024](DECISIONS.md#adr-024)). It is a poll rather than a push, and it
-says nothing about a pending permission, so it supplements hooks and does not
-replace them.
+row carried one on the 2026-08-02 re-run, so [ADR-024](DECISIONS.md#adr-024)
+narrowed what depended on it. Every row carries `status` on the installed
+2.1.270: `busy` and `idle` were observed live on 2026-09-15, and `shell` and
+`waiting` sit beside them in the CLI's own validator list, unobserved
+([ADR-035](DECISIONS.md#adr-035)). The registry the command reads,
+`%USERPROFILE%\.claude\sessions\<pid>.json`, also carries `procStart`, a
+process identity the CLI checks before listing a row, so a session the scan
+lists has a live process at the moment of listing. It is a poll rather than a
+push, and it says nothing about a pending permission, so it supplements hooks
+and does not replace them.
 
 Enumeration is no longer only a cold-start step. [ADR-028](DECISIONS.md#adr-028)
 (2026-09-13) has the daemon rerun it on its own 15-second timer for as long
 as it runs, outside the registry lock, so a slow or hanging enumeration call
-cannot stall hook ingestion. Each run does the same three things, whether it
-is the first one or the thousandth:
+cannot stall hook ingestion. Each run does the same things, whether it is the
+first one or the thousandth:
 
 1. Enumerate the live sessions. A session not already bound is bound now, at
    the end of the list, by any enumeration hit or hook event, whichever
    happens first; an already-bound session is only relabelled, never
-   restated.
-2. Map a `busy` status to `THINKING`, where a status is reported at all.
-3. Map everything else, including a status the daemon does not recognise and a
-   status that is absent, to `UNKNOWN`.
+   restated. A pid the daemon holds no handle for yet gets one opened now,
+   per the liveness rule above ([ADR-035](DECISIONS.md#adr-035)).
+2. Map the reported `status`, but only for a session hooks have not
+   coloured: one that is `UNKNOWN`, or has never been heard from by a hook
+   this run. `busy` and `shell` map to `THINKING`, `waiting` to
+   `NEEDS_INPUT`, `idle` to `IDLE`; any other value, including one absent or
+   unrecognised, leaves the state alone. Once a hook has coloured a session
+   this step never recolours it, and it never produces `COMPLETE`: hooks
+   carry what the scan cannot (green means finished and unread, amber
+   carries the question, red carries the error), and a coarse `idle` must
+   not erase them ([ADR-035](DECISIONS.md#adr-035)).
 
-On 2.1.220 no row carries a status, so step 2 never fires and every freshly
-bound session lands in step 3. The rule is kept rather than deleted because
-it costs nothing if the key comes back, not because state recovery works
-today. What this channel actually buys is binding and labelling, not state:
-a session enumeration alone finds is bound and named correctly, but stays
-grey until a hook for it actually arrives. That is a smaller claim than the
-one [ADR-017](DECISIONS.md#adr-017) made, and it is the one the observation
-supports.
+On 2.1.220 no row carried a status, so step 2 never fired and every freshly
+bound session stayed `UNKNOWN` until a hook arrived. On the installed 2.1.270,
+step 2 runs its full mapping, so a session the scan finds idle, busy,
+waiting, or in a shell is coloured correctly on the next scan instead of
+sitting grey. What this channel buys is no longer only binding and
+labelling: within that mapping, and only until a hook has something more
+specific to say, it buys state too. This is a larger claim than
+[ADR-017](DECISIONS.md#adr-017) made and [ADR-024](DECISIONS.md#adr-024) had
+to take back; [ADR-035](DECISIONS.md#adr-035) re-earns it, on the strength of
+`status` actually being observed this time.
 
-The daemon tracks that wait as `heard` on the session: false at binding,
-whether by enumeration or by restoring from disk, and set true on the
-first hook event received in this run. The state value stays `UNKNOWN`
-either way, so this is bookkeeping for the surface's word, not a new state;
-the row itself reads "not heard yet" instead of "unknown" for exactly the
-session this paragraph describes, per
-[ADR-029](DECISIONS.md#adr-029) and [UI_SPEC.md](UI_SPEC.md#row-anatomy).
+The daemon tracks whether a hook has spoken for a session this run as
+`heard`: false at binding, whether by enumeration or by restoring from disk,
+and set true on the first hook event received in this run. `heard` gates
+step 2's colouring, not only the surface's word choice: the row reads "not
+heard yet" instead of "unknown" for exactly the session this paragraph
+describes, per [ADR-029](DECISIONS.md#adr-029) and
+[UI_SPEC.md](UI_SPEC.md#row-anatomy).
 
-A bound session leaves the list when it ends, or when a *successful*
-enumeration run no longer lists it and it has had no hook event for 60
-seconds. A failed enumeration call (a non-zero exit that is not the known
-255-on-success case, or output that does not parse) prunes nothing: missing
-information is never grounds for removing a row. This replaces the earlier
-six fixed, manually filled slots with an unbounded list that a session can
-join or leave entirely on its own ([ADR-028](DECISIONS.md#adr-028)).
+A bound session leaves the list on one of three events
+([ADR-035](DECISIONS.md#adr-035)): a `SessionEnd`, the daemon's held handle
+reporting the process has exited, or, only for a session the daemon holds no
+handle for (no pid known, or the handle could not be opened), a *successful*
+enumeration run no longer listing it after 60 seconds with no hook event. A
+failed enumeration call (a non-zero exit that is not the known 255-on-success
+case, or output that does not parse) prunes nothing: missing information is
+never grounds for removing a row. This replaces the earlier six fixed,
+manually filled slots with an unbounded list that a session can join or
+leave entirely on its own ([ADR-028](DECISIONS.md#adr-028)).
 
-Step 3 is not a formality. `IDLE` is the one guess that looks like knowledge:
-a white tile says "nothing here needs you", which is exactly the claim the
-daemon cannot make about a session it has never observed. The daemon never
-guesses idle.
+`IDLE` from the scan is a read, not a guess, which is worth stating plainly
+since the rule used to be stricter. A white tile says "nothing here needs
+you"; before 2.1.270 confirming that claim needed a hook, because no
+enumeration field said so and the daemon would not invent one. The
+registry's `procStart` check means a `status: "idle"` row is a live process
+Claude Code itself calls idle at the moment of listing, not a guess dressed
+up as one, so step 2 may colour `IDLE` for a session hooks have not spoken
+for. What the daemon still never does is show `IDLE` the scan did not
+report.
 
 This narrows [ADR-005](DECISIONS.md#adr-005), which named hooks as the status
-source. ADR-005 stands as written; [ADR-017](DECISIONS.md#adr-017) supersedes
-that part of it.
+source. ADR-005 stands as written; [ADR-017](DECISIONS.md#adr-017) and
+[ADR-035](DECISIONS.md#adr-035) supersede that part of it.
 
 One limitation belongs here and not only in the adapter. `documented`: the
 switches that turn hooks off (`disableAllHooks`, `--safe-mode`, `--bare`) turn
@@ -542,17 +588,18 @@ These are real and unresolved. They are tracked in [TODO.md](../TODO.md).
    design is trusted. If it is too slow, the fallback is to hook only the events
    needed for status and gate permissions on a narrower matcher.
 2. **Whether `ERROR` is detectable at all.** Amber and blue and green are
-   straightforward. A failed turn may not surface as a distinct hook event. If
-   it does not, red may only ever mean "the process died", and the spec should
-   say so honestly rather than promise a colour that never lights. A candidate
-   event is now `documented` (`StopFailure`), but nothing has been observed
-   firing here, so this question stays open and red stays a narrow promise.
-3. **Confirming process death on Windows** cheaply enough to poll.
-4. **Whether the terminal keystroke fallback is worth shipping at all.** It may
+   straightforward. A failed turn may not surface as a distinct hook event,
+   and process death no longer stands in for it: confirmed death now moves a
+   session straight to `ENDED`, not `ERROR` ([ADR-035](DECISIONS.md#adr-035)).
+   If `StopFailure` never fires, red may end up a promise nothing ever
+   redeems, and the spec should say so honestly rather than claim a colour
+   that never lights. A candidate event is `documented` (`StopFailure`), but
+   nothing has been observed firing here, so this question stays open.
+3. **Whether the terminal keystroke fallback is worth shipping at all.** It may
    be that attached mode should simply not offer send, and that wanting to send
    is the reason to use hosted mode.
-5. **Whether one daemon should serve several surfaces**, for example a second
+4. **Whether one daemon should serve several surfaces**, for example a second
    window on a tablet.
-6. **Binding stability across `--resume`.** Resuming appears to continue under
+5. **Binding stability across `--resume`.** Resuming appears to continue under
    the same session id, but a tile pointing at a session that forked needs
    defined behaviour.
