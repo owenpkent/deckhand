@@ -24,6 +24,8 @@ Checking a box here means the item is done, not that it is perfect. See
 - [x] `docs/ACCESSIBILITY.md`
 - [x] `docs/DECISIONS.md`
 - [x] `docs/EXECUTIVE_SUMMARY.md`
+- [x] `docs/WHITEPAPER.md`, with a PDF build in
+      `scripts/build-whitepaper.ps1`
 - [x] `docs/WORKFLOW.md`
 - [x] `CONTRIBUTING.md`
 - [x] `ROADMAP.md`

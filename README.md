@@ -22,7 +22,8 @@ to the front in a single click.
 ---
 
 **New here?** The short version is
-[docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md), the design ledger is
+[docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md), the full technical
+account is [docs/WHITEPAPER.md](docs/WHITEPAPER.md), the design ledger is
 [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md), and the ways to help are in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -204,6 +205,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 deckhand/
 ├── docs/                  The specification (start here)
 │   ├── EXECUTIVE_SUMMARY.md   Two pages, no jargon
+│   ├── WHITEPAPER.md          The whole system in one technical paper
 │   ├── CONTROL_MAPPING.md     Device control to software control, with reasons
 │   ├── ARCHITECTURE.md        Daemon, shim, surface, state machine
 │   ├── ADAPTER_PROTOCOL.md    The contract any agent runtime plugs into

@@ -39,6 +39,12 @@ the file most likely to drift without anyone noticing. If it disagrees with
 any other file in this table, it is wrong, and it is the file that gets
 corrected.
 
+`docs/WHITEPAPER.md` is derived in the same way, at more depth, and is
+also authoritative for nothing. It carries numbers (timers, test counts,
+line counts) that drift with the code, so re-read it whenever the
+executive summary is re-read, and rebuild its PDF with
+`scripts/build-whitepaper.ps1` before sharing one.
+
 ---
 
 ## 2. Change-propagation table

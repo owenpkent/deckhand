@@ -13,6 +13,14 @@ version number is invented and no past release is backfilled.
 
 ### Added
 
+- **A technical white paper** ([docs/WHITEPAPER.md](docs/WHITEPAPER.md)).
+  One document covering the problem, the surface, the architecture, how
+  the three observation channels are reconciled, the Windows integration,
+  the security model, the accessibility rules, the evidence behind each
+  integration claim, and the limitations. Derived, never authoritative.
+  `scripts/build-whitepaper.ps1` typesets it to a PDF with pandoc and
+  tectonic, into `target\whitepaper\`.
+
 - **Process liveness: a handle per session, exit ends the row**
   ([ADR-035](docs/DECISIONS.md#adr-035)). When a scan reports a pid for a
   session, the daemon opens an `OpenProcess(SYNCHRONIZE)` handle on it and
