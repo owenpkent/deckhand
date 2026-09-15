@@ -503,8 +503,10 @@ New commands, every one taking no argument from the webview:
 | `reset_window_position` | Moves the window to `window::default_rect`'s placement and persists the result. |
 | `repair_hooks` | `async`; reruns `scripts/install-hooks.ps1` off the webview/event thread via `spawn_blocking`, the same pattern `activate_session` uses for its reveal wait, bounded at 20 s. |
 
-`toggle_hide_unknown` is unchanged; only where the surface shows the
-setting moved, into a panel row rather than a header button.
+`toggle_hide_unknown` is not one of these new commands and is
+unchanged: it is still called from the header's own Hide grey switch
+([ADR-030](DECISIONS.md#adr-030)), which never moved into the panel,
+only restyled in place ([ADR-034](DECISIONS.md#adr-034)).
 
 ## Stack
 
@@ -515,7 +517,7 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 
 | Data | Where | Notes |
 | --- | --- | --- |
-| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown` (the settings panel's Hide unknown row, [ADR-030](DECISIONS.md#adr-030), moved off the header by [ADR-033](DECISIONS.md#adr-033)) and `always_on_top` (the same panel's Always on top row, [ADR-033](DECISIONS.md#adr-033), default `true`); a missing field or a corrupt file loads each at its own default rather than failing |
+| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown` (the header's own Hide grey switch, [ADR-030](DECISIONS.md#adr-030), left there rather than moved by [ADR-033](DECISIONS.md#adr-033)) and `always_on_top` (the settings panel's Always on top row, [ADR-033](DECISIONS.md#adr-033), default `true`); a missing field or a corrupt file loads each at its own default rather than failing |
 | Start with Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Deckhand` | Not mirrored into `settings.json`; the registry value itself is the only source of truth, read fresh on every panel open and every toggle ([ADR-033](DECISIONS.md#adr-033)) |
 | Session bindings | Local config directory, `bindings.json` | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
