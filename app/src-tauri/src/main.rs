@@ -9,7 +9,10 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use deckhand::{enumerate, hook_status, http, installer, persist, registry, reveal, reveal_queue, runkey, window};
+use deckhand::{
+    enumerate, hook_status, http, installer, instance, persist, registry, reveal, reveal_queue, runkey, watchdog,
+    window,
+};
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -497,6 +500,30 @@ async fn activate_session(
 }
 
 fn main() {
+    // Single instance and crash restart (ADR-037). The instance mutex is
+    // held for the whole life of this process and released by the
+    // kernel on any exit, including a crash (instance.rs); a second
+    // launch that finds it already held raises the first window and
+    // exits rather than starting a second daemon. The watchdog is this
+    // same binary, relaunched into a headless mode (`--watchdog
+    // <parent_pid>`) that only waits on the parent's exit code and
+    // decides whether to relaunch it (watchdog.rs); it must be claimed
+    // first, before the instance mutex and before Tauri starts, so a
+    // `--watchdog` invocation never touches the window or the mutex at
+    // all.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() == 3 && args[1] == "--watchdog" {
+        let code = args[2].parse::<u32>().map(watchdog::run).unwrap_or(2);
+        std::process::exit(code);
+    }
+    if let instance::Claim::AlreadyRunning = instance::claim() {
+        instance::raise_existing();
+        return;
+    }
+    if let Err(e) = watchdog::spawn_for(std::process::id()) {
+        eprintln!("deckhand: no watchdog: {e}");
+    }
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             snapshot,
