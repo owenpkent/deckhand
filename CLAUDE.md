@@ -112,7 +112,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 035.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 036.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **When to write an ADR:** only for big decisions: the security model,
   the approval path, what Deckhand may do, adapter capabilities, new
@@ -134,7 +134,9 @@ below. Skip it in searches.
    **partial** verification stamp against 2.1.220. Four things are observed;
    hook names, payload fields, and the decision vocabulary are `documented`
    at best. Keep the hedge when citing them, and do not claim the file is
-   wholly unverified either.
+   wholly unverified either. The scan's `status` key is a separate,
+   narrower observation, against 2.1.270, not against 2.1.220
+   ([ADR-035](docs/DECISIONS.md#adr-035)).
 3. Interaction rules in [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) are
    requirements, not guidance: no required holds, drags, double-clicks,
    hovers, or keyboard. 44 px minimum targets.
@@ -180,8 +182,15 @@ into a gear-triggered settings panel alongside four new settings
 status with Repair). ADR-034 redrew that panel the next day: icon
 buttons for the gear and Quit, toggle switches, a combined Hooks and
 Repair row, three titled panel sections, rounded rows with a left
-accent bar, and a window-sizing fix for the panel's own scrollbar;
-`app/` implements all of these.
+accent bar, and a window-sizing fix for the panel's own scrollbar.
+ADR-035, the day after that, gave the daemon a second liveness channel:
+a process handle held per session, polled on the existing two-second
+tick, so exit without a `SessionEnd` moves a session straight to
+`ended` instead of leaving a red or grey row behind. Where a hook has
+not yet coloured a session, the periodic scan now does, from `status`
+on the installed 2.1.270; `T_unknown` narrows so a session with a live
+handle stops greying from silence alone. `app/` implements all of
+these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

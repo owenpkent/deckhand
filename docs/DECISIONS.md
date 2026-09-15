@@ -1785,3 +1785,121 @@ daemon can read or write, and no change to
 [CONTROL_MAPPING.md](CONTROL_MAPPING.md), `README.md`, `CHANGELOG.md`,
 and `CLAUDE.md` (next ADR bumped to 035) are updated to match in the
 same change.
+
+<a id="adr-035"></a>
+## ADR-035: Liveness from the process, state from the scan
+
+Date: 2026-09-15
+
+**Context.** Two failures showed up in dogfooding. A session left idle for
+fifteen minutes turned grey, and rows disappeared from the list after a
+while with nothing having ended. With the grey toggle on, a greyed row is
+also a hidden row, so the two symptoms may have been one. Both trace to
+the same gap: the daemon has no proof that a session's process is alive.
+It has hook events, which stop arriving the moment a session has nothing
+to do, and the periodic `claude agents --json` scan, which it has treated
+as a source of pids and labels only.
+
+The greying came from `T_unknown` ([ADR-016](#adr-016)): fifteen minutes
+with no hook event moves any session to `unknown`, measured from the last
+event of any kind and suspended by nothing. That rule was written for a
+runtime that could die without a trace, and it cannot tell a session
+waiting for its owner from one whose terminal was killed. The
+disappearances came from the membership rule in [ADR-028](#adr-028): a
+bound session that a successful scan omits, and that has had no hook for
+sixty seconds, is dropped. Whether the rows the owner lost were omitted by
+the scan or had really exited, the daemon could not have told the
+difference, and it logs neither.
+
+Meanwhile the scan's output shape changed again. [ADR-024](#adr-024)
+narrowed [ADR-017](#adr-017) because 2.1.220 returned no `status` key, and
+named its own reopen condition: "It reopens if a release adds a
+status field to the enumeration, at which point the conditional in step
+2 starts firing on its own." On the installed 2.1.270 every row carries
+`status`. The values
+`busy` and `idle` were observed live on 2026-09-15; `shell` and `waiting`
+sit beside them in the CLI's own validator list and have not been
+observed. The registry the command reads,
+`%USERPROFILE%\.claude\sessions\<pid>.json`, also carries `procStart`, a
+process identity the CLI checks before listing a row, so a session the
+scan lists has a live process at the moment of listing. TODO.md has
+carried the fix since [ADR-032](#adr-032): hold a process handle per
+session, flip to `ended` when it exits, and stop greying a live idle
+session.
+
+**Decision.** Two channels, each doing only what it can prove.
+
+1. *Liveness from the process.* When a scan reports a pid for a session,
+   the daemon opens a handle on it with `OpenProcess(SYNCHRONIZE)` and
+   keeps it for the life of the session. The daemon's existing two-second
+   tick thread asks the handle, with a zero-timeout wait, whether the
+   process has exited. Exit
+   without a `SessionEnd` moves the session to `ended` and off the list,
+   exactly as `SessionEnd` would; only a `SessionStart` revives it. A
+   held handle also stops Windows from reusing the pid, so no start-time
+   check is needed. A session with a live handle is never dropped because
+   a scan omitted it; the sixty-second prune now applies only to sessions
+   the daemon holds no handle for (no pid known, or the handle could not
+   be opened). A handle is opened from a scan sighting only, never from a
+   pid restored from disk, since a restored pid may already name another
+   process.
+
+2. *State from the scan, when hooks have not spoken.* The scan's `status`
+   colours a session only while hooks have not: when the session is
+   `unknown`, or has never been heard from by a hook in this run. The
+   mapping is `busy` and `shell` to `thinking`, `waiting` to
+   `needs_input`, `idle` to `idle`; any other value leaves the state
+   alone. Once a hook has coloured a session the scan never recolours it:
+   hooks carry what the scan cannot (green means finished and unread,
+   amber carries the question, red carries the error), and a coarse
+   `idle` must not erase them. The scan never produces `complete`.
+
+3. *`T_unknown` narrowed.* For a session with a live handle, silence is
+   not degradation: `idle`, `complete`, `error`, and `needs_input` hold
+   for as long as the process lives. The one exception is `thinking`: a
+   turn in flight produces hook events, so a `thinking` session with no
+   hook for `T_unknown` whose latest scan status is not `busy`, `shell`,
+   or `waiting` moves to `unknown`, because the two channels disagree and
+   the colour cannot be trusted. For a session without a handle the old
+   rule stands with one change: being listed by a successful scan counts
+   as an event of any kind, so the fifteen minutes run from the later of
+   the last hook and the last sighting.
+
+Process death without `SessionEnd` is `ended`, not the `error` that
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) had pencilled in. Red
+with no exit path would sit on the list until the daemon restarted, since
+no further event can arrive for a dead process, and a crash is already
+visible in the host window the row points at. This closes the open
+question in [ARCHITECTURE.md](ARCHITECTURE.md) on confirming process
+death cheaply enough to poll: a held handle and a zero-timeout wait cost
+microseconds per session per tick.
+
+**Consequences.** After a daemon restart the scan colours every live
+session within one rescan instead of leaving the list grey, the failure
+[ADR-017](#adr-017) originally claimed to fix and [ADR-024](#adr-024) had
+to take back. An idle session stays white for as long as its process
+lives. A row leaves the list on `SessionEnd`, on process exit, or, for a
+session with no handle, on the existing scan-plus-sixty-seconds rule. The
+`unknown` state keeps its meaning, observation degraded and never a
+guess; what changes is that a live process waiting for its owner is no
+longer called degraded.
+
+The known limit: if the hook channel breaks mid-session while the process
+lives, a session parked in `idle`, `complete`, `error`, or `needs_input`
+keeps that colour until a hook or the process exit moves it. The settings
+panel's hooks status row is the place to notice a broken channel. The
+transcript fallback in TODO.md remains the planned answer for missed
+individual events and is not changed here.
+
+ADR-024's conditional (`busy` to `thinking`, kept in the spec at no cost)
+now fires: [ADR-024](#adr-024) is superseded on that point and stands on
+the rest. `list_sessions` keeps its `documented` confidence, now observed
+against 2.1.270 as well, and nothing beyond the mapping above depends on
+the key being present. [ADR-016](#adr-016) is superseded on the
+`T_unknown` rule as stated in point 3. The 2.1.220 stamp on
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) stays partial; the
+`status` observation carries its own 2.1.270 stamp.
+[ARCHITECTURE.md](ARCHITECTURE.md),
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md), `TODO.md`,
+`CHANGELOG.md`, and `CLAUDE.md` (next ADR bumped to 036) are updated in
+the same change.

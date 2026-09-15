@@ -13,6 +13,36 @@ version number is invented and no past release is backfilled.
 
 ### Added
 
+- **Process liveness: a handle per session, exit ends the row**
+  ([ADR-035](docs/DECISIONS.md#adr-035)). When a scan reports a pid for a
+  session, the daemon opens an `OpenProcess(SYNCHRONIZE)` handle on it and
+  keeps it for the session's life, polled with a zero-timeout wait on the
+  existing two-second tick. Exit without a `SessionEnd` now moves the
+  session straight to `ended` and off the list, exactly as `SessionEnd`
+  would; only a `SessionStart` revives it. A handle is opened only from a
+  scan sighting, never from a pid restored from disk, since a restored pid
+  may already name another process.
+
+### Changed
+
+- **The scan colours a never-heard session, `T_unknown` narrows, and list
+  membership follows the handle** ([ADR-035](docs/DECISIONS.md#adr-035)).
+  `claude agents --json`'s `status` key, absent on 2.1.220, is present on
+  the installed 2.1.270: `busy` and `shell` map to `thinking`, `waiting` to
+  `needs_input`, `idle` to `idle`, applied only to a session no hook has
+  coloured yet and never producing `complete`. `T_unknown`
+  (900 s, [ADR-016](docs/DECISIONS.md#adr-016)) now narrows for a session
+  with a live handle: `idle`, `complete`, `error`, and `needs_input` hold
+  for as long as the process lives, and only a `thinking` session the scan
+  does not confirm `busy`, `shell`, or `waiting` still times out to
+  `unknown`. A session with no handle keeps the old rule, except a
+  successful scan sighting now also counts as an event of any kind. A
+  bound session now leaves the list on `SessionEnd`, on the handle
+  reporting the process gone, or, only for a session with no handle, on
+  the existing scan-plus-sixty-seconds prune. `docs/ARCHITECTURE.md`,
+  `docs/CLAUDE_CODE_ADAPTER.md`, `TODO.md`, and `CLAUDE.md` are updated to
+  match, and `app/` implements the change.
+
 - **A settings panel, opened by a new gear button that replaces the
   header's grey toggle** ([ADR-033](docs/DECISIONS.md#adr-033)). The
   panel replaces the session list in place (not a second window),

@@ -111,9 +111,14 @@ Checking a box here means the item is done, not that it is perfect. See
       and a synthetic click was then received by a button in the webview
       while the foreground window never changed and the spike window never
       activated. Hedges and untested cases are in the ADR.
-- [ ] Confirm whether a genuine Claude Code error state (crash, process
+- [x] Confirm whether a genuine Claude Code error state (crash, process
       death, the adapter losing the session) can be detected at all through
-      hooks, or whether it needs a separate supervisory heartbeat.
+      hooks, or whether it needs a separate supervisory heartbeat. Answered
+      by [ADR-035](docs/DECISIONS.md#adr-035) (2026-09-15): not through
+      hooks. The daemon holds a process handle per session, opened from a
+      scan sighting, and polls it on the existing two-second tick; no
+      separate heartbeat process is needed. Process death without a
+      `SessionEnd` moves the session to `ended`, not `error`.
 - [ ] Decide what happens when two Claude Code sessions share a `cwd`.
       `docs/CLAUDE_CODE_ADAPTER.md` should say.
 - [ ] Decide the transcript JSONL fallback's exact trigger condition: when
@@ -219,11 +224,14 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       (`Code.exe`, `WindowsTerminal.exe`, or a plain console), then
       raises through the strategy chosen for that host. It does not
       populate an ADR-023 `host` field; that axis is unaffected.
-- [ ] Take liveness from the pid: hold a process handle per session and
+- [x] Take liveness from the pid: hold a process handle per session and
       flip to `ended` the moment it exits, and stop greying a live idle
       session at the fifteen-minute mark. Not resolved by ADR-032, which
-      only changed how Reveal finds a window for a pid it already has;
-      this still needs its own ADR.
+      only changed how Reveal finds a window for a pid it already has.
+      Landed as [ADR-035](docs/DECISIONS.md#adr-035) (2026-09-15): an
+      `OpenProcess(SYNCHRONIZE)` handle per session, opened from a scan
+      sighting, polled with a zero-timeout wait on the existing
+      two-second tick.
 - [x] Bring `app/` in line with ADR-028: replace the six-slot tile surface
       and its manual bind picker, command keys, stick, dial, talk and
       send placeholders, detail panel, layer strip, and corner badges
