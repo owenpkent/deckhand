@@ -18,7 +18,10 @@
 // signal, and prune_missing checks it before dropping anything. What
 // colour a listed row shows is a separate question, answered by
 // `state.rs` (`apply_hook` and, now, `apply_scan_state`) and by
-// `Session::tick`, not by list membership.
+// `Session::tick`, not by list membership. ADR-036 adds one exception to
+// the hook-always-wins rule inside `apply_scan_state`: two consecutive
+// scans that contradict a hook-set colour, with no hook event landing
+// between them, recolour the session anyway.
 
 use std::collections::{HashMap, HashSet};
 
@@ -150,9 +153,12 @@ impl Registry {
     /// ADR-035: state is no longer left unknown by rule. A `status` key
     /// has been observed since ADR-024 and colours the session
     /// (`Session::apply_scan_state`) precisely when no hook has already
-    /// coloured it; a hook still always wins. Also auto-binds:
-    /// enumeration is the only channel that ever sees a session in
-    /// another repo, one with no hook wired up at all.
+    /// coloured it; a hook still always wins, except for ADR-036's
+    /// tie-break, which lets two consecutive scans that disagree with a
+    /// hook-set colour, and no hook event landing between them, override
+    /// it anyway. Also auto-binds: enumeration is the only channel that
+    /// ever sees a session in another repo, one with no hook wired up at
+    /// all.
     pub fn register_enumerated(
         &mut self,
         id: &str,

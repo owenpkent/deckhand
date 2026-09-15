@@ -113,7 +113,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 036.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 037.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **When to write an ADR:** only for big decisions: the security model,
   the approval path, what Deckhand may do, adapter capabilities, new
@@ -163,8 +163,8 @@ state machine tests, and paints real tiles from synthetic events through
 the real shim; `scripts/build-app.ps1` builds it, and gitignored
 `.claude/settings.local.json` wires this repo's sessions into the shim
 for dogfooding. The open Phase 1 work is in [TODO.md](TODO.md): daemon
-lifecycle, installable hook registration, the transcript fallback, and
-the six-session colour test. ADR-023 added the host axis, ADR-024
+lifecycle, installable hook registration, and the six-session colour
+test. ADR-023 added the host axis, ADR-024
 corrected the enumeration to bindings-not-state, and ADR-025 recorded
 the window spike pass that Phase 1's window builds on. ADR-027 folded
 the raise into the tile click: selecting a session brings its window
@@ -193,8 +193,13 @@ exit without a `SessionEnd` moves a session straight to `ended`
 instead of leaving a red or grey row behind. Where a hook has not yet
 coloured a session, the periodic scan now does, from `status` on the
 installed 2.1.270; `T_unknown` narrows so a session with a live
-handle stops greying from silence alone. `app/` implements all of
-these.
+handle stops greying from silence alone. ADR-036, the same day,
+gave the scan one more job: after two consecutive scans contradict a
+hook-set colour with no hook between them, about thirty seconds, the
+scan breaks the tie instead of waiting on `T_unknown`. The planned
+transcript fallback is retired with it, not built; the scan's
+`status` already answers what it would have, from a documented
+command. `app/` implements all of these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

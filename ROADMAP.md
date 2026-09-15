@@ -173,7 +173,9 @@ through the contract.
 
 - Mouse-only or it does not ship. This is not negotiable per feature.
 - Documented interfaces over fragile internals. The transcript JSONL
-  fallback stays a fallback, permanently.
+  fallback was retired before being built
+  ([ADR-036](docs/DECISIONS.md#adr-036)): the scan's documented `status`
+  already answers what it would have.
 - Never guess a status colour. Show unknown instead of a wrong answer.
 - The approve button is a security surface, not a convenience. Treat every
   change near it accordingly.

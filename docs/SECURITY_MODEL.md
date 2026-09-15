@@ -170,8 +170,7 @@ the design, because they turn a security decision into configuration.
   They appear on disk only if the audit log is enabled, and the audit log
   stores the tool name and a hash of the input by default, full input only if
   explicitly configured.
-- Deckhand reads transcripts where Claude Code already keeps them and copies
-  nothing out of them.
+- Deckhand does not read transcripts ([ADR-036](DECISIONS.md#adr-036)).
 - Logs default to metadata, not content.
 
 ### 6. Touch other tools' config like a guest

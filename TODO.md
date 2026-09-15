@@ -121,10 +121,14 @@ Checking a box here means the item is done, not that it is perfect. See
       `SessionEnd` moves the session to `ended`, not `error`.
 - [ ] Decide what happens when two Claude Code sessions share a `cwd`.
       `docs/CLAUDE_CODE_ADAPTER.md` should say.
-- [ ] Decide the transcript JSONL fallback's exact trigger condition: when
+- [x] Decide the transcript JSONL fallback's exact trigger condition: when
       Deckhand falls back to reading
       `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`, and how it
       detects that the schema it expects has changed underneath it.
+      Retired by [ADR-036](docs/DECISIONS.md#adr-036) (2026-09-15), not
+      built: the scan's `status` answers the same question from a
+      documented command, `claude agents --json`, instead of an
+      undocumented file.
 - [x] Write down the minimum hit target size as an actual number, with a
       rationale: 44 px, in `docs/ACCESSIBILITY.md`, echoed in
       `docs/UI_SPEC.md`.
@@ -195,8 +199,11 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       Done 2026-08-02: unbound tiles render dashed with a plus and open
       the bind picker; first-heard sessions auto-fill free tiles. Unbind
       landed the same day in the detail panel.
-- [ ] Implement the transcript JSONL fallback path for a missed hook
-      event.
+- [x] Implement the transcript JSONL fallback path for a missed hook
+      event. Retired by [ADR-036](docs/DECISIONS.md#adr-036) (2026-09-15),
+      not built: the scan's `status` answers the same question from a
+      documented command, `claude agents --json`, instead of an
+      undocumented file.
 - [x] Handle daemon restart without losing which tile is bound to which
       session. Done 2026-08-02: bindings persist with labels, and a
       bound session the daemon has not seen renders as the right tile,

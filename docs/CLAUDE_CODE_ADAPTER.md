@@ -237,7 +237,7 @@ and it never reaches the reveal log or any other file Deckhand writes.
 | Status line JSON | Tile extras | Documented, keys observed 2.1.220, schema may grow |
 | Agent SDK (`@anthropic-ai/claude-agent-sdk`) | Hosted mode | Documented |
 | Enumerating `~/.claude/projects/` | Populating the bind picker | **Internal**, mangling observed 2.1.220 |
-| Transcript JSONL per-line schema | Last-resort detail | **Internal, changes between releases** |
+| Transcript JSONL per-line schema | Retired, unused ([ADR-036](DECISIONS.md#adr-036)) | **Internal, changes between releases** |
 | Window-title heuristics to find a session's window | Fallback host match when no usable `pid` exists, synthetic input. On a `vscode-extension` host it is the fallback for whichever session no lock file names a fitting workspace folder for, not the only route since [ADR-032](DECISIONS.md#adr-032) | **Synthetic** |
 | The extension's per-window MCP server, `~/.claude/ide/<port>.lock` (its WebSocket transport and twelve tools) | Nothing. Enumerated, evaluated for Reveal, and rejected | **Internal**, observed 2.1.220 |
 | The same lock file's plain JSON (`pid`, `workspaceFolders` only, never its `authToken` or its server) | Reveal's VS Code workspace match ([ADR-032](DECISIONS.md#adr-032)) | **Internal**, observed 2.1.270 |
@@ -573,8 +573,15 @@ Cold start, in order:
    `needs_input`, `idle` becomes `idle`. **Everything else, including a
    status that is missing or a value this adapter does not recognise,
    leaves the state alone.** Once a hook has coloured a session this step
-   never recolours it, and it never produces `complete`
-   ([ADR-035](DECISIONS.md#adr-035)).
+   does not recolour it on one contradicting scan, and it never produces
+   `complete` ([ADR-035](DECISIONS.md#adr-035)). The tie-break is the one
+   exception: after two consecutive scans contradict the hook-set colour
+   with no hook event between them, about thirty seconds at the
+   fifteen-second rescan, a `thinking` session the scan reports `idle`
+   moves to `idle`, and an `idle`, `complete`, or `error` session the scan
+   reports `busy` or `shell` moves to `thinking`. Any hook event resets
+   the count, `needs_input` is never touched, and `waiting` never triggers
+   it ([ADR-036](DECISIONS.md#adr-036)).
 3. A tile whose binding no enumeration explains stays `unknown` until an
    event arrives for it. That is the correct answer, not a failure. The
    surface's row for that case reads "not heard yet" rather than "unknown",
@@ -589,8 +596,9 @@ On 2.1.270 step 2 runs its full mapping instead of only the fallback branch
 2.1.220 left it, so a fresh restart colours every live session's row on the
 next scan instead of leaving it grey until a hook arrives. The `idle`
 mapping is still never a guess: it is read off `status`, backed by the
-session registry's own `procStart` check, not assumed, and it never
-overrides a colour a hook already set.
+session registry's own `procStart` check, not assumed, and it does not
+override a colour a hook already set except through the tie-break above
+([ADR-036](DECISIONS.md#adr-036)).
 
 The `pid` from the same call is what Reveal should match a host window on,
 in preference to window-title heuristics, since a title is a guess and a

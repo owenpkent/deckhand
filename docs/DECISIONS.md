@@ -1923,3 +1923,74 @@ the key being present. [ADR-016](#adr-016) is superseded on the
 [CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md), `TODO.md`,
 `CHANGELOG.md`, and `CLAUDE.md` (next ADR bumped to 036) are updated in
 the same change.
+
+<a id="adr-036"></a>
+## ADR-036: The scan breaks ties when hooks fall silent; the transcript fallback is retired
+
+Date: 2026-09-15
+
+**Context.** [ADR-035](#adr-035) gave the scan two jobs, liveness through a
+process handle and colour for a session no hook has coloured, and drew one
+line: once a hook has coloured a session, the scan never recolours it. That
+line left one gap. A `Stop` or `PostToolUse` that never arrives leaves a
+session blue while the CLI sits idle, and nothing corrects it until
+`T_unknown` turns it grey fifteen minutes later; a lost `UserPromptSubmit`
+leaves a green or white row while a turn runs. The planned answer since
+Phase 0 was the transcript fallback: tail the session's JSONL under
+`%USERPROFILE%\.claude\projects\` and infer the turn boundary from it.
+TODO.md carried its two halves, the trigger condition and the parser, and
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md) already rated the
+per-line schema "internal, changes between versions" and the channel a
+last resort.
+
+Two things changed the trade. The scan now carries `status`, observed on
+2.1.270, and reports `idle` within one fifteen-second rescan of a turn
+ending, hooks or no hooks; it is the same signal the transcript would have
+been read for, from a documented command rather than an undocumented file.
+And no missed hook has been observed in dogfooding: ten of the twelve
+documented events have fired with full payloads, and the two unobserved
+ones (`Notification`, `StopFailure`) are not the ones a fallback would
+recover. This session's own transcript is already 1.7 MB. Building a
+tailing parser against a format the adapter doc itself calls fragile, for
+a failure not yet seen, is the wrong trade.
+
+**Decision.**
+
+1. *The tie-break.* The scan may recolour a hook-coloured session in
+   exactly two cases, and only after two consecutive scans contradict the
+   hook-set colour with no hook event between them (about thirty seconds
+   at the fifteen-second rescan): a `thinking` session the scan reports
+   `idle` moves to `idle`, with its open operations and child ledger
+   cleared, since a session the CLI calls idle has nothing in flight; an
+   `idle`, `complete`, or `error` session the scan reports `busy` or
+   `shell` moves to `thinking`, as a lost `UserPromptSubmit` would have
+   done. Any hook event resets the count. The scan still never produces
+   `complete`, still never touches `needs_input`, and `waiting` never
+   triggers the tie-break in either direction. ADR-035's immediate
+   colouring of a never-heard or `unknown` session is unchanged, and its
+   fifteen-minute rule for a `thinking` session the scan does not confirm
+   busy stands for the case where the scan carries no status at all.
+
+2. *The transcript fallback is retired.* Deckhand does not read session
+   transcripts. Hooks and `claude agents --json` are the only observation
+   channels; the `transcript_path` field hooks carry stays unused. Both
+   TODO items close as retired, not as done. Should a missed hook ever be
+   observed that the tie-break does not recover within a rescan, that
+   observation, not this decision, is the grounds to reopen.
+
+**Consequences.** A lost `Stop` costs about thirty seconds of wrong blue
+instead of fifteen minutes of wrong blue and then grey. A lost
+`UserPromptSubmit` costs about thirty seconds of stale white, green, or red
+instead of a whole turn. What the tie-break does not recover self-heals on
+the next hook: a `needs_input` whose answering `PostToolUse` was lost turns
+blue at the turn's next `PreToolUse`. Green stays a hook-only claim, so a
+turn whose `Stop` was lost shows white, not green; the finished-and-unread
+signal is lost with the hook, honestly, rather than reconstructed.
+
+The privacy position in [ARCHITECTURE.md](ARCHITECTURE.md) tightens from
+"transcripts are read where they already are" to "transcripts are not
+read". [ADR-035](#adr-035) is superseded on the one word "never" in its
+second point and stands on the rest. [ARCHITECTURE.md](ARCHITECTURE.md),
+[CLAUDE_CODE_ADAPTER.md](CLAUDE_CODE_ADAPTER.md),
+[EXECUTIVE_SUMMARY.md](EXECUTIVE_SUMMARY.md), `TODO.md`, `CHANGELOG.md`,
+and `CLAUDE.md` (next ADR bumped to 037) are updated in the same change.

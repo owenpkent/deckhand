@@ -37,5 +37,6 @@ Windows 11 is the reference platform. macOS and Linux are intended, not proven.
 ## Redaction reminder
 
 Claude Code session transcripts contain your prompts and your source code.
-Deckhand reads them locally and never sends them anywhere, but **you** might
-when you paste a log into an issue. Please check before you post.
+Deckhand does not read them ([ADR-036](docs/DECISIONS.md#adr-036)), but they
+still sit on disk, and **you** might paste one into an issue. Please check
+before you post.
