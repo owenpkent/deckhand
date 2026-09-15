@@ -228,9 +228,19 @@ impl Registry {
                     existing.label_is_derived = true;
                 }
             }
+            // A real name is accepted for its source, not its text: a
+            // session in `C:/dev/deckhand` genuinely named `deckhand`
+            // clears `label_is_derived` even though the string does not
+            // move, because the flag is what protects the label from
+            // the next cwd-only row, and a scan-first session with the
+            // same name is already protected that way. That flag-only
+            // transition counts as a change so it reaches
+            // `bindings.json` (persist.rs) and survives a restart.
             if let Some(n) = name {
-                if !n.is_empty() && (existing.label.is_empty() || existing.label_is_derived) && existing.label != n {
-                    existing.label = n.to_string();
+                if !n.is_empty() && (existing.label.is_empty() || existing.label_is_derived) {
+                    if existing.label != n {
+                        existing.label = n.to_string();
+                    }
                     existing.label_is_derived = false;
                     changed = true;
                 }
@@ -861,6 +871,31 @@ mod tests {
         // including by a later cwd-only row.
         r.register_enumerated("s3", None, Some("C:/dev/deckhand-renamed"), None, None, 3);
         assert_eq!(r.sessions["s3"].label, "deckhand-e4", "a real name outlives a later cwd-only scan row");
+
+        // The equality case (2026-09-15 review): the scan's real name is
+        // the directory name, character for character. The source still
+        // has to win over the string, or a session that was hook-first
+        // stays replaceable while its scan-first twin does not.
+        r.apply_hook(
+            &json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s4", "cwd": "C:/dev/deckhand"}),
+            1,
+        );
+        assert!(r.sessions["s4"].label_is_derived);
+        assert!(
+            r.register_enumerated("s4", Some("deckhand"), Some("C:/dev/deckhand"), None, None, 2),
+            "accepting a real name is a change even when its text already matches"
+        );
+        assert!(!r.sessions["s4"].label_is_derived, "the flag clears on the name's source, not its text");
+        assert!(
+            !r.register_enumerated("s4", Some("deckhand"), Some("C:/dev/deckhand"), None, None, 3),
+            "the same row again is a no-op"
+        );
+        r.register_enumerated("s4", None, Some("C:/dev/deckhand-renamed"), None, None, 4);
+        assert_eq!(
+            r.sessions["s4"].label,
+            "deckhand",
+            "a real name equal to the old directory name still outlives a cwd-only row"
+        );
     }
 
     // ---- register_enumerated: pid replacement policy --------------------

@@ -430,6 +430,35 @@ mod tests {
     }
 
     #[test]
+    fn a_real_name_equal_to_the_derived_label_stays_real_across_a_restart() {
+        // The 2026-09-15 review's equality case: a hook derived
+        // `deckhand` from the cwd, then the scan named the session
+        // `deckhand` too. The name's source, not its text, is what makes
+        // it real, so the flag has to clear and be saved even though
+        // nothing visible changed; otherwise a cwd-only row after a
+        // restart renames the session.
+        let dir = temp_dir();
+        let mut reg = Registry::default();
+        reg.apply_hook(
+            &serde_json::json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1", "cwd": "C:/dev/deckhand"}),
+            1,
+        );
+        assert!(reg.sessions["s1"].label_is_derived);
+        assert!(
+            reg.register_enumerated("s1", Some("deckhand"), Some("C:/dev/deckhand"), None, None, 2),
+            "the flag-only transition is a change, which is what gets it saved"
+        );
+        save_bindings_in(&dir, &reg);
+
+        let mut reg2 = Registry::default();
+        load_bindings_in(&dir, &mut reg2, 5);
+        assert!(!reg2.sessions["s1"].label_is_derived, "the real name comes back real");
+        reg2.register_enumerated("s1", None, Some("C:/dev/deckhand-renamed"), None, None, 6);
+        assert_eq!(reg2.sessions["s1"].label, "deckhand", "a real name outlives a later cwd-only row, restart included");
+        cleanup(&dir);
+    }
+
+    #[test]
     fn a_bound_id_the_registry_has_never_seen_materialises_as_unknown_with_the_saved_label() {
         let dir = temp_dir();
         // The legacy shape: a fixed six-element array with null gaps.
