@@ -114,6 +114,12 @@ below. Skip it in searches.
   the thing that justifies it.
 - **Next ADR: 035.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
+- **When to write an ADR:** only for big decisions: the security model,
+  the approval path, what Deckhand may do, adapter capabilities, new
+  dependencies, the stack, or a frozen constant. UI layout, styling,
+  control placement, and wording changes get a CHANGELOG line and the
+  spec files from the WORKFLOW.md table, not an ADR. The owner does not
+  manage ADRs; this is the assistant's call.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
   resolving, CI green.
