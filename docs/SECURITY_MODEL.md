@@ -189,6 +189,31 @@ the design, because they turn a security decision into configuration.
   project's `.claude/settings.json`, which is usually committed and would
   publish a machine-local shim path to everyone who clones the repository.
 
+**The settings panel's Repair action** ([ADR-033](DECISIONS.md#adr-033))
+is a second, narrower write path into `~/.claude/settings.json`, honestly
+described rather than folded into the bullets above: clicking Repair
+runs `scripts\install-hooks.ps1` directly, the same script and the same
+effect a person running it by hand would get, without first previewing
+a diff of what it will change the way the aspirational "hook block is
+shown in full" bullet above describes. That script is itself
+idempotent and touches only Deckhand's own hook entries (see its own
+comments), so the residual risk is narrow, but it is still a real gap
+against this rule's spirit and is named here rather than implied to be
+covered by it. The click is a single, explicit one, the row it lives on
+names exactly what it does ("Repair"), and it only runs at all when the
+running exe sits inside a checkout that still has that script beside
+it, a Phase 1 dev assumption ([TODO.md](../TODO.md)), not a security
+boundary.
+
+**Start with Windows** ([ADR-033](DECISIONS.md#adr-033)) writes exactly
+one registry value, named `Deckhand`, under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. It never reads or
+touches any other value under that key, and it writes or deletes only
+on an explicit click, never on a timer, a default, or a background
+sync. This is the same guest posture as the settings.json rule above,
+extended to the one other place outside Deckhand's own data directory
+this panel can write to.
+
 ### 7. The gate is narrow by default
 
 `PreToolUse` fires on every tool call, so the scope of the gate is a safety
@@ -344,6 +369,16 @@ an entirely fabricated request in front of the approve button.
    and unverified. Until it has been observed, the mitigation is prevention
    rather than reconciliation: the health check in rule 6 detects duplicate
    entries and offers to remove the ones that are not this install's.
+7. **The settings panel's Repair action runs an external script without a
+   preview.** Unlike the confirmation-first posture rule 6 describes for
+   `settings.json` in general, Repair (rule 6, [ADR-033](DECISIONS.md#adr-033))
+   launches `scripts\install-hooks.ps1` on a single click with no diff
+   shown first. The script itself only ever touches Deckhand's own hook
+   entries and is idempotent, and it only runs when the exe sits inside a
+   checkout that still has it, a Phase 1 dev assumption rather than
+   something a distributed build would ship. This is accepted for Phase 1
+   and should be revisited, alongside a preview step, before Repair is
+   ever pointed at anything other than this repository's own installer.
 
 ## Reporting
 

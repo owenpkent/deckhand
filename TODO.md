@@ -148,7 +148,10 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 `scripts/phase1-smoke.ps1` drives it with synthetic events end to end.
 
 - [ ] Design the daemon's process lifecycle (start on login, restart on
-      crash, single instance).
+      crash, single instance). The settings panel's Start with Windows
+      row ([ADR-033](docs/DECISIONS.md#adr-033)) covers "start on
+      login" as an opt-in HKCU Run key toggle; restart-on-crash and
+      single-instance are still undesigned.
 - [x] Implement the hook shim: the small program Claude Code calls, per
       `docs/CLAUDE_CODE_ADAPTER.md`. Done 2026-08-02: `shim/`, std-only,
       reads stdin, POSTs to the daemon's loopback port with the token
@@ -273,6 +276,36 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       token today and POST fabricated hook events, which only paints a
       false session in Phase 1 but would face an actual permission
       decision once Phase 2 wires one up.
+- [x] Design and implement a settings panel, opened by a header gear
+      button in place of the removed grey toggle
+      ([ADR-033](docs/DECISIONS.md#adr-033)): always on top, start with
+      Windows, reset window position, hide unknown (moved from the
+      header), and a hooks-installed status with a Repair action. Done
+      2026-09-14: `app/src-tauri/src/runkey.rs`,
+      `app/src-tauri/src/hook_status.rs`,
+      `app/src-tauri/src/installer.rs`, and the new panel rows in
+      `app/ui/src/main.ts`.
+- [x] Visual refresh of the header, settings panel, and session rows
+      ([ADR-034](docs/DECISIONS.md#adr-034)): icon buttons for the gear
+      and Quit, toggle switches, the panel regrouped into three titled
+      sections and cut from six rows to five (Hooks and Repair
+      combined), and a window-sizing fix for the panel's own scrollbar.
+      Done 2026-09-14: `app/ui/src/icons.ts` (new), `app/ui/src/main.ts`,
+      `app/ui/src/format.ts`, `app/ui/styles.css`, and
+      `app/src-tauri/src/window.rs`.
+- [ ] Manually verify Start with Windows against a real login: toggle
+      it on, reboot or log out and back in, and confirm Deckhand
+      actually launches. Only unit-tested so far (registry comparison
+      and formatting are pure functions; the real
+      `RegSetValueExW`/`RegDeleteValueW` calls are unverified against a
+      live Run key).
+- [ ] Manually verify Repair against a real, previously-installed
+      `~/.claude/settings.json`: confirm it upgrades a stale entry (a
+      raw path or a leftover timeout) in place without duplicating
+      groups or disturbing any other tool's hooks in the same file.
+      Only exercised so far against synthetic JSON in
+      `hook_status.rs`'s tests, never against a real file
+      `scripts/install-hooks.ps1` has actually written.
 
 ---
 
@@ -307,7 +340,11 @@ theming, is removed from the plan by
 partial code in `app/` from the change just before ADR-028; removing that
 code to match the session-list surface is tracked once, in Phase 1 above,
 rather than repeated per control here. A control returning to the surface
-needs its own ADR and its own line here.
+needs its own ADR and its own line here. The "settings surface" retired
+here was a broader, undesigned notion; [ADR-033](docs/DECISIONS.md#adr-033)
+(2026-09-14, tracked in Phase 1 above) later added a much narrower,
+concrete settings panel, six named rows and nothing else, which is not
+a reopening of this retired item.
 
 ---
 

@@ -11,6 +11,62 @@ version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Added
+
+- **A settings panel, opened by a new gear button added beside the
+  header's grey toggle** ([ADR-033](docs/DECISIONS.md#adr-033)). The
+  panel replaces the session list in place (not a second window),
+  resizing the same window through the existing resize path, and holds
+  five rows: Always on top (on by default, persisted, reapplies
+  `WS_EX_NOACTIVATE` after any topmost toggle and restores the taskbar
+  icon when off), Start with Windows (an `HKCU\...\Run` registry value
+  named `Deckhand`, read fresh on every toggle, tri-state so a copy
+  already pointed at a different exe reads "On (other copy)" instead of
+  silently turning off), Reset window position (moves the window to its
+  default placement and persists it), and a Hooks status row
+  ("Installed," "Outdated," "Missing," or "Unreadable," from a pure
+  parse of `~/.claude/settings.json`) with a Repair action that reruns
+  `scripts/install-hooks.ps1` off the UI thread, bounded at 20 seconds.
+  The header's grey toggle stays exactly where it was; it does not move
+  into the panel. New Tauri commands (`toggle_settings_panel`,
+  `get_settings_snapshot`, `toggle_always_on_top`,
+  `toggle_start_with_windows`, `reset_window_position`, `repair_hooks`)
+  take no argument from the webview, matching `toggle_hide_unknown`'s
+  existing shape. The Repair row is styled inactive rather than
+  natively disabled when no installer checkout is found nearby, since
+  its reason is already permanent, visible state text
+  (docs/ACCESSIBILITY.md forbids a disabled control that clicking
+  explains nothing).
+
+### Changed
+
+- **Visual refresh of the header, settings panel, and session rows**
+  ([ADR-034](docs/DECISIONS.md#adr-034)). The gear and Quit are now
+  inline svg icon buttons (`app/ui/src/icons.ts`) instead of text; the
+  gear's open state is a shape swap, cog to back arrow, plus a raised
+  background, not only a colour change. In the panel, Always on top
+  and Start with Windows render as a toggle switch (`role="switch"`,
+  `aria-checked`) beside their existing On/Off word, its state word to
+  the left, right-aligned against the switch's own left edge, so the
+  switch, the Reset row's icon, and the Repair button all end flush
+  against the same right edge. The header's own grey toggle gets the
+  same switch, and its wording shortens to "Hide grey" / "N hidden"
+  (was "Hide unknown" / "Show N unknown"). Reset window position is
+  now a two-line action row labelled "Reset position," and the Hooks
+  and Repair rows combine into one: a tinted status pill plus a real
+  Repair button, with Repair's own result as a secondary line. The
+  panel's four rows now sit in two titled sections, Window and Claude
+  Code, instead of one flat list. Session rows and panel cards both
+  gain rounded corners, a left accent bar in the row's own state
+  colour, a softer background tint (idle 5%, thinking and complete 8%,
+  needs input and error 14%, down from 6/14/22), and a shared 8 px
+  horizontal inset from the window's left and right edges; none of
+  ADR-008's six colours or their meanings change. The window now sizes
+  the open panel off a fixed formula (`panel_content_height_logical`
+  and `panel_window_height` in `window.rs`) instead of a flat row
+  count times `ROW_H_LOGICAL`, fixing a native scrollbar that used to
+  appear because the two had drifted apart.
+
 ### Fixed
 
 - **`ENDED` now absorbs every straggler, not just a clear or a resume.**

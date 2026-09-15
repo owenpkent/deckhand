@@ -15,7 +15,19 @@ rows out of the list. [ADR-031](DECISIONS.md#adr-031), also the same day,
 removed Move (the window is now repositioned by dragging only), made the
 whole header its own drag region, shrank it to 52 px, relabelled and
 restyled the grey toggle, and dropped the dashed outline unknown and
-ended rows used to share.
+ended rows used to share. [ADR-033](DECISIONS.md#adr-033) (2026-09-14)
+then added a gear button beside the grey toggle that opens a settings
+panel in place of the session list, described in its own section
+below. [ADR-034](DECISIONS.md#adr-034), the next day, redrew the
+header, the panel, and the session rows: icon buttons in place of
+text, toggle switches beside their On/Off words (the header's own grey
+toggle included, relabelled "Hide grey" / "N hidden"), a combined
+Hooks and Repair row, two titled sections grouping the panel, rounded
+rows with a left accent bar, a shared horizontal inset for rows and
+panel cards, and a window-sizing fix so the open panel no longer shows
+a scrollbar. Nothing it changed touches a frozen colour, a hit target,
+or the row height floor; see that entry for what carries forward
+unchanged.
 
 Mockups in [`assets/`](../assets/), embedded in the README, predate both
 and still draw the wider control set at the old sizes. They are drawings,
@@ -29,7 +41,7 @@ as a single vertical list:
 
 ```
  ┌───────────────────────────────┐
- │  ◆1 ✕1 ◐1   Hide unknown  ✕   │  header, 52 px, 44 px+ targets
+ │  ◆1 ✕1 ◐1      ⏻ Hide grey ⚙ ✕ │  header, 52 px, 44 px+ targets
  ├───────────────────────────────┤
  │ ○  undertow                   │  row, 64 px, two lines
  │    IDLE                       │
@@ -69,31 +81,83 @@ before it). The whole bar is the drag region, `data-tauri-drag-region`
 on `#header` itself; there is no separate grip, and the count pills sit
 on top of it with pointer events passed through, so a drag started on a
 pill still drags the window. In order: a read-only summary of session
-counts, the grey toggle (present only when there is something to hide),
-and Quit, pinned to the header's right edge:
+counts, Hide grey, the gear, and Quit, pinned to the header's right
+edge:
 
 | Control | Width | Does |
 | --- | --- | --- |
-| Grey toggle | Variable, 44 px minimum | Toggles whether rows in the `unknown` state are shown. Reads "Hide unknown" when off. When on, shows pressed (background and text colour change; no inset outline) and reads "Show N unknown," N being the count of currently hidden `unknown` rows ("Show unknown" when N is 0). Hidden entirely when there is nothing unknown and hiding is already off. |
-| Quit | 44 px | Closes the daemon and the surface together. Icon only: a cross glyph, `aria-label="Quit Deckhand"`, no visible text. |
+| Hide grey | Content-sized, 44 px floor | Filters `unknown` rows out of the session list ([ADR-030](DECISIONS.md#adr-030)). A `role="switch"` button, `aria-checked` tracking whether hiding is on, reusing the same track-and-thumb graphic a panel switch row draws. Reads "Hide grey" while unknown rows show and "N hidden" while they are hidden ([ADR-034](DECISIONS.md#adr-034); "Hide unknown" / "Show N unknown" before it, under [ADR-031](DECISIONS.md#adr-031)). Hidden entirely, via the native `hidden` attribute, when there are no unknown rows and hiding is already off. |
+| Gear | 44 px | Opens or closes the settings panel in place of the session list, `aria-label="Settings"`, `aria-pressed` tracking whether it is open. Icon only: a cog closed, an arrow back to the session list open, on a raised, tinted background while open, so its pressed state is a shape and a background change, not only a colour ([ADR-034](DECISIONS.md#adr-034); ADR-033 first added the control and read its state as a text change instead). Added beside Hide grey, not in place of it ([ADR-033](DECISIONS.md#adr-033)). |
+| Quit | 44 px | Closes the daemon and the surface together. Icon only: an inline svg cross, `aria-label="Quit Deckhand"`, no visible text. |
 
 The summary is a row of pills, one per state that currently has at least
 one session in it, in a fixed order: waiting on you, error, thinking,
 complete (idle, unknown, and ended are left to the rows). Each pill
 pairs that state's glyph and colour with a count. It is read-only: it
-reports, it does not select or filter, and it is computed before the
-grey toggle's filter, so it never changes when that control is toggled.
+reports, it does not select or filter, and it stays visible and
+unchanged whether the session list or the settings panel is showing
+underneath it.
 
-When the grey toggle is on and every bound session is hidden, the list
-shows one placeholder row in place of the normal rows, "N unknown
-hidden," styled like the empty-list state rather than like a session
-row. A hidden row reappears on its own, and every target below it
-shifts, the moment that session's state moves off `unknown`; see
-[CONTROL_MAPPING.md](CONTROL_MAPPING.md#header-the-grey-toggle-and-quit)
-for the toggle's full behaviour and the trade-off it accepts. Move, the
-click-to-place alternative to dragging the window that used to sit here,
-is removed ([ADR-031](DECISIONS.md#adr-031)); see
-[ACCESSIBILITY.md](ACCESSIBILITY.md) for the open gap that leaves.
+## Settings panel
+
+Opened and closed by the header's gear, in place of the session list
+([ADR-033](DECISIONS.md#adr-033)). Not a second window: the same
+window resizes to fit the panel's own row count through the daemon's
+existing resize path, and closing restores the list's size. No control
+here takes focus either; the window's no-activate behaviour is
+unaffected by anything the panel does.
+
+```
+ ┌───────────────────────────────┐
+ │  ◆1 ✕1 ◐1      ⏻ Hide grey ⬅ ✕ │  header, unchanged
+ ├───────────────────────────────┤
+ │ WINDOW                        │  section title
+ │ Always on top          On  ⏻  │  panel row, 64 px, word + switch
+ │ Start with Windows    Off  ⏻  │
+ │ Reset position              ↺ │  action row, two lines
+ │ Moves the window back...      │
+ │ CLAUDE CODE                   │  section title
+ │ Hooks  [Installed]    Repair  │  status pill + button
+ └───────────────────────────────┘
+```
+
+Four rows across two titled sections (Window, Claude Code), each row
+still the same 64 px height as a session row, but a different layout
+from a session row's: a text label, plus a switch, a short
+description, or a status pill and a button, depending on the row,
+never colour alone for any of them ([ADR-034](DECISIONS.md#adr-034);
+five flat rows before it, under [ADR-033](DECISIONS.md#adr-033)).
+Every switch row's word sits to the left of its switch, right-aligned
+to the switch's own left edge, so the switch, the Reset row's icon,
+and the Repair button all end flush against the same right edge
+([ADR-034](DECISIONS.md#adr-034)). See
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#settings-panel) for what each
+row does. The Hooks row is the one row with no click of its own; it
+renders as a plain row rather than a button, the same way the header's
+own summary does, so it never implies an action it does not have, but
+it holds a real, separate Repair button rather than folding that
+action into a second row the way ADR-033 first had it. The Repair
+button is styled inactive rather than natively disabled when this
+install has no checkout nearby to run the installer from: its result
+text already reads "Installer not found," so a click while inactive is
+an already-explained no-op, not a silent dead one
+([ACCESSIBILITY.md](ACCESSIBILITY.md)).
+
+Hide grey, the header's own toggle, is not one of these rows; it stays
+in the header, restyled to the same switch above
+([ADR-034](DECISIONS.md#adr-034)). See
+[Header](#header) above and
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md#header-hide-grey-the-gear-and-quit)
+for what it does and the trade-off that carries over unchanged from
+[ADR-030](DECISIONS.md#adr-030).
+
+Move, the click-to-place alternative to dragging the window that used
+to sit in the header, is removed ([ADR-031](DECISIONS.md#adr-031)); the
+panel's own Reset position row (named "Reset window position" until
+[ADR-034](DECISIONS.md#adr-034) shortened its on-screen label) moves
+the window to a fixed default rather than restoring a click-based way
+to place it anywhere; see [ACCESSIBILITY.md](ACCESSIBILITY.md) for the
+open gap that leaves.
 
 ## Row anatomy
 
@@ -112,15 +176,25 @@ shortened to fit by `revealNote()` in `format.ts`
 
 - Row height: 64 px, fixed, above the
   [accessibility floor](ACCESSIBILITY.md#targets-and-sizing).
+- An 8 px horizontal inset sits between every row and the window's left
+  and right edges, the same inset the settings panel's own cards use
+  ([ADR-034](DECISIONS.md#adr-034)). Horizontal only: the list stays
+  flush top and bottom, so the window's height is still exactly
+  rows * 64 px.
 - Status is triple-coded on every row: colour, glyph, and the state word.
   See the state table in
   [ACCESSIBILITY.md](ACCESSIBILITY.md#status-without-colour).
-- Every coloured state tints the row's background toward its colour: idle
-  6%, thinking and complete 14%, needs input and error 22%. Unknown and
-  ended get no tint; a dashed outline used to mark them instead, removed
-  by [ADR-031](DECISIONS.md#adr-031), and they are now set apart by
-  glyph shape and dimming alone. Selected: a 3 px inset outline in the
-  text colour, on top of whatever tint the state already has.
+- Every coloured state tints the row's background toward its colour and
+  draws a 4 px accent bar down its left edge in the same colour
+  ([ADR-034](DECISIONS.md#adr-034)): idle 5% (was 6%), thinking and
+  complete 8% (was 14%), needs input and error 14% (was 22%), softer
+  than before now that the accent bar carries part of the signal.
+  Unknown and ended get no background tint, though the accent bar still
+  reads their colour at full strength; a dashed outline used to mark
+  them instead of either, removed by [ADR-031](DECISIONS.md#adr-031),
+  and they are set apart from a live row by glyph shape and dimming.
+  Selected: a 3 px inset outline in the text colour, on top of whatever
+  tint the state already has.
 - Unknown carries two words for the one state: "not heard yet" for a
   session bound by enumeration or restored from disk that no hook has
   spoken for yet this run, and "unknown" for one that spoke and then went

@@ -79,6 +79,56 @@ pub fn window_height(row_count: usize, max_h: i32) -> i32 {
     h.min(max_h.max(HEADER_H_LOGICAL as i32 + ROW_H_LOGICAL as i32))
 }
 
+/// Settings panel layout (docs/DECISIONS.md#adr-034, amended: Hide grey
+/// moved back to the header). Unlike the session list, the panel's
+/// content is fixed, not data-driven by a row count: two titled sections
+/// (Window, Claude Code) holding four rows between them (Always on top,
+/// Start with Windows, Reset position, Hooks, the last combining what
+/// used to be two separate rows). `styles.test.ts` pins these constants
+/// against the matching values in `app/ui/styles.css`.
+pub const PANEL_ROW_COUNT: usize = 4;
+pub const PANEL_SECTION_COUNT: usize = 2;
+
+/// One section's title strip, including the gap down to its card below
+/// it. Must match `.settings-section-title` in app/ui/styles.css.
+pub const SECTION_TITLE_H_LOGICAL: f64 = 32.0;
+
+/// Vertical gap above every section but the first. Must match
+/// `.settings-section + .settings-section` in app/ui/styles.css.
+pub const SECTION_GAP_LOGICAL: f64 = 12.0;
+
+/// Padding above and below the whole panel's stack of sections. Must
+/// match `#list.panel` in app/ui/styles.css.
+pub const PANEL_PADDING_LOGICAL: f64 = 8.0;
+
+/// A `row_count` value that can never be a real row count (`usize::MAX`
+/// is already `LAST_ROW_COUNT`'s own "never sized yet" sentinel in
+/// main.rs), used to route the existing resize plumbing to
+/// `panel_window_height` instead of `window_height` while the settings
+/// panel, not the session list, owns the window's height.
+pub const PANEL_SENTINEL: usize = usize::MAX - 1;
+
+/// The settings panel's own content height. Not a row-count formula like
+/// `window_height`: the panel is fixed content, not one row per session,
+/// so its height is section titles, gaps, and padding plus five rows,
+/// summed once rather than derived from a count passed in at resize
+/// time.
+pub fn panel_content_height_logical() -> f64 {
+    PANEL_PADDING_LOGICAL * 2.0
+        + PANEL_SECTION_COUNT as f64 * SECTION_TITLE_H_LOGICAL
+        + (PANEL_SECTION_COUNT.saturating_sub(1)) as f64 * SECTION_GAP_LOGICAL
+        + PANEL_ROW_COUNT as f64 * ROW_H_LOGICAL
+}
+
+/// The window's total height while the settings panel is open, header
+/// plus the panel's fixed content height, capped at `max_h` the same way
+/// `window_height` caps the session list so the panel never grows past
+/// the monitor's work area.
+pub fn panel_window_height(max_h: i32) -> i32 {
+    let h = (HEADER_H_LOGICAL + panel_content_height_logical()).round() as i32;
+    h.min(max_h.max(HEADER_H_LOGICAL as i32 + ROW_H_LOGICAL as i32))
+}
+
 /// Recompute a rect for a new height, keeping the bottom edge fixed when
 /// `bottom_anchored` (a window parked near the bottom of the screen
 /// should grow upward as rows are added, not slide off the taskbar) and
@@ -208,6 +258,29 @@ mod tests {
         let capped = window_height(50, 300);
         assert!(capped < uncapped);
         assert_eq!(capped, 300, "fifty rows must be capped to the work area height");
+    }
+
+    #[test]
+    fn panel_content_height_sums_padding_titles_gaps_and_rows() {
+        let expected = PANEL_PADDING_LOGICAL * 2.0
+            + PANEL_SECTION_COUNT as f64 * SECTION_TITLE_H_LOGICAL
+            + (PANEL_SECTION_COUNT - 1) as f64 * SECTION_GAP_LOGICAL
+            + PANEL_ROW_COUNT as f64 * ROW_H_LOGICAL;
+        assert_eq!(panel_content_height_logical(), expected);
+    }
+
+    #[test]
+    fn panel_window_height_is_header_plus_content_when_it_fits() {
+        let uncapped = (HEADER_H_LOGICAL + panel_content_height_logical()).round() as i32;
+        assert_eq!(panel_window_height(uncapped + 500), uncapped);
+    }
+
+    #[test]
+    fn panel_window_height_is_capped_at_the_monitor_work_area() {
+        let uncapped = panel_window_height(100_000);
+        let capped = panel_window_height(300);
+        assert!(capped < uncapped);
+        assert_eq!(capped, 300, "the panel must be capped to the work area height too");
     }
 
     #[test]

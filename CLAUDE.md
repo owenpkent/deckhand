@@ -9,11 +9,15 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
 - **What:** A software reimplementation of the Codex Micro macropad as an
   always-on-top, mouse-only control surface for Claude Code sessions. An
   ordered list of session rows (colour, glyph, name, state word), click
-  to select and raise, plus a grey toggle and Quit in the header, the
-  whole bar itself the drag region (ADR-030, ADR-031). Move, a
-  click-to-place alternative to dragging, was removed by ADR-031: the
-  window is now repositioned by dragging only, an owner-approved
-  exception to the no-required-drag rule in
+  to select and raise, plus a Hide grey switch, a gear button, and Quit
+  in the header, the whole bar itself the drag region (ADR-030, ADR-031).
+  The gear opens an in-bar settings panel in place of the session list
+  (ADR-033): always on top, start with Windows, reset position, and a
+  hooks-installed status with a Repair action; Hide grey stays a header
+  control throughout, never moving into the panel. Move, a
+  click-to-place alternative to dragging, was removed by
+  ADR-031: the window is now repositioned by dragging only, an
+  owner-approved exception to the no-required-drag rule in
   [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md), not a compliant
   default. Approve and deny via the `PreToolUse` hook are Phase 2 and
   not currently planned on the surface (ADR-028); the dial, stick,
@@ -68,16 +72,16 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 228 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 515 | Daemon, shim, surface, state machine |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 258 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 556 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 352 | Daemon to runtime contract |
 | [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 679 | Reference adapter; partial stamp |
-| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 299 | Approval path; fails to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 207 | Visual and interaction contract |
-| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 219 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 1473 | ADRs; append only |
+| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 387 | Approval path; fails to `ask` |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 248 | Visual and interaction contract |
+| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 228 | The rules that win every conflict |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 1632 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 151 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 364 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 403 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -109,8 +113,14 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 033.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 035.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
+- **When to write an ADR:** only for big decisions: the security model,
+  the approval path, what Deckhand may do, adapter capabilities, new
+  dependencies, the stack, or a frozen constant. UI layout, styling,
+  control placement, and wording changes get a CHANGELOG line and the
+  spec files from the WORKFLOW.md table, not an ADR. The owner does not
+  manage ADRs; this is the assistant's call.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
   resolving, CI green.
@@ -165,7 +175,17 @@ region, relabelled and restyled the grey toggle, and dropped the dashed
 outline unknown and ended rows used to share. ADR-029 had already
 restyled the list (64 px two-line rows, header counts, a bundled
 typeface), and ADR-032 made Reveal host-aware (VS Code, Windows
-Terminal, console); `app/` implements all of these.
+Terminal, console). ADR-033 then added a gear-triggered settings panel
+beside the header's existing grey toggle, holding four new settings
+(always on top, start with Windows, reset position, and a hooks
+status with Repair); the grey toggle itself stayed in the header.
+ADR-034 redrew the header and that panel the next day: icon buttons
+for the gear and Quit, toggle switches (the header's grey toggle
+included, relabelled "Hide grey" / "N hidden"), a combined Hooks and
+Repair row, two titled panel sections, rounded rows with a left
+accent bar, a shared inset for rows and panel cards, and a
+window-sizing fix for the panel's own scrollbar; `app/` implements
+all of these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

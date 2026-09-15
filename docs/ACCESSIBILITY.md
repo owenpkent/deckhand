@@ -114,8 +114,16 @@ disabled: nothing pending, the wrong kind of amber, a permission mode in which
 the decision would not have reached you, or a channel Deckhand does not have.
 A control that neither acts nor explains teaches its user to distrust their own
 click, and a doubted click gets repeated, which costs more than the action ever
-would have. No control on the current surface is disabled; the rule binds
-whatever control is added next.
+would have. No control on the current surface is a native, natively-disabled
+element; the settings panel's Repair button
+([ADR-033](DECISIONS.md#adr-033), moved into the combined Hooks row's
+own button by [ADR-034](DECISIONS.md#adr-034)) is the first control
+this rule actually binds, and it is met by never disabling the button
+at all: when there is no installer to run, it is styled inactive but
+stays clickable, and its reason, "Installer not found," is already its
+row's permanent, always-visible secondary text rather than something a
+click would have to reveal. The rule binds whatever control is added
+next.
 
 ## Targets and sizing
 
@@ -125,10 +133,13 @@ whatever control is added next.
   constant, not a guideline (the PR template asks about it by name).
 - Session rows are larger than the floor: 64 px, fixed, per
   [UI_SPEC.md](UI_SPEC.md#row-anatomy). The floor binds hardest on the
-  header, now 52 px total ([ADR-031](DECISIONS.md#adr-031)): Quit is
-  44 by 44 px, exactly the floor, and the grey toggle is a
-  variable-width text button with a 44 px minimum height; both hold
-  the floor on the dimension that matters.
+  header, now 52 px total ([ADR-031](DECISIONS.md#adr-031)): Quit and
+  the gear are both 44 by 44 px icon buttons
+  ([ADR-034](DECISIONS.md#adr-034); the gear was a variable-width text
+  button before it), exactly the floor on every side. The settings
+  panel's own rows
+  ([ADR-033](DECISIONS.md#adr-033)) reuse the 64 px row height rather
+  than sitting at the floor.
 - **Surface scale from 100% to 300%**, everything scaling together. At 300%
   on a 1080p screen, the header and at least a few rows must still render
   legibly; if a layout cannot survive that, the layout is wrong.

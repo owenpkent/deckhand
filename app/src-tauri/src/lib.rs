@@ -3,11 +3,14 @@
 // second copy of the state machine.
 
 pub mod enumerate;
+pub mod hook_status;
 pub mod host;
 pub mod http;
+pub mod installer;
 pub mod persist;
 pub mod registry;
 pub mod reveal;
 pub mod reveal_queue;
+pub mod runkey;
 pub mod state;
 pub mod window;

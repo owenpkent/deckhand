@@ -481,6 +481,33 @@ for the full record, including the unverified console path and the two
 tab-targeting gaps, inside Windows Terminal and inside a VS Code window,
 that stay out of reach from outside either editor.
 
+## Settings panel
+
+Opened by the header's gear, replacing the session list in place
+([ADR-033](DECISIONS.md#adr-033)); not a second window. `main.rs` holds
+a `PANEL_OPEN` flag (not persisted, always starts closed) and a fixed
+`PANEL_ROW_COUNT`; the window resizes to whichever count currently
+applies through the same `resize_for_rows`/`queue_resize` path every
+session-count change already used, and a hook event arriving while the
+panel is open resizes to the panel's own row count rather than the
+list's, so the panel is never resized out from under the owner mid-use.
+
+New commands, every one taking no argument from the webview:
+
+| Command | Does |
+| --- | --- |
+| `toggle_settings_panel` | Opens or closes the panel; returns the new open state. |
+| `get_settings_snapshot` | Reads always-on-top, start-with-Windows, hooks status, and whether an installer checkout was found. |
+| `toggle_always_on_top` | Flips and persists always-on-top, applies it to the real window, and reapplies the `WS_EX_NOACTIVATE` style ([ADR-025](DECISIONS.md#adr-025)) since toggling topmost can reset it. |
+| `toggle_start_with_windows` | Reads the HKCU Run key fresh and either writes this exe's path over it or deletes it, never trusting a client-cached guess of the current state. |
+| `reset_window_position` | Moves the window to `window::default_rect`'s placement and persists the result. |
+| `repair_hooks` | `async`; reruns `scripts/install-hooks.ps1` off the webview/event thread via `spawn_blocking`, the same pattern `activate_session` uses for its reveal wait, bounded at 20 s. |
+
+`toggle_hide_unknown` is not one of these new commands and is
+unchanged: it is still called from the header's own Hide grey switch
+([ADR-030](DECISIONS.md#adr-030)), which never moved into the panel,
+only restyled in place ([ADR-034](DECISIONS.md#adr-034)).
+
 ## Stack
 
 Tauri v2, Rust daemon, TypeScript frontend. Recorded with its alternatives and
@@ -490,13 +517,20 @@ its risks in [DECISIONS.md](DECISIONS.md#adr-002).
 
 | Data | Where | Notes |
 | --- | --- | --- |
-| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown`, the grey toggle's state ([ADR-030](DECISIONS.md#adr-030), relabelled by [ADR-031](DECISIONS.md#adr-031)); a missing field or a corrupt file loads as `false` |
-| Session bindings | Same | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
+| Settings | Local config directory, `settings.json` | Portable, hand-editable. Holds `hide_unknown` (the header's own Hide grey switch, [ADR-030](DECISIONS.md#adr-030), left there rather than moved by [ADR-033](DECISIONS.md#adr-033)) and `always_on_top` (the settings panel's Always on top row, [ADR-033](DECISIONS.md#adr-033), default `true`); a missing field or a corrupt file loads each at its own default rather than failing |
+| Start with Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Deckhand` | Not mirrored into `settings.json`; the registry value itself is the only source of truth, read fresh on every panel open and every toggle ([ADR-033](DECISIONS.md#adr-033)) |
+| Session bindings | Local config directory, `bindings.json` | An ordered list, by session id, which survives restarts. A legacy six-slot `bindings.json` loads by dropping its null slots and keeping the rest in order ([ADR-028](DECISIONS.md#adr-028)) |
 | Approval audit log | Local, append-only, optional | Off by default. If Deckhand approves tool calls, being able to answer "what did I approve" is worth having |
 | Session transcripts | Not stored | Deckhand reads them where they already are and copies nothing |
 
 Nothing leaves the machine. There is no telemetry, no account, and no network
-egress other than loopback.
+egress other than loopback. The settings panel's Repair action and its
+Start with Windows row are the two exceptions to "nothing outside
+Deckhand's own data directory": Repair runs `scripts/install-hooks.ps1`,
+which writes `~/.claude/settings.json`, and Start with Windows writes
+the HKCU Run key above. Both stay local to the machine and both fire
+only on an explicit click; see
+[SECURITY_MODEL.md](SECURITY_MODEL.md) for the trust implications.
 
 ## Open questions
 

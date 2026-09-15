@@ -9,8 +9,9 @@
   <main id="surface" aria-label="Deckhand surface">
     <div id="header" data-tauri-drag-region>
       <div id="summary" aria-label="Session counts"></div>
-      <button id="grey" class="side-btn" aria-pressed="false"></button>
-      <button id="quit" class="side-btn" aria-label="Quit Deckhand">&#10005;</button>
+      <button id="hideGrey" class="side-btn hide-grey-btn" role="switch" aria-checked="false" hidden></button>
+      <button id="gear" class="side-btn icon-btn" aria-label="Settings" aria-pressed="false"></button>
+      <button id="quit" class="side-btn icon-btn" aria-label="Quit Deckhand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div id="list" role="group" aria-label="Sessions"></div>
   </main>
