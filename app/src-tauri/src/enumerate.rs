@@ -44,7 +44,9 @@ pub struct Row {
     pub status: Option<String>,
     /// `startedAt`, ms epoch (documented, 2.1.220). `None` on an older
     /// CLI or a non-numeric value; feeds `supersede::superseded`'s
-    /// ordering (`Registry::note_started_at`), nothing else.
+    /// ordering through `Registry::note_started_at`, whose change report
+    /// `register` folds into its own, since a start time alone can
+    /// decide which rows the board shows.
     pub started_at_ms: Option<i64>,
 }
 
@@ -108,7 +110,7 @@ pub fn register(reg: &mut Registry, rows: &[Row], now_ms: i64) -> bool {
             row.status.as_deref(),
             now_ms,
         );
-        reg.note_started_at(&row.id, row.started_at_ms);
+        changed |= reg.note_started_at(&row.id, row.started_at_ms);
     }
     changed |= reg.prune_missing(&present, now_ms);
     changed
@@ -193,6 +195,42 @@ mod tests {
         let mut reg = Registry::default();
         register(&mut reg, &rows, 10);
         assert_eq!(reg.sessions["s1"].started_at_ms, Some(1_789_492_719_945));
+    }
+
+    #[test]
+    fn register_reports_a_change_when_started_at_alone_flips_supersession() {
+        // The 2026-09-15 review: two idle sessions in one VS Code window
+        // and folder, discovered in the same scan with no `startedAt`,
+        // tie on first-seen and both show. A later scan that differs
+        // only in naming distinct start times hides the older one, and
+        // the scan loop only repaints and resizes when `register` says
+        // something changed, so that timestamp-only transition has to
+        // count, and an identical scan after it must not.
+        let rows = |started: bool| {
+            let mut a = json!({"sessionId": "a", "name": "a", "cwd": "C:/dev/deckhand", "pid": 111, "status": "idle"});
+            let mut b = json!({"sessionId": "b", "name": "b", "cwd": "C:/dev/deckhand", "pid": 222, "status": "idle"});
+            if started {
+                a["startedAt"] = json!(100);
+                b["startedAt"] = json!(200);
+            }
+            parse(&json!([a, b]).to_string().into_bytes()).unwrap()
+        };
+        let mut reg = Registry::default();
+        assert!(register(&mut reg, &rows(false), 10));
+        // host::resolve walked the real process table for pids that are
+        // not claude.exe; stand in the VS Code window facts directly, the
+        // same way registry.rs's supersession tests do. The pids do not
+        // change again below, so nothing re-resolves them.
+        for id in ["a", "b"] {
+            let s = reg.sessions.get_mut(id).unwrap();
+            s.host = Some(crate::host::Host::VsCode);
+            s.parent_pid = Some(4242);
+        }
+        assert_eq!(reg.snapshot(11).tiles.len(), 2, "tied on first-seen, neither is hidden");
+
+        assert!(register(&mut reg, &rows(true), 20), "a startedAt-only change must report a change");
+        assert_eq!(reg.snapshot(21).tiles.len(), 1, "with start times known, the older row is hidden");
+        assert!(!register(&mut reg, &rows(true), 30), "an identical follow-up scan is a no-op");
     }
 
     #[test]

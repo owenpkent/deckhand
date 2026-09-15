@@ -296,20 +296,30 @@ impl Registry {
     /// Record the scan's own `startedAt` for this session
     /// (`supersede::superseded`'s ordering), called by
     /// `enumerate::register` right after `register_enumerated` for the
-    /// same row. Separate from it because a change here alone is never
-    /// itself repaint-worthy the way a binding, a colour, or a label
-    /// change is, and because a session `register_enumerated` left
-    /// untouched (already `Ended`) must be left alone here too --
-    /// `get_mut` simply finds nothing to do for an id this run never
-    /// bound. A scan that reports no `startedAt` this time (`None`)
-    /// leaves whatever is already recorded alone, the same as a missing
-    /// pid does.
-    pub fn note_started_at(&mut self, id: &str, started_at_ms: Option<i64>) {
-        if let Some(ms) = started_at_ms {
-            if let Some(s) = self.sessions.get_mut(id) {
-                s.started_at_ms = Some(ms);
-            }
+    /// same row. Reports whether the stored value actually changed,
+    /// and `enumerate::register` folds that into its own change flag:
+    /// a `startedAt` arriving or moving can flip which rows
+    /// `superseded_ids` hides with no other field changing (two idle
+    /// rows tied on first-seen, then a scan naming distinct start
+    /// times), and the scan loop only repaints and resizes when
+    /// registration says something changed. An identical follow-up
+    /// scan is a no-op here as everywhere else. A session
+    /// `register_enumerated` left untouched (already `Ended`) is left
+    /// alone here too, and a scan that reports no `startedAt` this time
+    /// (`None`) leaves whatever is already recorded alone, the same as
+    /// a missing pid does.
+    pub fn note_started_at(&mut self, id: &str, started_at_ms: Option<i64>) -> bool {
+        let Some(ms) = started_at_ms else {
+            return false;
+        };
+        let Some(s) = self.sessions.get_mut(id) else {
+            return false;
+        };
+        if s.state == SessionState::Ended || s.started_at_ms == Some(ms) {
+            return false;
         }
+        s.started_at_ms = Some(ms);
+        true
     }
 
     /// The facts `supersede::superseded` needs about every currently
@@ -1127,8 +1137,35 @@ mod tests {
     #[test]
     fn note_started_at_on_an_unknown_id_is_a_harmless_no_op() {
         let mut r = Registry::default();
-        r.note_started_at("nobody", Some(1000));
+        assert!(!r.note_started_at("nobody", Some(1000)));
         assert!(r.sessions.is_empty());
+    }
+
+    #[test]
+    fn note_started_at_reports_a_change_only_when_the_stored_value_moves() {
+        // enumerate::register folds this into its change flag, so a
+        // repeated identical scan must not keep the scan loop
+        // repainting.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "UserPromptSubmit", "session_id": "s1"}), 1);
+        assert!(r.note_started_at("s1", Some(1000)), "first sighting of a startedAt is a change");
+        assert!(!r.note_started_at("s1", Some(1000)), "the same value again is not");
+        assert!(!r.note_started_at("s1", None), "a scan without one changes nothing");
+        assert!(r.note_started_at("s1", Some(2000)), "a moved value is a change");
+        assert_eq!(r.sessions["s1"].started_at_ms, Some(2000));
+    }
+
+    #[test]
+    fn note_started_at_leaves_an_ended_session_alone() {
+        // register_enumerated leaves an ended session untouched entirely;
+        // the scan can keep listing its process, and this must not
+        // report a change for a row that will never show.
+        let mut r = Registry::default();
+        r.apply_hook(&json!({"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1"}), 1);
+        r.apply_hook(&json!({"hook_event_name": "SessionEnd", "session_id": "s1"}), 2);
+        assert_eq!(r.sessions["s1"].state, crate::state::SessionState::Ended);
+        assert!(!r.note_started_at("s1", Some(1000)));
+        assert_eq!(r.sessions["s1"].started_at_ms, None);
     }
 
     // ---- supersession: snapshot and the row count both hide it ----------
