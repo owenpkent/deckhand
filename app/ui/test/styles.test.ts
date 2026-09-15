@@ -103,3 +103,49 @@ test("the header buttons (gear, Quit) meet the 44px floor", () => {
   const block = ruleBlock(".side-btn");
   assert.match(block, /min-height:\s*44px/);
 });
+
+test("the Hooks row's Repair button meets the 44px floor", () => {
+  const block = ruleBlock(".repair-btn");
+  assert.match(block, /min-height:\s*44px/);
+});
+
+// ---- Settings panel sizing matches window.rs (docs/DECISIONS.md#adr-034) --
+//
+// window.rs sizes the window for the open panel off a fixed formula
+// (panel_content_height_logical), not a row count times ROW_H_LOGICAL
+// the way the session list is. These constants must stay in lockstep
+// with the CSS that actually lays the panel out, or the window is
+// either too short (a scrollbar on a panel that should fit) or too
+// tall (dead space under the last row).
+
+function panelConstant(name: string): number {
+  const rs = readFileSync(path.join(here, "../../../src-tauri/src/window.rs"), "utf8");
+  const m = new RegExp(`${name}: f64 = (\\d+(?:\\.\\d+)?)`).exec(rs);
+  assert.ok(m, `constant not found in window.rs: ${name}`);
+  return Number(m![1]);
+}
+
+test("the settings section title height matches SECTION_TITLE_H_LOGICAL", () => {
+  const expected = panelConstant("SECTION_TITLE_H_LOGICAL");
+  assert.match(ruleBlock(".settings-section-title"), new RegExp(`min-height:\\s*${expected}px`));
+});
+
+test("the gap between settings sections matches SECTION_GAP_LOGICAL", () => {
+  const expected = panelConstant("SECTION_GAP_LOGICAL");
+  assert.match(
+    ruleBlock(".settings-section + .settings-section"),
+    new RegExp(`margin-top:\\s*${expected}px`),
+  );
+});
+
+test("the panel's own outer padding matches PANEL_PADDING_LOGICAL", () => {
+  const expected = panelConstant("PANEL_PADDING_LOGICAL");
+  assert.match(ruleBlock("#list.panel"), new RegExp(`padding:\\s*${expected}px`));
+});
+
+test("a panel row still reuses .row's 64px floor (ROW_H_LOGICAL), never shrinking it", () => {
+  // .panel-row overrides .row's grid and borders but must not touch
+  // min-height, which it inherits from .row itself (docs/ADR-029).
+  const panelRowBlock = ruleBlock(".panel-row");
+  assert.equal(/min-height/.test(panelRowBlock), false, ".panel-row must not override .row's min-height");
+});

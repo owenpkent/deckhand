@@ -55,6 +55,12 @@ export function stateGlyph(state: SessionState): string {
   return GLYPHS[isKnownState(state) ? state : "unknown"];
 }
 
+// The header count pill's accessible name, pulled out of main.ts so it is
+// testable without the DOM (docs/DECISIONS.md#adr-034).
+export function countPillLabel(state: SessionState, n: number): string {
+  return `${n} ${STATE_WORDS[state]}`;
+}
+
 // The states the header counts, in display order: what needs a human
 // first, then what is running, then what finished. Idle, unknown, and
 // ended are left to the rows.
@@ -132,17 +138,28 @@ export function rowLabel(s: { id: string; label: string; state: SessionState; he
   return parts.join(", ");
 }
 
-// ---- Settings panel (docs/DECISIONS.md#adr-033) ------------------------
+// ---- Settings panel (docs/DECISIONS.md#adr-033, restyled by adr-034) --
 //
 // Every row here reads as a text label plus a text state, never colour
-// alone (docs/ACCESSIBILITY.md), so each of these is plain text, never
-// an icon or a colour token.
+// alone (docs/ACCESSIBILITY.md). ADR-034 adds toggle-switch graphics and
+// a status pill, but both are decoration layered on top of this same
+// text, never a replacement for it: the switch always keeps its On/Off
+// word, and the pill's tint always sits beside its own status word.
 
-// The gear button's own visible text doubles as its pressed/open
-// signal: open and closed read as different words, not only a
-// different background colour.
-export function gearLabel(open: boolean): string {
-  return open ? "Close settings" : "Settings";
+// Which glyph the header's gear shows: the arrow-back glyph when the
+// panel is open, so the pressed state reads as a different shape, not
+// only a different background colour (docs/ACCESSIBILITY.md). Paired
+// with aria-pressed on the button itself; see icons.ts for the actual
+// markup each name selects.
+export function gearIconKind(open: boolean): "gear" | "back" {
+  return open ? "back" : "gear";
+}
+
+// The string form of an aria-checked value for a plain boolean switch
+// (Always on top, Hide unknown). A literal "true"/"false" string, not a
+// boolean, because that is what the attribute itself takes.
+export function boolChecked(on: boolean): "true" | "false" {
+  return on ? "true" : "false";
 }
 
 export function onOffText(on: boolean): string {
@@ -163,10 +180,18 @@ export function startWithWindowsText(state: StartWithWindowsState): string {
   }
 }
 
+// Start with Windows is a switch even in its tri-state form: "on this
+// exe" and "on other copy" both read as checked, since the Run key does
+// launch Deckhand either way; the word beside the switch is what
+// distinguishes the two.
+export function startWithWindowsChecked(state: StartWithWindowsState): "true" | "false" {
+  return state.kind === "off" ? "false" : "true";
+}
+
 // Naming the hidden count here is the same reasoning the header's own
 // toggle used to carry in its label before ADR-033 moved it into this
 // panel row: a hidden session must always be counted, never simply
-// gone.
+// gone. Doubles as the word shown beside the row's switch.
 export function hideUnknownText(hidden: boolean, unknownCount: number): string {
   return hidden ? `On, ${unknownCount} hidden` : "Off";
 }
@@ -182,11 +207,29 @@ export function hookStatusText(status: HookStatus): string {
   return HOOK_STATUS_TEXT[status];
 }
 
-// The Repair row's state text, in order of precedence: why it cannot
-// run at all, that it is running right now, or what the last run did.
-// installerAvailable false is the only case the row does not accept a
-// click for; everything else is exactly one click away.
-export function repairRowText(
+// The Hooks row's status pill is tinted as well as labelled (never
+// colour alone: the word from hookStatusText is always shown beside
+// it). installed reuses the same "good" hue the rows already use for
+// complete, missing and unreadable both read as a problem in the same
+// red the rows use for error, and outdated borrows the amber "needs
+// attention" hue; none of this touches ADR-008, which is scoped to
+// session states, not hook-install status.
+const HOOK_STATUS_PILL_CLASS: Record<HookStatus, string> = {
+  installed: "pill-good",
+  outdated: "pill-warn",
+  missing: "pill-bad",
+  unreadable: "pill-bad",
+};
+
+export function hookStatusPillClass(status: HookStatus): string {
+  return HOOK_STATUS_PILL_CLASS[status];
+}
+
+// The Hooks row's secondary line: Repair's own result, once it has one.
+// Empty until there is something to report, since the button itself
+// already reads "Repair" and does not need its idle state repeated
+// underneath it.
+export function repairSecondaryText(
   installerAvailable: boolean,
   running: boolean,
   lastOutcome: RepairOutcome | null,
@@ -202,8 +245,17 @@ export function repairRowText(
       return "Failed to start";
     case null:
     case undefined:
-      return "Repair";
+      return "";
   }
+}
+
+// Whether the Repair button accepts a click right now. installerAvailable
+// false is the only case it does not; the reason is already permanent,
+// visible text from repairSecondaryText, so a click while inactive is an
+// already-explained no-op rather than a silent dead one
+// (docs/ACCESSIBILITY.md).
+export function repairButtonInactive(installerAvailable: boolean, running: boolean): boolean {
+  return !installerAvailable || running;
 }
 
 // The Reset position row's brief confirmation, shown for a few seconds

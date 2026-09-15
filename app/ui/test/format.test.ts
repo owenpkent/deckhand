@@ -6,19 +6,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  boolChecked,
+  countPillLabel,
   displayName,
   escapeHtml,
   fmtElapsed,
-  gearLabel,
+  gearIconKind,
   GLYPHS,
   hideUnknownText,
+  hookStatusPillClass,
   hookStatusText,
   isRevealSuccess,
   onOffText,
-  repairRowText,
+  repairButtonInactive,
+  repairSecondaryText,
   resetPositionText,
   revealNote,
   rowLabel,
+  startWithWindowsChecked,
   startWithWindowsText,
   STATE_WORDS,
   stateGlyph,
@@ -255,11 +260,24 @@ test("unknownCount treats a null session (defensive-only row) as not unknown", (
   assert.equal(unknownCount([{ session: null }, { session: { state: "unknown" } }]), 1);
 });
 
-// ---- Settings panel helpers (docs/DECISIONS.md#adr-033) -------------------------
+// ---- Header count pill (docs/DECISIONS.md#adr-034) -------------------------
 
-test("gearLabel names the gear's own pressed/open state, not only its colour", () => {
-  assert.equal(gearLabel(false), "Settings");
-  assert.equal(gearLabel(true), "Close settings");
+test("countPillLabel names the count and the state word together", () => {
+  assert.equal(countPillLabel("thinking", 2), "2 thinking");
+  assert.equal(countPillLabel("needs_input", 1), "1 waiting on you");
+  assert.equal(countPillLabel("complete", 0), "0 complete");
+});
+
+// ---- Settings panel helpers (docs/DECISIONS.md#adr-033, restyled by adr-034)
+
+test("gearIconKind swaps to the back glyph only while the panel is open", () => {
+  assert.equal(gearIconKind(false), "gear");
+  assert.equal(gearIconKind(true), "back");
+});
+
+test("boolChecked renders a literal true/false string for aria-checked", () => {
+  assert.equal(boolChecked(true), "true");
+  assert.equal(boolChecked(false), "false");
 });
 
 test("onOffText is a plain On or Off", () => {
@@ -274,6 +292,12 @@ test("startWithWindowsText covers off, on for this exe, and on for another copy"
   assert.equal(startWithWindowsText(off), "Off");
   assert.equal(startWithWindowsText(onThisExe), "On");
   assert.equal(startWithWindowsText(onOtherExe), "On (other copy)");
+});
+
+test("startWithWindowsChecked reads checked for both on-shaped kinds, unchecked only for off", () => {
+  assert.equal(startWithWindowsChecked({ kind: "off" }), "false");
+  assert.equal(startWithWindowsChecked({ kind: "onThisExe" }), "true");
+  assert.equal(startWithWindowsChecked({ kind: "onOtherExe", path: "D:/old/deckhand.exe" }), "true");
 });
 
 test("hideUnknownText counts what is hidden and reads Off otherwise", () => {
@@ -294,22 +318,44 @@ test("hookStatusText renders every HookStatus as its own capitalised word", () =
   }
 });
 
-test("repairRowText prioritises unavailable, then running, then the last outcome", () => {
-  assert.equal(repairRowText(false, false, null), "Installer not found");
-  assert.equal(repairRowText(false, true, "ran"), "Installer not found", "unavailable outranks a stale running/outcome state");
-  assert.equal(repairRowText(true, true, null), "Running\u2026");
-  assert.equal(repairRowText(true, false, null), "Repair");
+test("hookStatusPillClass tints installed good, outdated warn, and missing/unreadable bad", () => {
+  assert.equal(hookStatusPillClass("installed"), "pill-good");
+  assert.equal(hookStatusPillClass("outdated"), "pill-warn");
+  assert.equal(hookStatusPillClass("missing"), "pill-bad");
+  assert.equal(hookStatusPillClass("unreadable"), "pill-bad");
 });
 
-test("repairRowText names every RepairOutcome once it is available and idle", () => {
+test("repairSecondaryText prioritises unavailable, then running, then the last outcome", () => {
+  assert.equal(repairSecondaryText(false, false, null), "Installer not found");
+  assert.equal(
+    repairSecondaryText(false, true, "ran"),
+    "Installer not found",
+    "unavailable outranks a stale running/outcome state",
+  );
+  assert.equal(repairSecondaryText(true, true, null), "Running\u2026");
+  assert.equal(
+    repairSecondaryText(true, false, null),
+    "",
+    "idle and available has nothing to report; the button itself already reads Repair",
+  );
+});
+
+test("repairSecondaryText names every RepairOutcome once it is available and idle", () => {
   const expected: Record<RepairOutcome, string> = {
     ran: "Repaired",
     timed_out: "Timed out",
     failed_to_start: "Failed to start",
   };
   for (const outcome of Object.keys(expected) as RepairOutcome[]) {
-    assert.equal(repairRowText(true, false, outcome), expected[outcome]);
+    assert.equal(repairSecondaryText(true, false, outcome), expected[outcome]);
   }
+});
+
+test("repairButtonInactive is true when there is no installer or a repair is already running", () => {
+  assert.equal(repairButtonInactive(false, false), true);
+  assert.equal(repairButtonInactive(true, true), true);
+  assert.equal(repairButtonInactive(false, true), true);
+  assert.equal(repairButtonInactive(true, false), false);
 });
 
 test("resetPositionText names the action, then confirms it briefly after a click", () => {

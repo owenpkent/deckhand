@@ -9,33 +9,38 @@
 // a brief inline note on that row instead of opening anything.
 //
 // The header's gear button opens the settings panel in place of the
-// session list (docs/DECISIONS.md#adr-033): always on top, start with
-// Windows, reset position, hide unknown (moved here from the header,
-// where ADR-030/031 had it), and a Hooks status row with a Repair
-// action. The panel has no authority of its own either; it only shows
-// what the daemon and the registry already hold and asks the daemon to
-// change them.
+// session list (docs/DECISIONS.md#adr-033, restyled by adr-034): always
+// on top, start with Windows, and reset position under "Window"; hide
+// unknown under "List"; and a combined Hooks status and Repair row
+// under "Claude Code". The panel has no authority of its own either; it
+// only shows what the daemon and the registry already hold and asks the
+// daemon to change them.
 
 import {
+  boolChecked,
+  countPillLabel,
   displayName,
   escapeHtml,
-  gearLabel,
+  gearIconKind,
   GLYPHS,
   hideUnknownText,
+  hookStatusPillClass,
   hookStatusText,
   isRevealSuccess,
   onOffText,
-  repairRowText,
+  repairButtonInactive,
+  repairSecondaryText,
   resetPositionText,
   revealNote,
   rowLabel,
+  startWithWindowsChecked,
   startWithWindowsText,
-  STATE_WORDS,
   stateGlyph,
   stateWord,
   summaryCounts,
   unknownCount,
 } from "./format.js";
+import { BACK_ICON, GEAR_ICON, RESET_ICON } from "./icons.js";
 import { presentSessionIds, staleNoteIds } from "./notes.js";
 import { applyTheme, dark } from "./theme.js";
 import { RepairOutcome, RepairResult, Snapshot, SettingsSnapshot, StartWithWindowsState, TileSnapshot, tauri } from "./types.js";
@@ -173,7 +178,7 @@ function renderSummary(): void {
       const el = document.createElement("span");
       el.className = "count";
       el.dataset["state"] = state;
-      el.setAttribute("aria-label", `${n} ${STATE_WORDS[state]}`);
+      el.setAttribute("aria-label", countPillLabel(state, n));
       el.innerHTML = `<span class="glyph">${GLYPHS[state]}</span>${n}`;
       return el;
     }),
@@ -182,121 +187,250 @@ function renderSummary(): void {
 
 // ---- Header gear / settings panel --------------------------------------
 
-// The gear's own visible text carries its pressed/open state (never
-// colour alone, docs/ACCESSIBILITY.md): "Settings" closed, "Close
-// settings" open.
+// The gear's own icon carries its pressed/open state (never colour
+// alone, docs/ACCESSIBILITY.md): the cog closed, an arrow back to the
+// session list open. aria-pressed carries the same fact for anyone not
+// reading the shape; aria-label stays the fixed "Settings" set in
+// index.html either way.
 function renderGear(): void {
   gear.setAttribute("aria-pressed", String(panelOpen));
-  gear.textContent = gearLabel(panelOpen);
+  gear.innerHTML = gearIconKind(panelOpen) === "back" ? BACK_ICON : GEAR_ICON;
 }
 
-interface PanelRow {
+// ---- Settings panel rows (docs/DECISIONS.md#adr-034) -------------------
+//
+// Three kinds of row. A switch row is the whole row acting as a
+// role="switch" control (never a button nested inside a button): the
+// track-and-thumb graphic is decorative, aria-hidden, and the On/Off
+// word next to it is the real, always-visible state text. An action row
+// is a plain button that does something once, not a toggle (Reset
+// position). The Hooks row is the one row with no click of its own
+// (like the header's own summary, it is a plain div), but it holds a
+// real nested <button> for Repair, which a div is free to contain.
+
+interface SwitchRow {
+  kind: "switch";
+  key: string;
   label: string;
-  state: string;
-  inactive?: boolean;
-  onClick?: () => void;
+  checked: boolean;
+  word: string;
+  onClick: () => void;
 }
 
-function panelRows(): PanelRow[] {
+interface ActionRow {
+  kind: "action";
+  key: string;
+  label: string;
+  secondary: string;
+  icon: string;
+  onClick: () => void;
+}
+
+interface HooksRow {
+  kind: "hooks";
+  key: string;
+  label: string;
+  pillText: string;
+  pillClass: string;
+  secondary: string;
+  repairInactive: boolean;
+  onRepair: () => void;
+}
+
+type PanelRow = SwitchRow | ActionRow | HooksRow;
+
+interface PanelSection {
+  title: string;
+  rows: PanelRow[];
+}
+
+function panelSections(): PanelSection[] {
   const s = settings;
   if (!s) return [];
   return [
     {
-      label: "Always on top",
-      state: onOffText(s.alwaysOnTop),
-      onClick: () => {
-        void api.core.invoke<boolean>("toggle_always_on_top").then((on) => {
-          if (settings) settings.alwaysOnTop = on;
-          render();
-        });
-      },
+      title: "Window",
+      rows: [
+        {
+          kind: "switch",
+          key: "always-on-top",
+          label: "Always on top",
+          checked: s.alwaysOnTop,
+          word: onOffText(s.alwaysOnTop),
+          onClick: () => {
+            void api.core.invoke<boolean>("toggle_always_on_top").then((on) => {
+              if (settings) settings.alwaysOnTop = on;
+              render();
+            });
+          },
+        },
+        {
+          kind: "switch",
+          key: "start-with-windows",
+          label: "Start with Windows",
+          checked: startWithWindowsChecked(s.startWithWindows) === "true",
+          word: startWithWindowsText(s.startWithWindows),
+          onClick: () => {
+            void api.core.invoke<StartWithWindowsState>("toggle_start_with_windows").then((state) => {
+              if (settings) settings.startWithWindows = state;
+              render();
+            });
+          },
+        },
+        {
+          kind: "action",
+          key: "reset-position",
+          label: "Reset position",
+          secondary: resetPositionText(justResetPosition),
+          icon: RESET_ICON,
+          onClick: () => {
+            void api.core.invoke("reset_window_position").then(() => {
+              justResetPosition = true;
+              clearTimeout(resetNoteTimer);
+              resetNoteTimer = setTimeout(() => {
+                justResetPosition = false;
+                render();
+              }, NOTE_MS);
+              render();
+            });
+          },
+        },
+      ],
     },
     {
-      label: "Start with Windows",
-      state: startWithWindowsText(s.startWithWindows),
-      onClick: () => {
-        void api.core.invoke<StartWithWindowsState>("toggle_start_with_windows").then((state) => {
-          if (settings) settings.startWithWindows = state;
-          render();
-        });
-      },
+      title: "List",
+      rows: [
+        {
+          kind: "switch",
+          key: "hide-unknown",
+          label: "Hide unknown",
+          checked: snapshot.hideUnknown,
+          word: hideUnknownText(snapshot.hideUnknown, unknownCount(snapshot.tiles)),
+          onClick: () => {
+            void api.core.invoke("toggle_hide_unknown");
+          },
+        },
+      ],
     },
     {
-      label: "Reset window position",
-      state: resetPositionText(justResetPosition),
-      onClick: () => {
-        void api.core.invoke("reset_window_position").then(() => {
-          justResetPosition = true;
-          clearTimeout(resetNoteTimer);
-          resetNoteTimer = setTimeout(() => {
-            justResetPosition = false;
+      title: "Claude Code",
+      rows: [
+        {
+          kind: "hooks",
+          key: "hooks",
+          label: "Hooks",
+          pillText: hookStatusText(s.hookStatus),
+          pillClass: hookStatusPillClass(s.hookStatus),
+          secondary: repairSecondaryText(s.installerAvailable, repairRunning, repairOutcome),
+          repairInactive: repairButtonInactive(s.installerAvailable, repairRunning),
+          onRepair: () => {
+            if (!settings || repairButtonInactive(settings.installerAvailable, repairRunning)) return;
+            repairRunning = true;
+            repairOutcome = null;
             render();
-          }, NOTE_MS);
-          render();
-        });
-      },
-    },
-    {
-      label: "Hide unknown",
-      state: hideUnknownText(snapshot.hideUnknown, unknownCount(snapshot.tiles)),
-      onClick: () => {
-        void api.core.invoke("toggle_hide_unknown");
-      },
-    },
-    {
-      label: "Hooks",
-      state: hookStatusText(s.hookStatus),
-    },
-    {
-      label: "Repair",
-      state: repairRowText(s.installerAvailable, repairRunning, repairOutcome),
-      // Not a native `disabled` button: docs/ACCESSIBILITY.md forbids a
-      // control that clicking does nothing to explain, but this row's
-      // reason is already shown as its permanent state text, with
-      // nothing hidden behind the click, so a click while inactive is
-      // an honest no-op rather than a silent dead one.
-      inactive: !s.installerAvailable || repairRunning,
-      onClick: () => {
-        if (!settings || !settings.installerAvailable || repairRunning) return;
-        repairRunning = true;
-        repairOutcome = null;
-        render();
-        void api.core
-          .invoke<RepairResult>("repair_hooks")
-          .then((result) => {
-            repairRunning = false;
-            repairOutcome = result.outcome;
-            if (settings) settings.hookStatus = result.hookStatus;
-            render();
-          })
-          .catch(() => {
-            repairRunning = false;
-            repairOutcome = "failed_to_start";
-            render();
-          });
-      },
+            void api.core
+              .invoke<RepairResult>("repair_hooks")
+              .then((result) => {
+                repairRunning = false;
+                repairOutcome = result.outcome;
+                if (settings) settings.hookStatus = result.hookStatus;
+                render();
+              })
+              .catch(() => {
+                repairRunning = false;
+                repairOutcome = "failed_to_start";
+                render();
+              });
+          },
+        },
+      ],
     },
   ];
 }
 
-function renderPanelRow(row: PanelRow): HTMLElement {
-  // The Hooks status row (no onClick) is read-only, like the header's
-  // own summary counts, so it renders as a plain div rather than a
-  // button that would imply a click does something.
-  const el = document.createElement(row.onClick ? "button" : "div");
-  el.className = "row panel-row";
-  if (row.inactive) el.classList.add("panel-row-inactive");
-  if (row.onClick) el.setAttribute("aria-disabled", String(!!row.inactive));
+function renderSwitchRow(row: SwitchRow): HTMLElement {
+  const el = document.createElement("button");
+  el.className = "row panel-row panel-row-switch";
+  el.setAttribute("role", "switch");
+  el.setAttribute("aria-checked", boolChecked(row.checked));
   el.innerHTML = `
-    <div class="panel-row-label">${escapeHtml(row.label)}</div>
-    <div class="panel-row-state">${escapeHtml(row.state)}</div>`;
-  el.setAttribute("aria-label", `${row.label}, ${row.state}`);
-  if (row.onClick) el.addEventListener("click", row.onClick);
+    <div class="panel-row-main">
+      <div class="panel-row-label">${escapeHtml(row.label)}</div>
+    </div>
+    <div class="panel-row-control">
+      <span class="switch" aria-hidden="true"><span class="switch-thumb"></span></span>
+      <span class="switch-word">${escapeHtml(row.word)}</span>
+    </div>`;
+  el.setAttribute("aria-label", `${row.label}, ${row.word}`);
+  el.addEventListener("click", row.onClick);
   return el;
 }
 
+function renderActionRow(row: ActionRow): HTMLElement {
+  const el = document.createElement("button");
+  el.className = "row panel-row panel-row-action";
+  el.innerHTML = `
+    <div class="panel-row-main">
+      <div class="panel-row-label">${escapeHtml(row.label)}</div>
+      <div class="panel-row-secondary">${escapeHtml(row.secondary)}</div>
+    </div>
+    <div class="panel-row-control glyph" aria-hidden="true">${row.icon}</div>`;
+  el.setAttribute("aria-label", `${row.label}, ${row.secondary}`);
+  el.addEventListener("click", row.onClick);
+  return el;
+}
+
+function renderHooksRow(row: HooksRow): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "row panel-row panel-row-hooks";
+  el.innerHTML = `
+    <div class="panel-row-main">
+      <div class="panel-row-label-line">
+        <span class="panel-row-label">${escapeHtml(row.label)}</span>
+        <span class="pill ${row.pillClass}">${escapeHtml(row.pillText)}</span>
+      </div>
+      <div class="panel-row-secondary">${escapeHtml(row.secondary)}</div>
+    </div>
+    <button type="button" class="repair-btn"${row.repairInactive ? ' data-inactive="true"' : ""} aria-label="Repair hooks">Repair</button>`;
+  el.setAttribute(
+    "aria-label",
+    `${row.label}, ${row.pillText}${row.secondary ? `, ${row.secondary}` : ""}`,
+  );
+  // Not a native `disabled` button: docs/ACCESSIBILITY.md forbids a
+  // control that clicking does nothing to explain, but this row's
+  // reason is already shown as its permanent secondary text, so a click
+  // while inactive is an honest no-op rather than a silent dead one.
+  // onRepair itself re-checks repairInactive before doing anything.
+  el.querySelector(".repair-btn")!.addEventListener("click", row.onRepair);
+  return el;
+}
+
+function renderPanelRow(row: PanelRow): HTMLElement {
+  switch (row.kind) {
+    case "switch":
+      return renderSwitchRow(row);
+    case "action":
+      return renderActionRow(row);
+    case "hooks":
+      return renderHooksRow(row);
+  }
+}
+
 function renderPanel(): void {
-  list.replaceChildren(...panelRows().map(renderPanelRow));
+  list.replaceChildren(
+    ...panelSections().map((section) => {
+      const wrap = document.createElement("div");
+      wrap.className = "settings-section";
+      const title = document.createElement("div");
+      title.className = "settings-section-title";
+      title.textContent = section.title;
+      const card = document.createElement("div");
+      card.className = "settings-card";
+      card.append(...section.rows.map(renderPanelRow));
+      wrap.append(title, card);
+      return wrap;
+    }),
+  );
 }
 
 function render(): void {
@@ -307,6 +441,10 @@ function render(): void {
   // (docs/DECISIONS.md#adr-033: "in-bar, not a separate window"), so its
   // accessible name has to say which one is actually showing.
   list.setAttribute("aria-label", panelOpen ? "Settings" : "Sessions");
+  // Panel-only spacing (docs/DECISIONS.md#adr-034); the session list
+  // keeps its own flush layout so its height stays exactly
+  // rows * ROW_H_LOGICAL, matching window.rs.
+  list.classList.toggle("panel", panelOpen);
   if (panelOpen) {
     renderPanel();
     return;

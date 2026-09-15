@@ -105,11 +105,11 @@ fn after_change(app: &tauri::AppHandle, change: PendingChange) {
     // Hook traffic calls this constantly; the window only needs touching
     // when the visible row count actually moved. While the settings
     // panel is open it owns the window's height instead of the session
-    // list (PANEL_ROW_COUNT, not change.row_count), so a hook event
-    // arriving mid-panel repaints the (hidden) list state without
+    // list (window::PANEL_SENTINEL, not change.row_count), so a hook
+    // event arriving mid-panel repaints the (hidden) list state without
     // resizing the window out from under the panel the owner is
     // looking at.
-    let row_count = if PANEL_OPEN.load(Ordering::SeqCst) { PANEL_ROW_COUNT } else { change.row_count };
+    let row_count = if PANEL_OPEN.load(Ordering::SeqCst) { window::PANEL_SENTINEL } else { change.row_count };
     if LAST_ROW_COUNT.swap(row_count, Ordering::SeqCst) != row_count {
         queue_resize(app, row_count);
     }
@@ -130,14 +130,10 @@ fn queue_resize(app: &tauri::AppHandle, row_count: usize) {
 }
 
 /// Row count the window was last sized for; `usize::MAX` until the
-/// startup sizing in `setup` has run.
+/// startup sizing in `setup` has run. `window::PANEL_SENTINEL` (one less
+/// than this) is stored here instead while the settings panel owns the
+/// window's height (docs/DECISIONS.md#adr-034).
 static LAST_ROW_COUNT: AtomicUsize = AtomicUsize::new(usize::MAX);
-
-/// Row count the settings panel uses while it is open, replacing the
-/// session list: always on top, start with Windows, reset position,
-/// hide grey, hooks status, and repair, each a full row like a session
-/// row (docs/DECISIONS.md#adr-033).
-const PANEL_ROW_COUNT: usize = 6;
 
 /// Whether the settings panel is currently open. Pure surface
 /// navigation, not a persisted setting: it always starts closed, unlike
@@ -189,7 +185,16 @@ fn resize_for_rows(win: &tauri::WebviewWindow, row_count: usize) {
     let cur = window::Rect::new(pos.x, pos.y, outer.width as i32, outer.height as i32);
 
     let max_h_logical = ((area.h - frame_h) as f64 / scale).round() as i32;
-    let new_h_logical = window::window_height(row_count, max_h_logical);
+    // The settings panel's content is fixed, not one row per session
+    // (docs/DECISIONS.md#adr-034), so it is sized off its own formula
+    // rather than `row_count * ROW_H_LOGICAL`; `row_count` still carries
+    // the sentinel through the rest of this otherwise-generic resize
+    // path unchanged.
+    let new_h_logical = if row_count == window::PANEL_SENTINEL {
+        window::panel_window_height(max_h_logical)
+    } else {
+        window::window_height(row_count, max_h_logical)
+    };
     let inner_w = (window::WINDOW_W_LOGICAL * scale).round() as i32;
     let inner_h = (new_h_logical as f64 * scale).round() as i32;
 
@@ -270,7 +275,7 @@ fn toggle_hide_unknown(shared: State<Shared>, app: tauri::AppHandle) {
 fn toggle_settings_panel(shared: State<Shared>, app: tauri::AppHandle) -> bool {
     let open = !PANEL_OPEN.load(Ordering::SeqCst);
     PANEL_OPEN.store(open, Ordering::SeqCst);
-    let row_count = if open { PANEL_ROW_COUNT } else { visible_rows(&shared.0.lock().unwrap()) };
+    let row_count = if open { window::PANEL_SENTINEL } else { visible_rows(&shared.0.lock().unwrap()) };
     LAST_ROW_COUNT.store(row_count, Ordering::SeqCst);
     queue_resize(&app, row_count);
     open

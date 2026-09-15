@@ -339,26 +339,144 @@ body {
 }
 
 /* ---- Settings panel: replaces the session list in place while open
-   (docs/DECISIONS.md#adr-033). Rows reuse .row's 64px height and full
-   width but never a glyph column: a text label and a text state only,
-   so nothing here relies on colour. ---------------------------------- */
+   (docs/DECISIONS.md#adr-033, restyled by adr-034). Grouped into titled
+   sections, each a bordered card of rows; every row is still a text
+   label plus a text state, never colour alone, whether that state reads
+   through a switch, a status pill, or plain secondary text. ---------- */
 
-.panel-row {
-  grid-template-columns: 1fr auto;
-  grid-template-areas: "label state";
-  column-gap: 12px;
+/* Only the panel gets outer padding; the session list stays flush so
+   its height stays exactly rows * ROW_H_LOGICAL (window.rs). Must match
+   PANEL_PADDING_LOGICAL in app/src-tauri/src/window.rs (applied top and
+   bottom, so 8px here is 16px of total height). */
+#list.panel {
+  padding: 8px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Must match SECTION_GAP_LOGICAL in window.rs. */
+.settings-section + .settings-section {
+  margin-top: 12px;
+}
+
+/* Must match SECTION_TITLE_H_LOGICAL in window.rs. */
+.settings-section-title {
+  min-height: 32px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 4px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--subtext);
+}
+
+.settings-card {
+  border-radius: 10px;
+  overflow: hidden;
   background: var(--tile);
+  box-shadow: inset 0 0 0 1px var(--tile-border);
+}
+
+/* Overrides .row's grid, left accent, radius and outer border: a panel
+   row is a flex row inside its card, separated from its neighbours by a
+   hairline rather than a full card gap. */
+.panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-left: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  border-bottom: 1px solid var(--tile-border);
+}
+.panel-row:last-child {
+  border-bottom: none;
+}
+
+.panel-row-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .panel-row-label {
-  grid-area: label;
   font-size: 15px;
   font-weight: 700;
 }
 
-.panel-row-state {
-  grid-area: state;
-  justify-self: end;
+.panel-row-label-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Reset position's description, and the Hooks row's Repair result, both
+   sit here: one short line under the label, never crowding it. */
+.panel-row-secondary {
+  font-size: 12px;
+  color: var(--subtext);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-row-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.panel-row-action .panel-row-control.glyph {
+  width: 22px;
+  height: 22px;
+  color: var(--subtext);
+}
+
+/* ---- Toggle switch: role="switch" on the row itself (main.ts), never
+   a control nested inside the row's own <button>. The track and thumb
+   are decorative (aria-hidden); the word beside them is the real,
+   always-visible state text (docs/ACCESSIBILITY.md). */
+.switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--text) 18%, var(--tile));
+  border: 1px solid var(--tile-border);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--subtext);
+  transition: transform 120ms ease, background 120ms ease;
+}
+.panel-row-switch[aria-checked="true"] .switch {
+  background: color-mix(in srgb, var(--c-thinking) 55%, var(--tile));
+  border-color: color-mix(in srgb, var(--c-thinking) 70%, var(--tile-border));
+}
+.panel-row-switch[aria-checked="true"] .switch-thumb {
+  transform: translateX(16px);
+  background: var(--text);
+}
+.switch-word {
+  min-width: 3.5em;
   font-size: 13px;
   font-weight: 700;
   color: var(--subtext);
@@ -366,14 +484,68 @@ body {
   white-space: nowrap;
 }
 
-/* Styled inactive, not natively disabled: the row still accepts a
-   click (docs/ACCESSIBILITY.md forbids a control that clicking does
-   nothing to explain), it just has nothing further to do while its own
-   state text already names the reason. */
-.panel-row-inactive {
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch-thumb,
+  .row,
+  .side-btn {
+    transition: none;
+  }
+}
+
+/* ---- Status pill: tint plus text, never colour alone. Reuses the same
+   frozen hues the session rows use for a loosely matching meaning
+   (green good, amber attention, red problem); this is hook-install
+   status, not a session state, so ADR-008's own mapping is untouched. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.pill-good {
+  background: color-mix(in srgb, var(--c-complete) 22%, transparent);
+  color: color-mix(in srgb, var(--c-complete) 80%, var(--text));
+}
+.pill-warn {
+  background: color-mix(in srgb, var(--c-needs-input) 22%, transparent);
+  color: color-mix(in srgb, var(--c-needs-input) 80%, var(--text));
+}
+.pill-bad {
+  background: color-mix(in srgb, var(--c-error) 22%, transparent);
+  color: color-mix(in srgb, var(--c-error) 80%, var(--text));
+}
+
+/* The Hooks row's Repair action: a real nested <button>, valid because
+   the Hooks row itself is a plain div, not a button (main.ts). Styled
+   inactive rather than natively disabled when there is no installer to
+   run (docs/ACCESSIBILITY.md forbids a disabled control that clicking
+   explains nothing); its reason is always visible as the row's own
+   secondary text. */
+.repair-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-thinking) 25%, var(--tile-border));
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 120ms ease;
+}
+.repair-btn:active {
+  background: color-mix(in srgb, var(--c-thinking) 40%, var(--tile-border));
+}
+.repair-btn[data-inactive="true"] {
+  background: var(--tile-border);
   color: var(--subtext);
   cursor: default;
-}
-.panel-row-inactive .panel-row-label {
-  color: var(--subtext);
 }
