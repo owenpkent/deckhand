@@ -85,5 +85,11 @@ Send-Hook @{ hook_event_name = "StopFailure"; session_id = "synth-3"; error = @{
 Start-Sleep -Milliseconds 400
 Shot "4-green-and-red" $proc
 
+# $proc is the PID Start-Process handed back for the main app, not a
+# lookup by name, so this targets the right one of the two deckhand.exe
+# processes that run once ADR-037's watchdog is spawned. Note: a forced
+# kill is not exit code 0, so the watchdog reads it as a crash and
+# relaunches deckhand.exe; a fresh, untracked instance may still be
+# running after this script exits (docs/DECISIONS.md#adr-037).
 Stop-Process -Id $proc.Id -Force -Confirm:$false
 "screenshots in $shots"

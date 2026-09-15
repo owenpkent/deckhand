@@ -42,6 +42,15 @@ not extend today's permission authority or weaken the fail-to-ask rule.
    a socket to 127.0.0.1. Loopback is a convenience, not a boundary.
 3. **The settings files.** Whatever else edits `settings.json` can add hooks of
    its own; Deckhand must not make that easier or harder to notice.
+4. **The watchdog.** `deckhand.exe --watchdog <pid>`
+   ([ADR-037](DECISIONS.md#adr-037)) is the same binary, signed or not,
+   carrying no new privilege: it holds a wait handle on the app's process and
+   nothing else, and its only capability is relaunching `deckhand.exe`. The
+   instance mutex it depends on, `Local\Deckhand.Instance`, and its ledger,
+   `%LOCALAPPDATA%\deckhand\watchdog.log`, are both local-only artefacts;
+   neither is read or written by anything outside the machine, and "nothing
+   leaves the machine, no crash reporting" still holds, because the ledger
+   never leaves the local config directory.
 
 Out of scope: Claude Code itself, the model's behaviour, Anthropic's services,
 and an attacker who already runs code as you with full user rights (such an
@@ -165,7 +174,10 @@ the design, because they turn a security decision into configuration.
 
 - Nothing leaves the machine. No telemetry, no crash reporting, no update
   pings in Phase 1 to 3. If any of that is ever proposed, it is opt-in and
-  gets its own decision record.
+  gets its own decision record. The watchdog ledger
+  ([ADR-037](DECISIONS.md#adr-037)) does not change this: it is a local,
+  append-only record of restart decisions, not a crash report sent
+  anywhere.
 - Tool inputs are held in memory for display and dropped with the request.
   They appear on disk only if the audit log is enabled, and the audit log
   stores the tool name and a hash of the input by default, full input only if

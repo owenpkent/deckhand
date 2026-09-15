@@ -23,6 +23,19 @@ version number is invented and no past release is backfilled.
   scan sighting, never from a pid restored from disk, since a restored pid
   may already name another process.
 
+- **Single instance and a crash watchdog**
+  ([ADR-037](docs/DECISIONS.md#adr-037)). Startup now claims a named
+  kernel mutex, `Local\Deckhand.Instance`; a second launch raises the
+  first copy's window without activating it and exits 0 rather than
+  opening a duplicate. Every launch also spawns a detached watchdog, the
+  same `deckhand.exe` in a headless `--watchdog <pid>` mode, that waits
+  for the app to exit and relaunches it on any exit code other than 0,
+  rate-limited by an append-only local ledger,
+  `%LOCALAPPDATA%\deckhand\watchdog.log` (three restarts in ten minutes
+  and the watchdog gives up rather than loop forever). Start with
+  Windows is unchanged. Two `deckhand.exe` processes now run while the
+  board is up.
+
 ### Changed
 
 - **The scan colours a never-heard session, `T_unknown` narrows, and list

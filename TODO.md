@@ -156,11 +156,18 @@ Started 2026-08-02. The skeleton lives in `app/` (daemon and surface, one
 Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 `scripts/phase1-smoke.ps1` drives it with synthetic events end to end.
 
-- [ ] Design the daemon's process lifecycle (start on login, restart on
+- [x] Design the daemon's process lifecycle (start on login, restart on
       crash, single instance). The settings panel's Start with Windows
       row ([ADR-033](docs/DECISIONS.md#adr-033)) covers "start on
       login" as an opt-in HKCU Run key toggle; restart-on-crash and
-      single-instance are still undesigned.
+      single-instance landed as
+      [ADR-037](docs/DECISIONS.md#adr-037) (2026-09-15): a named
+      kernel mutex for single instance, and a same-binary watchdog
+      that relaunches the app after a non-zero exit, rate-limited by
+      a local ledger.
+- [ ] Surface the watchdog ledger in the settings panel ("restarted
+      after a crash at <time>"), linking to
+      [ADR-037](docs/DECISIONS.md#adr-037).
 - [x] Implement the hook shim: the small program Claude Code calls, per
       `docs/CLAUDE_CODE_ADAPTER.md`. Done 2026-08-02: `shim/`, std-only,
       reads stdin, POSTs to the daemon's loopback port with the token
