@@ -64,10 +64,10 @@ deny authority through Claude Code's hook system, but it has no proven way
 to put a prompt into that session at the moment a person wants to type one.
 Documented channels do exist and they all deliver at a turn boundary rather
 than into an idle session, and none of them has been observed working here,
-so Deckhand declares the capability false and ships no send. Continue is a
-visible, disabled button that states the reason; sending and interrupting
-fall back to synthetic keystrokes aimed at the terminal window only if the
-user opts in, which is fragile and off by default. Hosted mode starts
+so Deckhand declares the capability false and ships no send. The Continue,
+Send, and Interrupt controls that once stood for this were removed from
+the surface by [ADR-028](DECISIONS.md#adr-028) rather than left disabled.
+Hosted mode starts
 sessions itself through the Claude Agent SDK, which gets full control
 including sending prompts, at the cost of the normal terminal UI.
 
@@ -158,7 +158,7 @@ application plus the small program Claude Code's hooks call, watching
 live sessions and painting their status. Nothing in it can approve,
 deny, or send anything yet; that authority arrives in Phase 2, after
 the watching has earned trust. One Phase 0 item remains open alongside:
-validating the last few hook events against a live install. See `ROADMAP.md` for the phase breakdown and `TODO.md` for what is
-currently open, including the specific validation work, against a real
-Claude Code install rather than just its documentation, that Phase 0 still
-owes before Phase 1 can start on solid ground.
+validating the last two hook events, `Notification` and `StopFailure`,
+against a live install. See `ROADMAP.md` for the phase breakdown and
+`TODO.md` for what is currently open. For the full technical account,
+see the [white paper](WHITEPAPER.md).

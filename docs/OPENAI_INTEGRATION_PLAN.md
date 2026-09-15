@@ -82,7 +82,7 @@ describe release gates, not claims about current functionality.
 
 | ID | Requirement | Acceptance evidence |
 | --- | --- | --- |
-| R1 | Mixed runtimes share the existing six-tile surface and frozen state meanings | One test drives three Claude and three Codex sessions without runtime branches in rendering |
+| R1 | Mixed runtimes share the existing session-list surface and frozen state meanings | One test drives three Claude and three Codex sessions without runtime branches in rendering |
 | R2 | Session identity includes runtime and stable origin as well as native session ID | Identical native IDs from different runtimes/origins cannot overwrite one another |
 | R3 | Discovery distinguishes history, observed activity, and current connection health | A stored thread or lost connection never invents idle, complete, or ended |
 | R4 | Existing Claude hooks and saved bindings continue to work | Old payload fixtures and a legacy bindings file retain their prior results |
@@ -446,7 +446,9 @@ Paths below are proposed locations; files named as new do not exist yet.
 
 Do not add provider-specific behavior to glyphs, state colors, or common
 control labels. Runtime provenance and capability reasons belong in
-session metadata, the picker, and the detail panel. Distinguish equal
+session metadata and wherever the surface explains a control's status;
+ADR-028 removed the bind picker and the detail panel this section used
+to name, and neither exists on the current surface. Distinguish equal
 session labels by runtime and origin without relying on color. Replace
 the current hardcoded attached label and Claude-only blocked reasons
 with these fields. Production setup must be usable

@@ -61,6 +61,19 @@ a scrollbar that used to appear on the open panel. One Phase 0 item
 also stays open alongside it: hook payload validation against a live
 install has ten of the twelve documented events observed, with
 `Notification` and `StopFailure` still unseen.
+[ADR-035](docs/DECISIONS.md#adr-035) (2026-09-15) then gave the daemon
+a second liveness channel: a process handle held per session, polled
+on the existing two-second tick, so a crash without `SessionEnd` moves
+a session straight to `ended`, and the periodic `claude agents --json`
+scan now colours a session no hook has coloured yet, narrowing
+`T_unknown` for a session with a live handle.
+[ADR-036](docs/DECISIONS.md#adr-036), the same day, let the scan break
+a tie with a hook-set colour after two consecutive contradicting
+scans, and retired the planned transcript JSONL fallback before it was
+built. [ADR-037](docs/DECISIONS.md#adr-037), also that day, closed the
+daemon's process lifecycle: a named mutex makes it single instance,
+and a same-binary watchdog relaunches it after a crash, rate-limited
+by a local, append-only ledger; Start with Windows is unchanged.
 
 | Piece | State |
 | --- | --- |
@@ -74,6 +87,8 @@ install has ten of the twelve documented events observed, with
 | Daemon, shim, state machine | ✅ Phase 1 skeleton; live sessions paint real status |
 | Session-list surface, auto-binding | ✅ Built (ADR-028); binds every enumerated session, prunes ended ones |
 | Settings panel (always on top, start with Windows, reset position, hooks status, Repair) | ✅ Built (ADR-033), regrouped and restyled (ADR-034); Start with Windows and Repair unverified against a real login and a real settings.json |
+| Session liveness (process handle, scan status, tie-break) | ✅ Built (ADR-035, ADR-036); `shell` and `waiting` scan statuses still unobserved live |
+| Process lifecycle (single instance, crash watchdog) | ✅ Built (ADR-037); Start with Windows unchanged; the watchdog ledger is not yet surfaced in the settings panel |
 | Approve and deny | ❌ Phase 2, nothing has write authority yet, and not currently planned on the surface |
 
 Build and run it with `python run.py`, which checks the toolchain,
@@ -157,18 +172,42 @@ a mockup and
 [docs/UI_SPEC.md](docs/UI_SPEC.md) disagree, the spec wins; treat the
 images as historical until they are redrawn.
 
-<img src="assets/surface-horizontal.svg" width="100%" alt="Mockup of the Deckhand surface: a dark horizontal panel. Left, six square tiles: undertow with a white idle ring, contour with a blue thinking ring and the subtitle Bash cmake, deckhand with a thick amber ring, a hand glyph, subtitle Bash approval, and a selection chevron, meshview with a green ring, a check and an unread dot, markcopy grey and hatched with a question mark and the words state unknown, and an empty dashed tile reading bind a session. Middle, six command keys: Approve and Deny enabled, Continue and Interrupt greyed out, Plan and Compact neutral. Right, a four-way arrow pad, a dial reading Opus, model, with minus and plus targets, and Talk and Send buttons. Bottom left, three layer dots labelled Layer 1: Claude Code."/>
+<img src="assets/surface-horizontal.svg" width="100%" alt="Mockup of the
+Deckhand surface: a dark horizontal panel. Left, six square tiles: undertow with
+a white idle ring, contour with a blue thinking ring and the subtitle Bash
+cmake, deckhand with a thick amber ring, a hand glyph, subtitle Bash approval,
+and a selection chevron, meshview with a green ring, a check and an unread dot,
+markcopy grey and hatched with a question mark and the words state unknown, and
+an empty dashed tile reading bind a session. Middle, six command keys: Approve
+and Deny enabled, Continue and Interrupt greyed out, Plan and Compact neutral.
+Right, a four-way arrow pad, a dial reading Opus, model, with minus and plus
+targets, and Talk and Send buttons. Bottom left, three layer dots labelled Layer
+1: Claude Code."/>
 
 *The surface, horizontal, docked to a screen edge. One tile per session; the
 amber tile is selected, so Approve and Deny are live and everything that does
 not apply is disabled rather than hidden.*
 
-<img src="assets/states.svg" width="100%" alt="Legend of the seven tile states, each a small tile with its own colour, glyph, and words: Idle, white with an open circle and alive, waiting. Thinking, blue with an arc spinner and working. Needs input, amber with a hand glyph and waiting on you. Complete, green with a check, an unread dot, and done, unread, clears on select. Error, red with a cross and crashed or failed. Unknown, grey and hatched with a question mark and never guessed. Ended or unbound, a dashed outline with a plus and empty."/>
+<img src="assets/states.svg" width="100%" alt="Legend of the seven tile states,
+each a small tile with its own colour, glyph, and words: Idle, white with an
+open circle and alive, waiting. Thinking, blue with an arc spinner and working.
+Needs input, amber with a hand glyph and waiting on you. Complete, green with a
+check, an unread dot, and done, unread, clears on select. Error, red with a
+cross and crashed or failed. Unknown, grey and hatched with a question mark and
+never guessed. Ended or unbound, a dashed outline with a plus and empty."/>
 
 *The colour language, inherited from the Codex Micro. Every state also has a
 glyph and a label; colour is never the only channel.*
 
-<p align="center"><img src="assets/detail-approval.svg" width="60%" alt="Mockup of the detail panel during a pending approval. Header: Tile 3, deckhand, Opus, attached. An amber pill reads WAITING ON YOU. Below, the text Claude Code wants to run, then a monospace card showing Bash and the command cmake dash dash build build dash dash config Release. Underneath, a green Approve button and a red-outlined Deny button separated by a wide gap, with a note reading answers in 52 seconds, then returns to the terminal. At the bottom, a context bar at 62 percent, 41 cents this session, and Raise window, Unbind, and Settings buttons."/></p>
+<p align="center"><img src="assets/detail-approval.svg" width="60%" alt="Mockup
+of the detail panel during a pending approval. Header: Tile 3, deckhand, Opus,
+attached. An amber pill reads WAITING ON YOU. Below, the text Claude Code wants
+to run, then a monospace card showing Bash and the command cmake dash dash build
+build dash dash config Release. Underneath, a green Approve button and a
+red-outlined Deny button separated by a wide gap, with a note reading answers in
+52 seconds, then returns to the terminal. At the bottom, a context bar at 62
+percent, 41 cents this session, and Raise window, Unbind, and Settings
+buttons."/></p>
 
 *The approval card. The tool input is shown before the buttons are live, Deny
 sits a full dead gap away from Approve, and if you do nothing the decision

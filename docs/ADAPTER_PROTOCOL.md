@@ -15,11 +15,13 @@ does not revise version `0` or enable any additional capability.
 ## Capabilities
 
 An adapter declares what it can do. The surface reads these declarations and
-disables controls it cannot drive, so a missing capability is a greyed-out
-button that says why when you click it, never a button that silently does
-nothing. The reason is revealed in the detail panel, which the same click
-expands if it is collapsed. Not a tooltip: the surface never takes focus, so a
-dwell or eye-tracker user has no route to one. See
+disables a control it cannot drive: greyed out, and naming the missing
+capability when clicked, never a silent no-op. The reason used to expand
+into a detail panel; [ADR-028](DECISIONS.md#adr-028) removed that panel,
+and no control on the current session-list surface depends on one of
+these optional capabilities today, so the mechanism has no current
+example. A tooltip is never the answer either way: the surface never
+takes focus, so a dwell or eye-tracker user has no route to one. See
 [ACCESSIBILITY.md](ACCESSIBILITY.md#forbidden-interactions) and
 [DECISIONS.md](DECISIONS.md#adr-021).
 
@@ -52,7 +54,13 @@ this capability. Rule 7 applies: declare `false` until an adapter has been
 observed delivering.
 
 Controls map onto capabilities, and the mapping is the whole reason the
-declarations exist:
+declarations exist. The table below predates
+[ADR-028](DECISIONS.md#adr-028): every row except `decide_permission`
+names a control removed from the current surface outright, not merely
+disabled, and "Tile click" is now a session-list row click, folded with
+Reveal into one click by [ADR-027](DECISIONS.md#adr-027). It stays as a
+record of which capability a control would need if it returns; nothing
+below describes today's surface:
 
 | Surface control | Capability it needs |
 | --- | --- |
@@ -64,12 +72,13 @@ declarations exist:
 | Tile click, Reveal | `focus_session` |
 | Dial commit target | `set_option` |
 
-A control whose capability is `false` ships visible and disabled, and names the
-missing capability when clicked. Continue and Send are the current examples:
-in attached mode `send_prompt` is `false`, so both are disabled and say so
-rather than looking available. The dial's steppers are a readout and need no
-capability; only its commit target writes, so only the commit target is gated
-on `set_option`.
+A control whose capability is `false` ships visible and disabled, and names
+the missing capability when clicked, when a gated control exists at all.
+Before ADR-028, Continue and Send were the standing examples: in attached
+mode `send_prompt` is `false`, so both would have been disabled and said
+so rather than looking available. Neither ships today; ADR-028 removed
+them outright rather than leaving them disabled, and the dial and its
+commit target are gone the same way.
 
 Each capability also carries a **confidence**, because "supported" and
 "supported by a documented interface" are different claims:
@@ -315,7 +324,8 @@ polling never becomes the daemon's problem.
 6. **Never block the runtime you are observing.** An adapter's failure must not
    stop the user's actual work.
 7. **Declare confidence honestly.** Marking something `documented` when it is
-   scraped from an internal is the kind of shortcut that makes a tool untrustworthy.
+   scraped from an internal is the kind of shortcut that makes a tool
+   untrustworthy.
 8. **Report a lifecycle change only when the lifecycle changed.** Runtimes
    reuse start and end events for things that are neither, a compaction that
    arrives as a session start being the common case. Read the reason before

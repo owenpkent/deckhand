@@ -4,7 +4,8 @@
 
 ## Related issue
 
-<!-- Link the issue this addresses, if any. "Closes #123" auto-closes it on merge. -->
+<!-- Link the issue this addresses, if any. "Closes #123" auto-closes it
+on merge. -->
 
 ## Type of change
 

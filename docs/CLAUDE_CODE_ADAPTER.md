@@ -663,21 +663,24 @@ validator list ([ADR-035](DECISIONS.md#adr-035)). The overall file stamp
 stays partial against 2.1.220; only this row and the `status` observation
 carry the later version.
 
-`answer_question` is optional and unproven, and it is declared so that the
-surface has a real thing to disable an Answer target against rather than
-inventing one. `AskUserQuestion` is an ordinary tool call, so its options are
-visible in a `PreToolUse` payload and Deckhand installs the entry that sees
-them, but no interface for returning a chosen option to a running session has
-been observed, and it is not promoted on anything less. Deckhand can
-therefore show the question and cannot yet answer it, which is the honest
-half of the feature and is what ships. MCP elicitation is sometimes suggested
-here; it is MCP-only, so it answers a different question and is not a
-candidate.
+`answer_question` is optional and unproven; before
+[ADR-028](DECISIONS.md#adr-028) removed the Answer target, it was declared
+so the surface had a real capability to disable that control against
+rather than inventing one. `AskUserQuestion` is an ordinary tool call, so
+its options are visible in a `PreToolUse` payload and Deckhand installs
+the entry that sees them, but no interface for returning a chosen option
+to a running session has been observed, and it is not promoted on
+anything less. The current surface does not distinguish a question from
+any other amber row ([CONTROL_MAPPING.md](CONTROL_MAPPING.md)); showing
+and answering the question are both undesigned again until a control for
+either returns. MCP elicitation is sometimes suggested here; it is
+MCP-only, so it answers a different question and is not a candidate.
 
-`set_option` is `false` on both attached hosts because no local interface sets the
-model, the effort level, or the permission mode of a session that is already
-running. The dial is a readout there, and the surface should say so rather
-than offering a control with nowhere to write.
+`set_option` is `false` on both attached hosts because no local interface
+sets the model, the effort level, or the permission mode of a session
+that is already running. The dial that would have read and written it is
+gone too; [ADR-028](DECISIONS.md#adr-028) removed it, so this capability
+currently gates nothing on the surface.
 
 ## Known limitations
 

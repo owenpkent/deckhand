@@ -75,16 +75,16 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 258 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 556 | Daemon, shim, surface, state machine |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 290 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 665 | Daemon, shim, surface, state machine |
 | [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 352 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 679 | Reference adapter; partial stamp |
-| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 387 | Approval path; fails to `ask` |
-| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 248 | Visual and interaction contract |
-| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 228 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 1632 | ADRs; append only |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 713 | Reference adapter; partial stamp |
+| [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 398 | Approval path; fails to `ask` |
+| [docs/UI_SPEC.md](docs/UI_SPEC.md) | 281 | Visual and interaction contract |
+| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 231 | The rules that win every conflict |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 2080 | ADRs; append only |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 151 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 183 / 403 | Phases and open work |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 433 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -202,7 +202,7 @@ hook-set colour with no hook between them, about thirty seconds, the
 scan breaks the tie instead of waiting on `T_unknown`. The planned
 transcript fallback is retired with it, not built; the scan's
 `status` already answers what it would have, from a documented
-command. ADR-037, the day after that, closed the daemon's last open
+command. ADR-037, the same day again, closed the daemon's last open
 lifecycle question: a named mutex makes the app single instance, and
 a same-binary watchdog, spawned by every launch, relaunches it after
 a crash and rate-limits itself with a local, append-only ledger.

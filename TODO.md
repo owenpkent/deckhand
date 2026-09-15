@@ -248,6 +248,11 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       `OpenProcess(SYNCHRONIZE)` handle per session, opened from a scan
       sighting, polled with a zero-timeout wait on the existing
       two-second tick.
+- [ ] Observe the scan's `shell` and `waiting` status values against a
+      live session. Only `busy` and `idle` have fired (2026-09-15); the
+      other two sit beside them in the CLI's own validator list but are
+      still unconfirmed, same as the `Notification` and `StopFailure`
+      hook events tracked above.
 - [x] Bring `app/` in line with ADR-028: replace the six-slot tile surface
       and its manual bind picker, command keys, stick, dial, talk and
       send placeholders, detail panel, layer strip, and corner badges
@@ -415,6 +420,10 @@ here.
 
 Not tied to a specific phase yet.
 
+- [ ] `http::tests::a_chunked_body_gives_411_unread_and_nothing_arrives`
+      (`app/src-tauri/src/http.rs`) is flaky and not currently marked
+      `#[ignore]` or flagged in any way. Diagnose and stabilise it, or
+      mark it and record why.
 - [ ] Cross-platform testing on macOS.
 - [ ] Cross-platform testing on Linux.
 - [ ] Installer, packaging, and update story.
