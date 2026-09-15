@@ -202,6 +202,15 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  /* Horizontal-only inset from the window's left and right edges,
+     shared by session rows and panel cards alike (main.ts): the same
+     8px #list.panel below already carries horizontally as part of its
+     own padding, so this is what gives the session list that same
+     inset in list mode. Horizontal, never vertical, so it never touches
+     the session list's own height, which stays exactly
+     rows * ROW_H_LOGICAL (window.rs) whether or not the panel is open. */
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 /* 64px including the 6px ground-coloured bottom border that separates
@@ -380,8 +389,12 @@ body {
    label plus a text state, never colour alone, whether that state reads
    through a switch, a status pill, or plain secondary text. ---------- */
 
-/* Only the panel gets outer padding; the session list stays flush so
-   its height stays exactly rows * ROW_H_LOGICAL (window.rs). Must match
+/* Only the panel gets outer padding top and bottom; the session list
+   stays flush vertically so its height stays exactly
+   rows * ROW_H_LOGICAL (window.rs). Horizontally the two already agree:
+   this rule's own left/right 8px is the same 8px #list's own base rule
+   above gives session rows, so rows and cards share one inset even
+   though only this rule adds the vertical component. Must match
    PANEL_PADDING_LOGICAL in app/src-tauri/src/window.rs (applied top and
    bottom, so 8px here is 16px of total height). */
 #list.panel {
@@ -420,7 +433,18 @@ body {
 
 /* Overrides .row's grid, left accent, radius and outer border: a panel
    row is a flex row inside its card, separated from its neighbours by a
-   hairline rather than a full card gap. */
+   hairline rather than a full card gap. Every row kind (switch, action,
+   hooks) has exactly two direct children, its label/description block
+   and one trailing control (a switch, the Reset icon, or the Repair
+   button), so `justify-content: space-between` alone is what flushes
+   every one of those controls against the same right edge: the switch's
+   own track, the Reset row's icon, and Repair all end at this row's
+   inner right edge regardless of the control's own width. A switch
+   row's control is itself a flex pair, word then switch
+   (`renderSwitchRow` in main.ts), so the switch stays the rightmost,
+   flush element while `.switch-word`'s own min-width and right-aligned
+   text (below) keep the word's right edge sitting flush against the
+   switch's left edge no matter how long the word text runs. */
 .panel-row {
   display: flex;
   align-items: center;
