@@ -379,9 +379,10 @@ pid; both are hosted by the VS Code extension
 ([ADR-023](DECISIONS.md#adr-023)); both processes share the same direct
 parent pid, resolved once when the pid is learned; both share a working
 directory, compared case-insensitively with separators normalised; N
-started after O, by the scan's `startedAt` when both have one and by
-first-seen time otherwise; O is `IDLE`, `COMPLETE`, or `UNKNOWN`; and N is
-not `ENDED`. A session that is `THINKING`, `NEEDS_INPUT`, or `ERROR` is
+started after O, by the scan's `startedAt` when every session sharing that
+window and directory reports one and by first-seen time otherwise, so one
+clock orders the whole group; O is `IDLE`, `COMPLETE`, or `UNKNOWN`; and N
+is not `ENDED`. A session that is `THINKING`, `NEEDS_INPUT`, or `ERROR` is
 never hidden this way, whatever is newer, and a console or Windows Terminal
 session is never hidden either, since the observed case is specific to the
 extension host. `app/src-tauri/src/supersede.rs` holds the rule as a pure

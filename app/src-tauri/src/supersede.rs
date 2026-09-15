@@ -48,38 +48,84 @@ pub struct Candidate<'a> {
     /// to list this session reported one.
     pub started_at_ms: Option<i64>,
     /// When the daemon first heard of this session at all, by any
-    /// channel: the fallback ordering when one side or the other has no
-    /// `startedAt`.
+    /// channel: the fallback ordering, for a whole window-and-folder
+    /// group at once, when any session in it has no `startedAt`.
     pub first_seen_ms: i64,
 }
 
-/// True when `o` is superseded by `n`: same VS Code window (matching
-/// direct parent pid, both classified `Host::VsCode`), the same folder,
-/// `n` started after `o`, and `o` sits in a state it is safe to hide
-/// (never `Thinking`, `NeedsInput`, or `Error` -- a session doing
-/// something or waiting on a human is never a stale duplicate). `n`
-/// itself may be in any state except `Ended`: an ended session has
-/// already handed nothing back, so it supersedes nothing.
-fn is_superseded_by(o: &Candidate, n: &Candidate) -> bool {
+/// True when `a` and `b` share one VS Code window and folder: both have
+/// a known pid, both are classified `Host::VsCode`, both name the same
+/// direct parent pid, and both name the same folder (normalized, so
+/// case, separators, and a trailing slash do not split a match).
+/// Reflexive on any candidate that qualifies at all, symmetric, and
+/// transitive, which is what lets `superseded` treat "same window and
+/// folder" as a partition into groups and order each group by one
+/// clock.
+fn same_window_and_folder(a: &Candidate, b: &Candidate) -> bool {
+    if a.pid.is_none() || b.pid.is_none() {
+        return false;
+    }
+    if a.host != Some(Host::VsCode) || b.host != Some(Host::VsCode) {
+        return false;
+    }
+    let (Some(a_parent), Some(b_parent)) = (a.parent_pid, b.parent_pid) else {
+        return false;
+    };
+    if a_parent != b_parent {
+        return false;
+    }
+    let (Some(a_cwd), Some(b_cwd)) = (a.cwd, b.cwd) else {
+        return false;
+    };
+    crate::reveal::normalize_path(a_cwd) == crate::reveal::normalize_path(b_cwd)
+}
+
+/// Which clock orders one window-and-folder group: the scan's own
+/// `startedAt` when every member reports one, first-seen otherwise.
+/// Chosen once per group, never per pair. Choosing per pair, with each
+/// pair falling back on its own, made "newer than" non-transitive as
+/// soon as one member lacked `startedAt` (2026-09-15 review): A could
+/// be newer than C by first-seen, C newer than B by first-seen, and B
+/// newer than A by `startedAt`, a cycle that hid all three. One clock
+/// per group is a total order, so the member it ranks newest can never
+/// be hidden and a group never disappears entirely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Clock {
+    StartedAt,
+    FirstSeen,
+}
+
+fn clock_for(group: &[&Candidate]) -> Clock {
+    if group.iter().all(|c| c.started_at_ms.is_some()) {
+        Clock::StartedAt
+    } else {
+        Clock::FirstSeen
+    }
+}
+
+fn started(c: &Candidate, clock: Clock) -> i64 {
+    match clock {
+        // `StartedAt` is only ever chosen for a group whose every member
+        // has one; the fallback here is unreachable by construction and
+        // kept in place of a panic path.
+        Clock::StartedAt => c.started_at_ms.unwrap_or(c.first_seen_ms),
+        Clock::FirstSeen => c.first_seen_ms,
+    }
+}
+
+/// True when `o` is superseded by `n`: same VS Code window and folder
+/// (`same_window_and_folder`), `n` started after `o` on the group's
+/// `clock`, and `o` sits in a state it is safe to hide (never
+/// `Thinking`, `NeedsInput`, or `Error` -- a session doing something or
+/// waiting on a human is never a stale duplicate). `n` itself may be in
+/// any state except `Ended`: an ended session has already handed
+/// nothing back, so it supersedes nothing. A tie on the clock hides
+/// neither.
+fn is_superseded_by(o: &Candidate, n: &Candidate, clock: Clock) -> bool {
     if o.id == n.id {
         return false;
     }
-    if o.pid.is_none() || n.pid.is_none() {
-        return false;
-    }
-    if o.host != Some(Host::VsCode) || n.host != Some(Host::VsCode) {
-        return false;
-    }
-    let (Some(o_parent), Some(n_parent)) = (o.parent_pid, n.parent_pid) else {
-        return false;
-    };
-    if o_parent != n_parent {
-        return false;
-    }
-    let (Some(o_cwd), Some(n_cwd)) = (o.cwd, n.cwd) else {
-        return false;
-    };
-    if crate::reveal::normalize_path(o_cwd) != crate::reveal::normalize_path(n_cwd) {
+    if !same_window_and_folder(o, n) {
         return false;
     }
     if !matches!(o.state, SessionState::Idle | SessionState::Complete | SessionState::Unknown) {
@@ -88,23 +134,26 @@ fn is_superseded_by(o: &Candidate, n: &Candidate) -> bool {
     if n.state == SessionState::Ended {
         return false;
     }
-    let (o_started, n_started) = match (o.started_at_ms, n.started_at_ms) {
-        (Some(ot), Some(nt)) => (ot, nt),
-        _ => (o.first_seen_ms, n.first_seen_ms),
-    };
-    n_started > o_started
+    started(n, clock) > started(o, clock)
 }
 
-/// Every id in `candidates` that some other, newer candidate makes safe
-/// to hide right now. Pairwise (candidate counts are a handful of
-/// sessions at most, never enough for the O(n^2) scan to matter) and
-/// pure: the caller decides what "hide" means for its own list
-/// (registry.rs keeps the binding, only leaves the id out of the
-/// tiles/row-count it builds).
+/// Every id in `candidates` that some other, newer candidate in its own
+/// window-and-folder group makes safe to hide right now. Each
+/// candidate's group is gathered fresh (candidate counts are a handful
+/// of sessions at most, never enough for the O(n^2) scan to matter),
+/// the group's clock is chosen once (`Clock`), and the pairwise check
+/// runs on that clock alone. Pure: the caller decides what "hide" means
+/// for its own list (registry.rs keeps the binding, only leaves the id
+/// out of the tiles/row-count it builds).
 pub fn superseded(candidates: &[Candidate]) -> HashSet<String> {
     let mut hidden = HashSet::new();
     for o in candidates {
-        if candidates.iter().any(|n| is_superseded_by(o, n)) {
+        // `o`'s own group, `o` included when it qualifies at all; empty
+        // when it does not (no pid, not VS Code, ...), which hides
+        // nothing.
+        let group: Vec<&Candidate> = candidates.iter().filter(|c| same_window_and_folder(o, c)).collect();
+        let clock = clock_for(&group);
+        if group.iter().any(|n| is_superseded_by(o, n, clock)) {
             hidden.insert(o.id.to_string());
         }
     }
@@ -256,13 +305,13 @@ mod tests {
     }
 
     #[test]
-    fn started_at_is_only_used_when_both_sides_report_it() {
+    fn started_at_is_only_used_when_every_session_in_the_group_reports_it() {
         // "older" has no startedAt at all; "newer" does, and it names a
         // moment earlier than "older"'s own first-seen time. If
         // startedAt leaked in from one side alone, this would flip the
-        // ordering; instead both fall back to first-seen, so "older"
-        // (first-seen 10) is still the one hidden, by "newer"
-        // (first-seen 20).
+        // ordering; instead the whole group falls back to first-seen,
+        // so "older" (first-seen 10) is still the one hidden, by
+        // "newer" (first-seen 20).
         let older = c("older", 1, 100, "/dev/a", SessionState::Idle, None, 10);
         let mut newer = c("newer", 2, 100, "/dev/a", SessionState::Idle, None, 20);
         newer.started_at_ms = Some(1);
@@ -304,5 +353,42 @@ mod tests {
         let mut n = c("n", 2, 100, "/dev/a", SessionState::Idle, Some(2), 2);
         n.pid = None;
         assert!(superseded(&[o, n]).is_empty(), "n has no pid to match on either");
+    }
+
+    #[test]
+    fn mixed_started_at_availability_never_hides_a_whole_group() {
+        // The 2026-09-15 review's counterexample: three idle sessions in
+        // one window and folder, where A was discovered late (a large
+        // first-seen) and C's row has no startedAt. Pair by pair, with
+        // each pair picking its own clock, B beat A on startedAt, C beat
+        // B on first-seen, and A beat C on first-seen: a cycle, and all
+        // three rows vanished from a board that still had three live
+        // sessions. With one clock per group (first-seen here, since C
+        // has no startedAt), A is newest and stays, whatever order the
+        // registry happens to hand the candidates over in.
+        let a = c("a", 1, 100, "/dev/a", SessionState::Idle, Some(100), 500);
+        let b = c("b", 2, 100, "/dev/a", SessionState::Idle, Some(200), 300);
+        let cc = c("c", 3, 100, "/dev/a", SessionState::Idle, None, 400);
+        let permutations = [[a, b, cc], [a, cc, b], [b, a, cc], [b, cc, a], [cc, a, b], [cc, b, a]];
+        for order in permutations {
+            let hidden = superseded(&order);
+            assert!(hidden.len() < 3, "a group must never be hidden in its entirety: {hidden:?}");
+            assert_eq!(ids(hidden), vec!["b".to_string(), "c".to_string()], "one clock, one answer, in any input order");
+        }
+    }
+
+    #[test]
+    fn the_clock_is_chosen_per_group_not_across_the_whole_list() {
+        // Window 100: both report startedAt, and it disagrees with
+        // first-seen (p was heard of first but started later), so
+        // startedAt must decide and hide q. Window 999: r has no
+        // startedAt, so that group, and only that group, falls back to
+        // first-seen and hides r. A single clock for the whole list
+        // would get one of the two wrong.
+        let p = c("p", 1, 100, "/dev/a", SessionState::Idle, Some(200), 10);
+        let q = c("q", 2, 100, "/dev/a", SessionState::Idle, Some(100), 20);
+        let r = c("r", 3, 999, "/dev/a", SessionState::Idle, None, 30);
+        let s = c("s", 4, 999, "/dev/a", SessionState::Idle, Some(5), 40);
+        assert_eq!(ids(superseded(&[p, q, r, s])), vec!["q".to_string(), "r".to_string()]);
     }
 }

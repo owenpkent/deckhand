@@ -2116,13 +2116,14 @@ sessions the owner does come back to.
    ([ADR-023](#adr-023)); both processes have the same direct parent pid,
    resolved once when the pid is learned; both have the same working
    directory, compared case-insensitively with separators normalised; N
-   started after O, by the scan's `startedAt` when both have one and by
-   first-seen time otherwise; O is `idle`, `complete`, or `unknown`; and
-   N is not `ended`. The rule is a pure function recomputed whenever the
-   daemon builds a snapshot or sizes the window. Nothing is remembered,
-   so O returns, in its old position and with its old selection, the
-   moment it stops qualifying: a hook turns it blue, amber, or red, or N
-   ends.
+   started after O, by the scan's `startedAt` when every session sharing
+   that window and directory reports one and by first-seen time
+   otherwise, so one clock orders the whole group; O is `idle`,
+   `complete`, or `unknown`; and N is not `ended`. The rule is a pure
+   function recomputed whenever the daemon builds a snapshot or sizes the
+   window. Nothing is remembered, so O returns, in its old position and
+   with its old selection, the moment it stops qualifying: a hook turns
+   it blue, amber, or red, or N ends.
 
 2. *Never hide what needs the owner.* A session that is `thinking`,
    `needs_input`, or `error` is never superseded, whatever is newer. A
