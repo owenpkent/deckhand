@@ -147,10 +147,15 @@ still the drag region: there is no separate grip, and dragging from any
 empty part of the bar, including the count pills, moves the window.
 
 The gear opens the settings panel in place of the session list. A
-single click toggles it; the gear's own text reads "Settings" closed
-and "Close settings" open, so its pressed state is a different word,
-not only a different colour. The header's state-count summary and Quit
-stay visible and unchanged while the panel is open; only the list area
+single click toggles it; the gear is an icon button,
+`aria-label="Settings"`, `aria-pressed` tracking whether the panel is
+open, and its own icon swaps from a cog to a back arrow when open, on
+a raised, tinted background, so its pressed state is a shape and a
+background change, not only a colour
+([ADR-034](DECISIONS.md#adr-034); ADR-033 first added the gear and
+read its pressed state from a text change, "Settings" to "Close
+settings," instead). The header's state-count summary and Quit stay
+visible and unchanged while the panel is open; only the list area
 swaps content, in the same window. See
 [Settings panel](#settings-panel) below for what each row does.
 
@@ -170,18 +175,21 @@ the surface together; it is icon-only, a cross glyph with
 
 ### Settings panel
 
-Six rows, opened by the gear and closed by clicking it again
-([ADR-033](DECISIONS.md#adr-033)). Every row is a text label plus a
-text state, never colour alone:
+Five rows across three titled sections, Window, List, and Claude Code,
+opened by the gear and closed by clicking it again
+([ADR-033](DECISIONS.md#adr-033); grouped into sections and cut from
+six rows to five by [ADR-034](DECISIONS.md#adr-034), which combined
+Hooks and Repair). Every row is a text label plus a text state, never
+colour alone, whether that state reads through a toggle switch, a
+status pill, or plain text:
 
-| Row | Does |
-| --- | --- |
-| Always on top | Toggles whether the window stays above every other window. Default on. Persists across restarts. |
-| Start with Windows | Toggles a registry entry that launches Deckhand at login. Reads "On (other copy)" when some other Deckhand exe already owns the entry; clicking repoints it at this one rather than turning it off. |
-| Reset window position | A button, not a toggle: moves the window to its default spot near the top-left of the current monitor and remembers that as the new saved position. |
-| Hide unknown | The same setting the header's grey toggle used to hold ([ADR-030](DECISIONS.md#adr-030), [ADR-031](DECISIONS.md#adr-031)): filters `unknown` rows out of the session list, not out of the daemon. Its state text names the hidden count, "On, 3 hidden" or "Off," so a hidden session is always counted and never simply disappears. |
-| Hooks | Read-only: whether the Claude Code hook wiring `scripts/install-hooks.ps1` installs is "Installed," "Outdated," "Missing," or "Unreadable" in `~/.claude/settings.json`. |
-| Repair | Reruns the installer against this install's own checkout. Styled inactive rather than natively disabled when no checkout is found nearby; its state text already reads "Installer not found" without requiring a click. |
+| Section | Row | Does |
+| --- | --- | --- |
+| Window | Always on top | Toggles whether the window stays above every other window. Default on. Persists across restarts. A switch beside the word, not only the word. |
+| Window | Start with Windows | Toggles a registry entry that launches Deckhand at login. Reads "On (other copy)" when some other Deckhand exe already owns the entry; clicking repoints it at this one rather than turning it off. A switch beside the word. |
+| Window | Reset position | A button, not a toggle: moves the window to its default spot near the top-left of the current monitor and remembers that as the new saved position. Labelled "Reset position" on screen since [ADR-034](DECISIONS.md#adr-034) ("Reset window position" before it); a short description sits under the label, replaced by "Done" for a few seconds after a click. |
+| List | Hide unknown | The same setting the header's grey toggle used to hold ([ADR-030](DECISIONS.md#adr-030), [ADR-031](DECISIONS.md#adr-031)): filters `unknown` rows out of the session list, not out of the daemon. The word beside its switch names the hidden count, "On, 3 hidden" or "Off," so a hidden session is always counted and never simply disappears. |
+| Claude Code | Hooks | A status pill, tint plus text, shows whether the Claude Code hook wiring `scripts/install-hooks.ps1` installs is "Installed," "Outdated," "Missing," or "Unreadable" in `~/.claude/settings.json`. A separate Repair button beside it reruns the installer against this install's own checkout; its result shows as a short second line under the label. Styled inactive rather than natively disabled when no checkout is found nearby; the second line already reads "Installer not found" without requiring a click. Combined from two rows into one by [ADR-034](DECISIONS.md#adr-034). |
 
 Hide unknown is unchanged in every way except where the surface shows
 it: the daemon still owns `Registry.hide_unknown`, still persists it,
@@ -213,7 +221,7 @@ that.
 | Rear power button, sleep | Dropped. Window visibility replaces it. |
 | Underglow, lighting timeout (default 3 min) | Kept as an idle-dim behaviour on the surface. |
 | macOS Input Monitoring permission | Not required to read status. Required only for global hotkeys, which are optional. |
-| Soft reset via PCB screws | Replaced by the settings panel's Reset window position row ([ADR-033](DECISIONS.md#adr-033)); it resets placement only, not every setting. |
+| Soft reset via PCB screws | Replaced by the settings panel's Reset position row ([ADR-033](DECISIONS.md#adr-033), relabelled by [ADR-034](DECISIONS.md#adr-034)); it resets placement only, not every setting. |
 | Karabiner and Logitech Options conflicts | Not applicable. |
 
 ### Removed from the surface

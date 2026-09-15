@@ -112,7 +112,7 @@ below. Skip it in searches.
 - **Status claims:** every design doc carries a status line (`proposed`,
   `accepted`, `verified against version X`). Never upgrade a status without
   the thing that justifies it.
-- **Next ADR: 034.** ADRs are append-only, contiguous, and anchored; a
+- **Next ADR: 035.** ADRs are append-only, contiguous, and anchored; a
   decision is changed by adding a superseding entry, never by editing one.
 - **AI scratch space:** `_scratch/` (gitignored). Never commit temp files.
 - **Push discipline:** only at coherent boundaries: docs consistent, links
@@ -171,7 +171,11 @@ typeface), and ADR-032 made Reveal host-aware (VS Code, Windows
 Terminal, console). ADR-033 then moved the grey toggle off the header
 into a gear-triggered settings panel alongside four new settings
 (always on top, start with Windows, reset position, and a hooks
-status with Repair); `app/` implements all of these.
+status with Repair). ADR-034 redrew that panel the next day: icon
+buttons for the gear and Quit, toggle switches, a combined Hooks and
+Repair row, three titled panel sections, rounded rows with a left
+accent bar, and a window-sizing fix for the panel's own scrollbar;
+`app/` implements all of these.
 
 Of the two pre-Phase-1 spikes, the window spike is done: on 2026-08-02
 `spikes/tauri-focus/` proved the no-focus-steal window in Tauri on

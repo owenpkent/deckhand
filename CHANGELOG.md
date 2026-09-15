@@ -39,6 +39,30 @@ version number is invented and no past release is backfilled.
   (docs/ACCESSIBILITY.md forbids a disabled control that clicking
   explains nothing).
 
+### Changed
+
+- **Visual refresh of the header, settings panel, and session rows**
+  ([ADR-034](docs/DECISIONS.md#adr-034)). The gear and Quit are now
+  inline svg icon buttons (`app/ui/src/icons.ts`) instead of text; the
+  gear's open state is a shape swap, cog to back arrow, plus a raised
+  background, not only a colour change. Always on top, Start with
+  Windows, and Hide unknown render as a toggle switch
+  (`role="switch"`, `aria-checked`) beside their existing On/Off word.
+  Reset window position is now a two-line action row labelled "Reset
+  position," and the Hooks and Repair rows combine into one: a tinted
+  status pill plus a real Repair button, with Repair's own result as a
+  secondary line. The panel's five rows now sit in three titled
+  sections, Window, List, and Claude Code, instead of one flat list.
+  Session rows and panel rows both gain rounded corners, a left accent
+  bar in the row's own state colour, and a softer background tint
+  (idle 5%, thinking and complete 8%, needs input and error 14%, down
+  from 6/14/22); none of ADR-008's six colours or their meanings
+  change. The window now sizes the open panel off a fixed formula
+  (`panel_content_height_logical` and `panel_window_height` in
+  `window.rs`) instead of a flat row count times `ROW_H_LOGICAL`,
+  fixing a native scrollbar that used to appear because the two had
+  drifted apart.
+
 ### Fixed
 
 - **`ENDED` now absorbs every straggler, not just a clear or a resume.**

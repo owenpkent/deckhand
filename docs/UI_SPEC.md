@@ -18,6 +18,14 @@ restyled the grey toggle, and dropped the dashed outline unknown and
 ended rows used to share. [ADR-033](DECISIONS.md#adr-033) (2026-09-14)
 then replaced the grey toggle with a gear button that opens a settings
 panel in place of the session list, described in its own section below.
+[ADR-034](DECISIONS.md#adr-034), the next day, redrew the header, the
+panel, and the session rows: icon buttons in place of text, toggle
+switches beside their On/Off words, a combined Hooks and Repair row,
+three titled sections grouping the panel, and rounded rows with a left
+accent bar, plus a window-sizing fix so the open panel no longer shows
+a scrollbar. Nothing it changed touches a frozen colour, a hit target,
+or the row height floor; see that entry for what carries forward
+unchanged.
 
 Mockups in [`assets/`](../assets/), embedded in the README, predate both
 and still draw the wider control set at the old sizes. They are drawings,
@@ -31,7 +39,7 @@ as a single vertical list:
 
 ```
  ┌───────────────────────────────┐
- │  ◆1 ✕1 ◐1        Settings  ✕  │  header, 52 px, 44 px+ targets
+ │  ◆1 ✕1 ◐1           ⚙    ✕   │  header, 52 px, 44 px+ targets
  ├───────────────────────────────┤
  │ ○  undertow                   │  row, 64 px, two lines
  │    IDLE                       │
@@ -75,8 +83,8 @@ counts, the gear, and Quit, pinned to the header's right edge:
 
 | Control | Width | Does |
 | --- | --- | --- |
-| Gear | Variable, 44 px minimum | Opens or closes the settings panel in place of the session list. Reads "Settings" closed and "Close settings" open ([ADR-033](DECISIONS.md#adr-033)), so its pressed state is a different word, not only a different colour. Always present, unlike the grey toggle it replaced, which used to hide itself when there was nothing to hide. |
-| Quit | 44 px | Closes the daemon and the surface together. Icon only: a cross glyph, `aria-label="Quit Deckhand"`, no visible text. |
+| Gear | 44 px | Opens or closes the settings panel in place of the session list, `aria-label="Settings"`, `aria-pressed` tracking whether it is open. Icon only: a cog closed, an arrow back to the session list open, on a raised, tinted background while open, so its pressed state is a shape and a background change, not only a colour ([ADR-034](DECISIONS.md#adr-034); ADR-033 first added the control and read its state as a text change instead). Always present, unlike the grey toggle it replaced, which used to hide itself when there was nothing to hide. |
+| Quit | 44 px | Closes the daemon and the surface together. Icon only: an inline svg cross, `aria-label="Quit Deckhand"`, no visible text. |
 
 The summary is a row of pills, one per state that currently has at least
 one session in it, in a fixed order: waiting on you, error, thinking,
@@ -97,26 +105,35 @@ unaffected by anything the panel does.
 
 ```
  ┌───────────────────────────────┐
- │  ◆1 ✕1 ◐1    Close settings ✕ │  header, unchanged
+ │  ◆1 ✕1 ◐1                ⬅  ✕ │  header, unchanged
  ├───────────────────────────────┤
- │ Always on top             On  │  panel row, 64 px, two columns
- │ Start with Windows        Off │
- │ Reset window position         │
- │ Hide unknown        On, 3 hid.│
- │ Hooks               Installed │
- │ Repair                 Repair │
+ │ WINDOW                        │  section title
+ │ Always on top          ⏻  On  │  panel row, 64 px, switch + word
+ │ Start with Windows     ⏻  Off │
+ │ Reset position              ↺ │  action row, two lines
+ │ Moves the window back...      │
+ │ LIST                          │  section title
+ │ Hide unknown    ⏻  On, 3 hid. │
+ │ CLAUDE CODE                   │  section title
+ │ Hooks  [Installed]    Repair  │  status pill + button
  └───────────────────────────────┘
 ```
 
-Six rows, each the same 64 px height as a session row, but a different
-layout: a text label on the left, a text state on the right, no glyph
-column, since nothing on this panel may rely on colour alone. See
+Five rows across three titled sections (Window, List, Claude Code),
+each row still the same 64 px height as a session row, but a
+different layout from a session row's: a text label, plus a switch, a
+short description, or a status pill and a button, depending on the
+row, never colour alone for any of them
+([ADR-034](DECISIONS.md#adr-034); six flat rows before it, under
+[ADR-033](DECISIONS.md#adr-033)). See
 [CONTROL_MAPPING.md](CONTROL_MAPPING.md#settings-panel) for what each
 row does. The Hooks row is the one row with no click of its own; it
 renders as a plain row rather than a button, the same way the header's
-own summary does, so it never implies an action it does not have. The
-Repair row is styled inactive rather than natively disabled when this
-install has no checkout nearby to run the installer from: its state
+own summary does, so it never implies an action it does not have, but
+it holds a real, separate Repair button rather than folding that
+action into a second row the way ADR-033 first had it. The Repair
+button is styled inactive rather than natively disabled when this
+install has no checkout nearby to run the installer from: its result
 text already reads "Installer not found," so a click while inactive is
 an already-explained no-op, not a silent dead one
 ([ACCESSIBILITY.md](ACCESSIBILITY.md)).
@@ -132,9 +149,11 @@ trade-off that carries over unchanged from [ADR-030](DECISIONS.md#adr-030).
 
 Move, the click-to-place alternative to dragging the window that used
 to sit in the header, is removed ([ADR-031](DECISIONS.md#adr-031)); the
-panel's own Reset window position row moves the window to a fixed
-default rather than restoring a click-based way to place it anywhere;
-see [ACCESSIBILITY.md](ACCESSIBILITY.md) for the open gap that leaves.
+panel's own Reset position row (named "Reset window position" until
+[ADR-034](DECISIONS.md#adr-034) shortened its on-screen label) moves
+the window to a fixed default rather than restoring a click-based way
+to place it anywhere; see [ACCESSIBILITY.md](ACCESSIBILITY.md) for the
+open gap that leaves.
 
 ## Row anatomy
 
@@ -156,12 +175,17 @@ shortened to fit by `revealNote()` in `format.ts`
 - Status is triple-coded on every row: colour, glyph, and the state word.
   See the state table in
   [ACCESSIBILITY.md](ACCESSIBILITY.md#status-without-colour).
-- Every coloured state tints the row's background toward its colour: idle
-  6%, thinking and complete 14%, needs input and error 22%. Unknown and
-  ended get no tint; a dashed outline used to mark them instead, removed
-  by [ADR-031](DECISIONS.md#adr-031), and they are now set apart by
-  glyph shape and dimming alone. Selected: a 3 px inset outline in the
-  text colour, on top of whatever tint the state already has.
+- Every coloured state tints the row's background toward its colour and
+  draws a 4 px accent bar down its left edge in the same colour
+  ([ADR-034](DECISIONS.md#adr-034)): idle 5% (was 6%), thinking and
+  complete 8% (was 14%), needs input and error 14% (was 22%), softer
+  than before now that the accent bar carries part of the signal.
+  Unknown and ended get no background tint, though the accent bar still
+  reads their colour at full strength; a dashed outline used to mark
+  them instead of either, removed by [ADR-031](DECISIONS.md#adr-031),
+  and they are set apart from a live row by glyph shape and dimming.
+  Selected: a 3 px inset outline in the text colour, on top of whatever
+  tint the state already has.
 - Unknown carries two words for the one state: "not heard yet" for a
   session bound by enumeration or restored from disk that no hook has
   spoken for yet this run, and "unknown" for one that spoke and then went

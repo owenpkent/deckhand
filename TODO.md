@@ -285,6 +285,14 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
       `app/src-tauri/src/hook_status.rs`,
       `app/src-tauri/src/installer.rs`, and the new panel rows in
       `app/ui/src/main.ts`.
+- [x] Visual refresh of the header, settings panel, and session rows
+      ([ADR-034](docs/DECISIONS.md#adr-034)): icon buttons for the gear
+      and Quit, toggle switches, the panel regrouped into three titled
+      sections and cut from six rows to five (Hooks and Repair
+      combined), and a window-sizing fix for the panel's own scrollbar.
+      Done 2026-09-14: `app/ui/src/icons.ts` (new), `app/ui/src/main.ts`,
+      `app/ui/src/format.ts`, `app/ui/styles.css`, and
+      `app/src-tauri/src/window.rs`.
 - [ ] Manually verify Start with Windows against a real login: toggle
       it on, reboot or log out and back in, and confirm Deckhand
       actually launches. Only unit-tested so far (registry comparison

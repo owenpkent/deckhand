@@ -1630,3 +1630,158 @@ summary, Quit itself) is unaffected.
 [ARCHITECTURE.md](ARCHITECTURE.md),
 [SECURITY_MODEL.md](SECURITY_MODEL.md), `README.md`, `CLAUDE.md`,
 `CHANGELOG.md`, and `TODO.md` are updated to match in the same change.
+
+---
+
+<a id="adr-034"></a>
+## ADR-034: Visual refresh of the header, settings panel, and rows
+
+Date: 2026-09-14
+
+**Context.** A screenshot of the settings panel [ADR-033](#adr-033)
+shipped named several problems at once: the gear opened with a text
+button reading "Close settings" and Quit was a literal `&#10005;`
+entity rather than a drawn icon; every setting showed its value as
+plain top-aligned "On"/"Off" text instead of a recognisable control;
+the window did not size itself to the panel's real content, so a
+native grey scrollbar appeared on a panel that should have fit
+exactly; "Reset window position" wrapped across three lines with its
+description crowding the label; Hooks and Repair sat as two separate,
+visually redundant rows; and the panel read as one flat list with no
+grouping. The owner approved scope B for the fix: the header, the
+settings panel, and the session list rows, recorded here as one
+entry since the row and panel restyle share the same design tokens.
+
+**Decision.** Four things change together.
+
+*Header icons.* The gear and Quit become inline svg icon buttons
+(`app/ui/src/icons.ts`, hand-drawn in the same minimal stroke style as
+the session-state glyphs in `format.ts`, not copied from Lucide or any
+other icon set). The gear keeps `aria-label="Settings"` and
+`aria-pressed` exactly as ADR-033 defined them, but its open/closed
+state is now carried by a shape swap, a cog closed and an arrow back
+to the session list open (`gearIconKind` in `format.ts`), on top of a
+raised, tinted background, so the pressed state is still more than one
+colour change ([ACCESSIBILITY.md](ACCESSIBILITY.md)). `gearLabel`, the
+text-based version of this signal, is removed as dead code along with
+it.
+
+*Toggle switches.* Always on top, Start with Windows, and Hide unknown
+render as a track-and-thumb switch beside their existing On/Off (or
+tri-state) word, never replacing it
+([ACCESSIBILITY.md](ACCESSIBILITY.md): colour, and now shape, is
+never the only channel). The switch is not a control nested inside
+the row's own `<button>`; the row itself carries `role="switch"` and
+`aria-checked`, and the track and thumb are purely decorative,
+`aria-hidden`. `startWithWindowsChecked` in `format.ts` maps the
+tri-state value to a boolean check (both "on" shapes read checked;
+the word beside the switch is what still tells them apart).
+
+*Reset position and the combined Hooks row.* "Reset window position"
+becomes a two-line action row labelled "Reset position," with the
+existing confirmation text (`resetPositionText`, unchanged) as a
+small description line underneath and a decorative return-arrow icon
+on the right; the row itself, not a second nested control, stays the
+click target. Hooks and Repair merge into one row: a status pill
+(`hookStatusPillClass` in `format.ts`, tint plus the existing
+`hookStatusText` word, never colour alone) sits beside the "Hooks"
+label, a real `<button>` labelled "Repair" sits on the right at the
+44 px floor, and Repair's own result becomes a secondary line
+(`repairSecondaryText`, replacing `repairRowText`: empty while idle,
+since the button's own label already says "Repair," and otherwise the
+same "Running...", "Repaired," "Timed out," or "Failed to start" text
+ADR-033 defined). Because the Hooks row itself is a plain, non-button
+div exactly as ADR-033 already had it, nesting a real button inside it
+is valid; `repairButtonInactive` carries forward ADR-033's rule
+unchanged, styled inactive rather than natively disabled, and still
+clickable with its reason already visible.
+
+*Grouped sections.* The panel's rows sort into three titled cards:
+Window (Always on top, Start with Windows, Reset position), List
+(Hide unknown), and Claude Code (the combined Hooks row). Five rows
+across three sections, down from six flat rows, each still the
+64 px floor [ADR-029](#adr-029) set and
+[ACCESSIBILITY.md](ACCESSIBILITY.md) requires, never shrunk.
+
+*Window sizing.* The scrollbar bug was a real mismatch: the daemon
+sized the open panel at a flat `PANEL_ROW_COUNT` (6) times
+`ROW_H_LOGICAL`, a formula built for the session list's one-row-per-
+session shape, and the panel's fixed content, now three section
+titles and their gaps on top of five rows, no longer fit it. Rather
+than hand-tune that constant again, `window.rs` gains a dedicated,
+fixed formula for the panel: `PANEL_ROW_COUNT` (5), `PANEL_SECTION_COUNT`
+(3), `SECTION_TITLE_H_LOGICAL` (32), `SECTION_GAP_LOGICAL` (12), and
+`PANEL_PADDING_LOGICAL` (8) sum in `panel_content_height_logical()`,
+and `panel_window_height()` adds the header and clamps to the monitor's
+work area exactly as `window_height()` already does for the session
+list. `main.rs` routes to it through the same `resize_for_rows` /
+`queue_resize` path every other resize already uses
+("the existing resize path," per ADR-033's own framing): a new
+`window::PANEL_SENTINEL` (`usize::MAX - 1`, distinct from
+`LAST_ROW_COUNT`'s own "never sized yet" sentinel at `usize::MAX`)
+stands in for a real row count wherever the panel is open, and
+`resize_for_rows` branches on it instead of computing
+`row_count * ROW_H_LOGICAL`. `styles.test.ts` pins the three new pixel
+constants against the matching CSS rules
+(`.settings-section-title`, `.settings-section + .settings-section`,
+`#list.panel`) the same way it already pins `ROW_H_LOGICAL` and
+`HEADER_H_LOGICAL`, so the two cannot drift apart silently again. The
+session list's own sizing is untouched: it still fits `#list` with no
+padding or gap, exactly `rows * ROW_H_LOGICAL`, which is also why its
+own "rows as cards" look (below) is built entirely from borders inside
+each row's existing 64 px box rather than any spacing on `#list`.
+
+*Modern look, session rows included.* Every row, session and panel
+alike, gains rounded 10 px corners, a 4 px left accent bar in the
+row's own `--ring` (the same per-state colour already driving the
+background tint, so this is a second reading of an existing token,
+not a new one), and a subtle inset top highlight standing in for
+elevation. The background tint itself softens now that the accent bar
+carries part of the signal: idle 5% (was 6%), thinking and complete
+8% (was 14%), needs input and error 14% (was 22%); unknown and ended
+stay untinted as ADR-031 left them. The "cards with a small gap" look
+on the session list is drawn entirely with each row's own 6 px
+ground-coloured bottom border (was 2 px) inside its existing
+border-box 64 px height, never a gap or padding on `#list`, so the
+window-sizing formula above is untouched. Header count pills gain a
+1 px tinted border. Header buttons and rows gain a 120 ms background
+transition, `:focus-visible` gets an explicit outline (the surface has
+never removed the browser default, but never styled it either), and
+`prefers-reduced-motion: reduce` now also turns off the row, switch,
+and header-button transitions, on top of the spinner override
+ADR-029 already had. Every transition here is at or under 150 ms.
+
+**What stays frozen.** [ADR-008](#adr-008)'s six state colours and
+their meanings are unchanged; the accent bar and softened tint reuse
+the exact same `--ring` value each row already resolved, so no session
+state's hue or mapping moves. The Hooks status pill borrows the same
+green/amber/red tokens for a loosely matching but distinct meaning,
+hook-install health rather than session state, which is a reuse of
+the palette, not a new entry in ADR-008's table. The 64 px row floor
+([ADR-029](#adr-029)), the 44 px hit-target floor
+([ACCESSIBILITY.md](ACCESSIBILITY.md)), the bundled Atkinson
+Hyperlegible Next typeface, the header's drag-only repositioning
+exception ([ADR-031](#adr-031)), and the "styled inactive, never
+natively disabled" rule for a control with nothing to do
+([ACCESSIBILITY.md](ACCESSIBILITY.md), first applied to Repair by
+[ADR-033](#adr-033)) all carry forward unchanged.
+
+**Consequences.** The panel's height is now hand-maintained in two
+places, `window.rs`'s five constants and the matching `styles.css`
+rules, instead of one row count falling out of the row-per-session
+formula for free; `styles.test.ts`'s new cross-file assertions are
+what keep a future edit to one from silently reintroducing the
+scrollbar bug in the other, the same safety net ADR-029 built for
+`ROW_H_LOGICAL` and `HEADER_H_LOGICAL` before it. Nesting a real
+`<button>` (Repair) inside a plain, non-button row (Hooks) is a
+pattern this entry establishes rather than one ADR-033 needed; a
+future row that needs both a status display and its own action can
+reuse it instead of inventing a new one. This is a visual and markup
+change only: no new observation capability, no change to what the
+daemon can read or write, and no change to
+[SECURITY_MODEL.md](SECURITY_MODEL.md)'s trust boundary.
+
+[UI_SPEC.md](UI_SPEC.md), [ACCESSIBILITY.md](ACCESSIBILITY.md),
+[CONTROL_MAPPING.md](CONTROL_MAPPING.md), `README.md`, `CHANGELOG.md`,
+and `CLAUDE.md` (next ADR bumped to 035) are updated to match in the
+same change.
