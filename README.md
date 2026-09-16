@@ -2,7 +2,7 @@
 
 # 🧭 Deckhand
 
-**A software Codex Micro for Claude Code**
+**A software control surface for Claude Code sessions**
 
 An always-on-top, mouse-only surface for running several Claude Code
 sessions at once: an ordered list of every session with a live status
@@ -114,13 +114,13 @@ dystrophy; moving a pointer is cheap, pressing keys is not, and checking six
 terminals by keyboard is exactly the tax this project removes.
 
 Deckhand is designed as a **status board first**: a list you can read at a
-glance, using the Codex Micro's colour language. White idle, blue thinking,
-green done-and-unread, amber waiting on you, red problem. As of
-[ADR-028](docs/DECISIONS.md#adr-028), that list and a single click to raise
-a session's window are currently the whole surface. Acting on a session,
-approving a call, denying one, or answering a question, stays Phase 2 or
-later work, and is no longer planned to land on this surface as designed;
-a returning control needs its own ADR.
+glance, using the hardware macropad's colour language. White idle, blue
+thinking, green done-and-unread, amber waiting on you, red problem. As of
+[ADR-028](docs/DECISIONS.md#adr-028), that list and a single click to raise a
+session's window are currently the whole surface. Acting on a session, approving
+a call, denying one, or answering a question, stays Phase 2 or later work, and
+is no longer planned to land on this surface as designed; a returning control
+needs its own ADR.
 
 Everything is operable with a pointer alone. Keyboard and voice are
 conveniences, never requirements. That rule is load-bearing and
@@ -130,13 +130,12 @@ non-negotiable; see [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md).
 
 ## Inspiration
 
-The [Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro) is a
-limited-run macropad by [Work Louder](https://worklouder.cc/) and OpenAI: six
-agent keys with status LEDs, six command keys, a stick, a dial, push-to-talk.
-It is a genuinely good piece of interaction design, and Deckhand copies its
-model deliberately and credits it plainly. What the hardware cannot do is be
-free, be available after the run ends, drive Claude Code, or be usable without
-functioning hands. Those four gaps are the project.
+Deckhand's model comes from a limited-run hardware macropad: six agent keys
+with status LEDs, six command keys, a stick, a dial, push-to-talk. It is a
+genuinely good piece of interaction design, and Deckhand copies it
+deliberately. What the hardware cannot do is be free, be available after the
+run ends, drive Claude Code, or be usable without functioning hands. Those
+four gaps are the project.
 
 Where Deckhand diverges from the device, it says so and says why:
 [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md#deliberate-divergences).
@@ -200,8 +199,8 @@ check, an unread dot, and done, unread, clears on select. Error, red with a
 cross and crashed or failed. Unknown, grey and hatched with a question mark and
 never guessed. Ended or unbound, a dashed outline with a plus and empty."/>
 
-*The colour language, inherited from the Codex Micro. Every state also has a
-glyph and a label; colour is never the only channel.*
+*The colour language, inherited from the hardware macropad. Every state also has
+a glyph and a label; colour is never the only channel.*
 
 <p align="center"><img src="assets/detail-approval.svg" width="60%" alt="Mockup
 of the detail panel during a pending approval. Header: Tile 3, deckhand, Opus,
@@ -318,7 +317,6 @@ repository:
 | [alpha-stick](https://github.com/owenpkent/alpha-stick) | Adaptive gaming joystick | Sibling; this repo mirrors its documentation discipline |
 | MacroVox | Voice to clipboard | Sibling; Deckhand's talk button delegates to it |
 | Nimbus | Adaptive virtual joystick | Sibling; future pointer source for switch users |
-| [Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro) | The hardware original | Credited inspiration, not affiliated |
 
 Deckhand is not affiliated with, or endorsed by, OpenAI, Work Louder, or
 Anthropic. It is an independent tool that observes and drives Claude Code
@@ -343,8 +341,6 @@ MIT. See [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-- **Work Louder and OpenAI**, for the Codex Micro's interaction design, which
-  this project studies and reimplements in software with respect.
 - **Anthropic**, for shipping the hooks and permission interfaces that make an
   honest external control surface possible at all.
 

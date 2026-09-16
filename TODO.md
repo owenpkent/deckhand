@@ -170,6 +170,21 @@ Tauri application) and `shim/`; `scripts/build-app.ps1` builds it and
 - [ ] Surface the watchdog ledger in the settings panel ("restarted
       after a crash at <time>"), linking to
       [ADR-037](docs/DECISIONS.md#adr-037).
+- [ ] Register the `PermissionRequest` hook and set amber from it.
+      Deckhand registers twelve events and this is not one of them; it
+      registers `PermissionDenied` instead
+      (`app/src-tauri/src/hook_status.rs`), so amber for a permission
+      prompt is manufactured from a `PreToolUse` payload Deckhand holds
+      itself rather than read from the event built for it. Observed
+      2026-09-16: `anthropics/claude-code#13024` closed as completed on
+      2026-08-17, and the maintainer's closing comment states
+      `PermissionRequest` fires immediately, while
+      `Notification`/`permission_prompt` waits roughly six seconds of
+      inactivity, which is why `Notification` has never been seen here.
+      Also confirm whether the `PreToolUse` matcher should become
+      `AskUserQuestion|ExitPlanMode`, which the same comment says covers
+      plan approval. See
+      [UPSTREAM_ASKS.md](docs/UPSTREAM_ASKS.md) section 4.3.
 - [x] Hide a superseded idle session and give every row one label rule.
       Landed as [ADR-038](docs/DECISIONS.md#adr-038) (2026-09-15):
       `app/src-tauri/src/supersede.rs` hides an idle, complete, or

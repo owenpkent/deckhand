@@ -11,6 +11,58 @@ version number is invented and no past release is backfilled.
 
 ## [Unreleased]
 
+### Added
+
+- **`docs/UPSTREAM_ASKS.md`, one place for what Deckhand needs from the
+  runtimes it observes.** Each entry pairs a need with the workaround
+  standing in for it and the file that carries the cost, so an issue can
+  be filed from evidence rather than rewritten from memory. Checking the
+  contribution paths first ruled out a pull request to either vendor:
+  `anthropics/claude-code` ships no CLI source and is "All rights
+  reserved", and `openai/codex` states it does not accept external code
+  contributions, so issues are the only channel to both. Two findings
+  came out of the check and are recorded with a 2.1.273 stamp: the CLI
+  already writes `entrypoint`, `procStart`, `nameSource`, and a
+  `messagingSocketPath` with `peerFeatures: ["notify_idle",
+  "artifact_yield"]` to `~/.claude/sessions/<pid>.json`, and
+  `claude agents --json` drops all four, which makes the smallest ask on
+  the list also the most valuable one. Nothing has been filed yet and no
+  adapter capability changes on the strength of this file.
+
+  Checking the asks against the current release before writing them down
+  also retired one of them. The waiting-on-human event Deckhand wanted
+  already shipped: `anthropics/claude-code#13024` closed as completed on
+  2026-08-17, and a `PermissionRequest` hook fires immediately, while
+  `Notification`/`permission_prompt` waits roughly six seconds of
+  inactivity, which explains why `Notification` has never been observed
+  here. Deckhand registers twelve events and `PermissionRequest` is not
+  one of them, so that is now Phase 1 work in `TODO.md` rather than an
+  ask. Recorded in section 4.3 with the correction left visible.
+
+### Changed
+
+- **The hardware macropad is no longer named in the living
+  documentation.** README, IDEAS, SECURITY, CLAUDE.md, ACCESSIBILITY,
+  CONTROL_MAPPING, EXECUTIVE_SUMMARY, and WHITEPAPER now describe the
+  inspiration generically ("a limited-run hardware macropad", "the
+  original device") instead of by product name. README's tagline becomes
+  "A software control surface for Claude Code sessions" and
+  `docs/CONTROL_MAPPING.md` becomes "Control mapping: hardware to
+  Deckhand". The related-projects table row and the acknowledgement line
+  crediting the device's makers are removed, and the executive summary no
+  longer claims the inspiration "deserves to be credited plainly", which
+  had become self-contradictory once the name was gone. The facts are
+  unchanged: Deckhand is still a deliberate software reinterpretation of
+  a hardware design, and the documentation still says so.
+
+  `docs/DECISIONS.md` and this file keep the original wording on purpose.
+  ADRs are append-only and ADR-001's title carries its `#adr-001` anchor,
+  so rewriting it would break inbound links and the repository's own
+  rule; a changelog records what was true when it was written. The
+  non-affiliation disclaimers in README, EXECUTIVE_SUMMARY, and
+  WHITEPAPER are also unchanged, since they are legal statements rather
+  than credit.
+
 ### Fixed
 
 - **Hidden superseded rows and consistent labels**

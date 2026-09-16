@@ -94,7 +94,7 @@ can move it once it is placed. This is a real, open accessibility
 gap, not a compliant reading of the rule above, and it stands until a
 click-based reposition control returns, which would need its own ADR.
 
-The 350 ms double-click inherited from the Codex Micro has no accelerator
+The 350 ms double-click inherited from the hardware macropad has no accelerator
 here: since [ADR-027](DECISIONS.md#adr-027) the row's single click already
 raises, so there is nothing for a double-click to be faster at. If one ever
 returns for some other action it must be optional, adjustable (up to 2000 ms),
@@ -200,11 +200,11 @@ others.
 ## What the hardware does better
 
 Honesty section, referenced from [CONTROL_MAPPING.md](CONTROL_MAPPING.md). The
-Codex Micro beats a software surface at: tactile confirmation, operation
-without looking, muscle memory across days, zero screen footprint, and working
-while your pointer is busy elsewhere. Deckhand accepts all five losses because
-the hardware's own cost, requiring functioning hands, is the one this project
-cannot pay. Anyone who can use the device happily should; the two are not in
+device beats a software surface at: tactile confirmation, operation without
+looking, muscle memory across days, zero screen footprint, and working while
+your pointer is busy elsewhere. Deckhand accepts all five losses because the
+hardware's own cost, requiring functioning hands, is the one this project cannot
+pay. Anyone who can use the device happily should; the two are not in
 competition.
 
 ## Screen readers and switch access

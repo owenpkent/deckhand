@@ -37,7 +37,7 @@ Out of scope:
 - Attacks requiring arbitrary code execution as the same user; see the
   residual-risks section of
   [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md).
-- The Codex Micro hardware and Work Louder software.
+- The hardware macropad that inspired this project, and its own software.
 
 ## One safety note
 

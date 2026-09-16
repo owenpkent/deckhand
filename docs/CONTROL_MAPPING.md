@@ -1,4 +1,4 @@
-# Control mapping: Codex Micro to Deckhand
+# Control mapping: hardware to Deckhand
 
 Status: **accepted**. [ADR-028](DECISIONS.md#adr-028) narrowed the surface to
 a session list on 2026-09-13 and removed the command keys, the stick, the
@@ -19,11 +19,10 @@ design. The retabling and the usage measurements that shaped the
 removed controls are preserved in the ADRs that ADR-028 names as
 superseded, not restated here.
 
-Deckhand is a software reimplementation of the [Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro),
-a limited-run macropad by Work Louder and OpenAI that acts as a command centre
-for Codex chats. Deckhand keeps the device's core idea, a persistent status
-board with one lamp per agent, and points it at Claude Code instead of the
-ChatGPT desktop app.
+Deckhand is a software reimplementation of a limited-run macropad that acted as
+a command centre for Codex chats. Deckhand keeps the device's core idea, a
+persistent status board with one lamp per agent, and points it at Claude Code
+instead of the ChatGPT desktop app.
 
 This document is the source of truth for **what each control is**. It does not
 say how a control is implemented; see [ARCHITECTURE.md](ARCHITECTURE.md) and
@@ -31,7 +30,7 @@ say how a control is implemented; see [ARCHITECTURE.md](ARCHITECTURE.md) and
 
 ## Why clone a keyboard in software
 
-The Codex Micro is a good design solving a problem it cannot fully solve. Its
+The hardware is a good design solving a problem it cannot fully solve. Its
 value is not that it is a keyboard; it is that it is a **persistent, glanceable
 status board with one lamp per agent**. Nothing about that requires a physical
 object.
@@ -56,7 +55,7 @@ the hardware did not. See
 
 ### Agent keys to session rows
 
-| Codex Micro | Deckhand |
+| Hardware | Deckhand |
 | --- | --- |
 | 6 frosted keys, each following one chat | One row per Claude Code session, in an ordered, unbounded list |
 | Key LED shows chat status | Row colour, glyph, and a state word show session status |
@@ -100,7 +99,7 @@ inside a VS Code window is still out of reach from outside either editor.
 
 ### Status colours
 
-Taken from the device unchanged, so anyone who has used a Codex Micro already
+Taken from the device unchanged, so anyone who has used the hardware already
 knows how to read a Deckhand surface.
 
 | Colour | Device meaning | Deckhand meaning |

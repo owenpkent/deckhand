@@ -15,17 +15,16 @@ and accessibility and assistive-technology practitioners
 
 ## Abstract
 
-Running several Claude Code sessions at once turns the developer into a
-poller: every session that finishes a turn, asks a question, or fails has to
-be noticed, and the only way to notice is to go and look. For a user whose
-pointer is cheap but whose keyboard, window switching, and focus changes are
-physically expensive, that polling cost compounds across a working day.
-Deckhand is a small, always-on-top Windows surface, operated with a pointer
-alone, that lists every live Claude Code session on the machine with a
-colour, a glyph, and a state word, and brings a session's window forward in
-the same click that selects it. It is a software reinterpretation of the
-Codex Micro, a limited-run macropad whose status keys made agent sessions
-readable at a glance.
+Running several Claude Code sessions at once turns the developer into a poller:
+every session that finishes a turn, asks a question, or fails has to be noticed,
+and the only way to notice is to go and look. For a user whose pointer is cheap
+but whose keyboard, window switching, and focus changes are physically
+expensive, that polling cost compounds across a working day. Deckhand is a
+small, always-on-top Windows surface, operated with a pointer alone, that lists
+every live Claude Code session on the machine with a colour, a glyph, and a
+state word, and brings a session's window forward in the same click that selects
+it. It is a software reinterpretation of a limited-run macropad whose status
+keys made agent sessions readable at a glance.
 
 Deckhand is built as one Tauri v2 application (a Rust daemon and a
 TypeScript surface) plus a dependency-free hook shim. It observes sessions
@@ -63,16 +62,15 @@ terminal" costs a few seconds every time, many times an hour. A monitoring
 problem that most people tolerate is a larger problem for people who cannot
 tolerate it cheaply, and that asymmetry is the reason the project exists.
 
-### 1.2 Prior art: the Codex Micro
+### 1.2 Prior art: the hardware macropad
 
-The Codex Micro, a limited-run macropad built by Work Louder in
-collaboration with OpenAI, is the direct inspiration and is credited as
-such ([ADR-001](DECISIONS.md#adr-001)). It paired agent keys bound to chat
-sessions with status LEDs, command keys for actions such as approve and
-deny, a dial, a stick, and push-to-talk. Its central insight, which
-Deckhand keeps, is that managing several agent conversations is a
-status-board problem as much as a chat problem, and that a small, fixed
-surface read at a glance can beat a window manager for it.
+A limited-run macropad is the direct inspiration and is credited as such
+([ADR-001](DECISIONS.md#adr-001)). It paired agent keys bound to chat sessions
+with status LEDs, command keys for actions such as approve and deny, a dial, a
+stick, and push-to-talk. Its central insight, which Deckhand keeps, is that
+managing several agent conversations is a status-board problem as much as a chat
+problem, and that a small, fixed surface read at a glance can beat a window
+manager for it.
 
 A hardware device cannot be free, cannot outlive its production run,
 does not drive Claude Code, and assumes working hands. Deckhand borrows
@@ -193,9 +191,9 @@ daemon finds the right window, and when it declines to.
 ### 2.4 How the surface became this small
 
 The Phase 0 specification, written in full on 2026-07-27, mapped the whole
-Codex Micro: six agent tiles, command keys for approve, deny, and continue,
-a dial, a stick, push-to-talk, layers, a detail panel, and answer targets
-for an agent's multiple-choice questions
+hardware macropad: six agent tiles, command keys for approve, deny, and
+continue, a dial, a stick, push-to-talk, layers, a detail panel, and answer
+targets for an agent's multiple-choice questions
 ([ADR-013](DECISIONS.md#adr-013)). Building Phase 1 against real sessions
 showed that most of that surface either depended on write authority that
 did not exist yet or duplicated the one action that mattered.
@@ -771,7 +769,7 @@ changed by a later entry, never by editing.
 
 | ADR | Decision |
 |---|---|
-| 001 | Build a software reinterpretation of the Codex Micro |
+| 001 | Build a software reinterpretation of the hardware macropad |
 | 002 | Tauri v2, Rust daemon, TypeScript surface |
 | 003 | Claude Code first, through an adapter boundary |
 | 004 | Attached mode before hosted mode |

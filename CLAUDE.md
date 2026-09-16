@@ -6,7 +6,7 @@ then [docs/WORKFLOW.md](docs/WORKFLOW.md) before editing anything.
 ## Project overview
 
 - **Name:** Deckhand (`owenpkent/deckhand`)
-- **What:** A software reimplementation of the Codex Micro macropad as an
+- **What:** A software reimplementation of a hardware macropad as an
   always-on-top, mouse-only control surface for Claude Code sessions. An
   ordered list of session rows (colour, glyph, name, state word), click
   to select and raise, plus a Hide grey switch, a gear button, and Quit
@@ -54,7 +54,7 @@ expensive; the pointer is cheap. Working agreement:
 ## Frozen constants
 
 Inlined so no file read is needed to check them. Six colours and meanings
-come from the Codex Micro and are frozen by
+come from the hardware macropad and are frozen by
 [ADR-008](docs/DECISIONS.md#adr-008); `unknown` is the only Deckhand
 addition. Do not invent states or repurpose colours.
 
@@ -78,16 +78,17 @@ source-of-truth map. This table is a reading budget, not a second map.
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 297 | What every control does |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 695 | Daemon, shim, surface, state machine |
-| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 352 | Daemon to runtime contract |
-| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 743 | Reference adapter; partial stamp |
+| [docs/CONTROL_MAPPING.md](docs/CONTROL_MAPPING.md) | 296 | What every control does |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 696 | Daemon, shim, surface, state machine |
+| [docs/ADAPTER_PROTOCOL.md](docs/ADAPTER_PROTOCOL.md) | 362 | Daemon to runtime contract |
+| [docs/CLAUDE_CODE_ADAPTER.md](docs/CLAUDE_CODE_ADAPTER.md) | 780 | Reference adapter; partial stamp |
 | [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) | 398 | Approval path; fails to `ask` |
 | [docs/UI_SPEC.md](docs/UI_SPEC.md) | 285 | Visual and interaction contract |
 | [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 231 | The rules that win every conflict |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 2162 | ADRs; append only |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 151 | Map and change-propagation table |
-| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 457 | Phases and open work |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 2163 | ADRs; append only |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | 158 | Map and change-propagation table |
+| [docs/UPSTREAM_ASKS.md](docs/UPSTREAM_ASKS.md) | 311 | What we need from the runtimes |
+| [ROADMAP.md](ROADMAP.md) / [TODO.md](TODO.md) | 185 / 472 | Phases and open work |
 
 **Do not read `CONSTELLATION_INTEGRATION_GUIDE.md`.** It is 380 lines of
 generic vendor boilerplate sitting at the repo root, where it matches
@@ -143,7 +144,12 @@ below. Skip it in searches.
    at best. Keep the hedge when citing them, and do not claim the file is
    wholly unverified either. The scan's `status` key is a separate,
    narrower observation, against 2.1.270, not against 2.1.220
-   ([ADR-035](docs/DECISIONS.md#adr-035)).
+   ([ADR-035](docs/DECISIONS.md#adr-035)). The session-record fields that
+   `claude agents --json` drops are a third, against 2.1.273 on
+   2026-09-16. The reason `Notification` has never fired here, a six
+   second inactivity delay, is `documented` from a maintainer comment and
+   is not observed; see
+   [docs/UPSTREAM_ASKS.md](docs/UPSTREAM_ASKS.md) section 4.3.
 3. Interaction rules in [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) are
    requirements, not guidance: no required holds, drags, double-clicks,
    hovers, or keyboard. 44 px minimum targets.

@@ -23,22 +23,19 @@ cheaply. Deckhand exists to move that cost down.
 
 ## Prior art
 
-The Codex Micro, a limited-run macropad built by Work Louder in
-collaboration with OpenAI, is the direct inspiration for this project and
-deserves to be credited plainly rather than treated as a vague influence.
-It is a physical device: agent keys bound to ChatGPT chats, command keys for
-approve, deny, and similar actions, a dial, a stick, and status colours that
-let you read a session's state at a glance instead of reading its text.
-What it gets right, and what Deckhand is trying to keep, is the core idea
-that managing several agent conversations is a status-board problem as much
-as it is a chat problem, and that a small, fixed, physical-feeling control
-set can be a better interface for that than a window manager is.
+A limited-run macropad is the direct inspiration for this project. It is a
+physical device: agent keys bound to chat sessions, command keys for approve,
+deny, and similar actions, a dial, a stick, and status colours that let you read
+a session's state at a glance instead of reading its text. What it gets right,
+and what Deckhand is trying to keep, is the core idea that managing several
+agent conversations is a status-board problem as much as it is a chat problem,
+and that a small, fixed, physical-feeling control set can be a better interface
+for that than a window manager is.
 
-Deckhand is not a Codex Micro clone and is not affiliated with Work Louder
-or OpenAI. It borrows the interaction model on purpose and points it at a
-different backend, Claude Code, and a different constraint, mouse-only
-operation, that the original hardware device did not need to solve because
-it was hardware.
+Deckhand is not a clone of the device and is not affiliated with its maker. It
+borrows the interaction model on purpose and points it at a different backend,
+Claude Code, and a different constraint, mouse-only operation, that the original
+device did not need to solve because it was hardware.
 
 ## What Deckhand is
 
@@ -83,7 +80,7 @@ rather than to an adapter.
 
 ## What is genuinely new
 
-Two things here are not just a port of the Codex Micro's idea to a new
+Two things here are not just a port of the hardware macropad's idea to a new
 backend.
 
 The first is the status board itself, applied to coding agent sessions

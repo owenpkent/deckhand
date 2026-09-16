@@ -5,8 +5,9 @@ exists. It implements the contract in [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md)
 against Claude Code.
 
 > **Verification stamp: partial, against Claude Code 2.1.220, extended
-> 2026-09-13 and 2026-09-15 against 2.1.270, and 2026-09-15 against the
-> extension's 2.1.272 binary, for the items marked with those versions.**
+> 2026-09-13 and 2026-09-15 against 2.1.270, 2026-09-15 against the
+> extension's 2.1.272 binary, and 2026-09-16 against 2.1.273, for the
+> items marked with those versions.**
 > Checked on 2026-07-30 and extended on 2026-08-02, on Windows 11, against
 > both the native single-binary build at
 > `C:/Users/owenp/.local/bin/claude.exe` and the copy the VS Code extension
@@ -353,7 +354,10 @@ the gated row wins, because `thinking` on a call that is waiting for a human
 is the wrong colour and the one the gate exists to replace.
 
 **An amber can arrive without a kind, and that is not a failure.**
-`Notification` says a prompt is on screen and nothing about which sort. The
+`Notification` says a prompt is on screen and nothing about which sort. It
+also arrives late: `documented` 2026-09-16, the `permission_prompt` variant
+waits roughly six seconds of inactivity before it fires, so a surface that
+resolves a prompt sooner never sees it. The
 adapter reports `needs_input` with no `kind` rather than guessing one, and
 the surface enables neither Approve nor Answer on it, because both would be
 buttons that cannot do what their labels say. See
@@ -366,6 +370,21 @@ not spiked. It is in the table because the state machine has an answer ready
 for it, not because Deckhand installs it today; see
 [Hook installation](#hook-installation) for why the installed set stops where
 it does.
+
+**The case for installing it anyway changed on 2026-08-17, and this file
+did not notice until 2026-09-16.** `documented`, from the maintainer's
+comment closing `anthropics/claude-code#13024`, not observed here:
+`PermissionRequest` fires immediately when Claude asks for permission,
+whereas `Notification` with `permission_prompt` waits roughly six seconds
+of inactivity first. That delay is the most likely reason `Notification`
+has never been seen firing here at all, since Deckhand's own gate answers
+the prompt long before six idle seconds accrue. The same comment states
+that a `PreToolUse` matcher of `AskUserQuestion|ExitPlanMode` also covers
+plan approval, which Deckhand does not currently match on. Installing
+`PermissionRequest` for observation would let a permission amber come from
+the event built for it instead of from a `PreToolUse` payload the gate is
+holding. That is Phase 1 work, tracked in [TODO.md](../TODO.md), and
+nothing here is observed until it is.
 
 ## Hook installation
 
@@ -585,7 +604,24 @@ TTY, and on this machine it returned the live sessions with `pid`, `cwd`,
 narrowed what depended on it. Every row carries `status` on the installed
 2.1.270: `busy` and `idle` were observed live on 2026-09-15, and `shell` and
 `waiting` sit beside them in the CLI's own validator list, unobserved
-([ADR-035](DECISIONS.md#adr-035)). `startedAt` arrives as epoch
+([ADR-035](DECISIONS.md#adr-035)).
+
+What the command returns is a strict subset of what the CLI writes.
+`observed` 2026-09-16 against 2.1.273: the per-session record at
+`~/.claude/sessions/<pid>.json` additionally carries `entrypoint` (for
+example `claude-vscode`), `procStart`, `nameSource`, `pidDomain`,
+`messagingSocketPath`, and `peerFeatures`. `claude agents --json` returns
+none of them and `claude agents --help` offers no flag that widens the
+output. Three of those are facts Deckhand reconstructs by other means:
+`entrypoint` is most of what the host walk in
+[ARCHITECTURE.md](ARCHITECTURE.md) infers, `procStart` is the pid-reuse
+guard the liveness handle lacks, and `nameSource` is the distinction
+[ADR-038](DECISIONS.md#adr-038) added a `derived` flag to track. Deckhand
+does not read that file: it is undocumented and building on it would break
+without warning. The ask is recorded in
+[UPSTREAM_ASKS.md](UPSTREAM_ASKS.md) section 4.1.
+
+`startedAt` arrives as epoch
 milliseconds, not as a string, so the adapter converts it to the ISO 8601
 that [ADAPTER_PROTOCOL.md](ADAPTER_PROTOCOL.md#types) requires. The daemon
 itself also keeps `startedAt` in its raw millisecond form, alongside `name`,
