@@ -135,6 +135,10 @@ Deliverables:
 **Done when** a session can be started, driven, and ended entirely from the
 surface, with attached mode unaffected.
 
+One candidate engine for this phase, the sibling Anchor project, is noted
+in `IDEAS.md` under Ecosystem. Nothing is chosen; the SDK deliverable above
+stands as written.
+
 ---
 
 ## Phase 5: Retired (ADR-028)

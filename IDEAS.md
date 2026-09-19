@@ -66,6 +66,25 @@ vetted.
   no concrete shape yet)**
 - Tighter MacroVox integration beyond push-to-talk, for example a status
   change read aloud on amber.
+- The sibling Anchor project (`..nchor`) as the engine behind hosted
+  mode. Anchor is a Python daemon that starts and owns Claude Agent SDK
+  sessions, gates every consequential tool call through an approval broker
+  that resolves to "the tool does not run" on timeout and never to allow,
+  and writes a hash-chained audit log. Its front-ends implement a
+  three-method channel protocol (post text, request approval, close
+  approval), which is close to what a hosted tile needs, so Deckhand would
+  be a local channel next to Anchor's Slack one, talking over the daemon's
+  existing local transport. It does nothing for attached mode: it has no
+  knowledge of Claude Code's hooks or session ids. Its broker and policy
+  code are also worth reading before the Phase 2 ADR, although the
+  plumbing differs (Anchor answers an in-process SDK callback, Deckhand
+  answers a `PreToolUse` hook subprocess) and so do the languages, so it
+  is a design to copy, not code to import. Anchor has not yet run against
+  a live model, so nothing should be wired until that and Phase 1 here are
+  both done. The matching note on the Anchor side is its
+  `docs/DECKHAND.md`. **(speculative, depends on Anchor reaching its first
+  live milestone, and on deciding whether a Rust app should depend on a
+  Python daemon at all)**
 
 ## Wild
 

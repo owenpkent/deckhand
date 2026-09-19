@@ -13,6 +13,12 @@ version number is invented and no past release is backfilled.
 
 ### Added
 
+- **Anchor noted as a candidate hosted-mode engine.** `IDEAS.md` records
+  what the sibling Anchor project already has (Agent SDK session
+  ownership, an approval broker that fails to "the tool does not run", a
+  hash-chained audit log, a three-method channel protocol) and what it
+  does not do (observe attached Claude Code sessions). `ROADMAP.md` Phase 4
+  points at the entry. No decision, no code, and no new dependency.
 - **`docs/UPSTREAM_ASKS.md`, one place for what Deckhand needs from the
   runtimes it observes.** Each entry pairs a need with the workaround
   standing in for it and the file that carries the cost, so an issue can
